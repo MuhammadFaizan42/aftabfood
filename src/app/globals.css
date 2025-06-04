@@ -9,6 +9,9 @@
 @theme {
   --header: #18181880;
   --wow: #04D590;
+  --hover-color: #00FFC2;
+  --table-head: #353535;
+  --mint: #06120F;
 }
 
 .gradient {
@@ -58,4 +61,28 @@ body::after {
   transform: translate(-50%, 0%);
   background: var(--wow);
   z-index: -1;
+}
+
+.t-head::after {
+  position: absolute;
+  width: 1px;
+  height: 39px;
+  background: #ffffff;
+  right: 0;
+  top: 50%;
+  content: " ";
+  z-index: 999;
+  transform: translate(0, -50%);
+}
+
+th:last-child .t-head::after {
+  content: none;
+}
+
+.shadow-custom {
+  box-shadow: 0px 0px 16px var(--wow);
+}
+
+.bg-btn-gradient {
+  background: linear-gradient(to bottom, #081519 12%, #026F4B 100%);
 }
