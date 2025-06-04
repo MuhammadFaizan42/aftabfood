@@ -40,7 +40,7 @@ export default function Dropdown({ label, options, selectedValue, onChange, widt
   const buttonWidth = width || "w-40"; // Set a default width if no width is passed
 
   return (
-    <div className="flex items-center gap-6">
+    <div className="grid grid-cols-[auto_1fr] md:flex items-center gap-6">
       <label htmlFor="dropdown" className="text-sm font-bold">
         {label}
       </label>

@@ -55,7 +55,7 @@ export default function UserList() {
         <main className="p-6 m-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
           <h1 className="text-xl font-semibold mb-6">User List</h1>
           <div className="w-full">
-            <div className="mb-4 flex flex-wrap justify-between items-center gap-4">
+            <div className="mb-4 grid grid-cols-1 md:grid-cols-[auto_auto_auto] justify-between items-center gap-4">
               <div className="relative">
                 <input
                   type="text"
@@ -73,12 +73,12 @@ export default function UserList() {
                   options={options}
                   selectedValue={selectedValue}
                   onChange={handleSelectionChange}
-                  width="w-[150px]"
+                  width="w-full md:w-[150px]"
                 />
               </div>
 
               <button
-                className="flex gap-2 items-center text-sm font-semibold bg-btn-gradient border-2 border-[var(--wow)] hover:bg-black hover:border-[var(--hover-color)] rounded-full py-[13px] h-[51.33px] px-6 whitespace-nowrap cursor-pointer"
+                className="w-max flex gap-2 items-center text-sm font-semibold bg-btn-gradient border-2 border-[var(--wow)] hover:bg-black hover:border-[var(--hover-color)] rounded-full py-[13px] h-[51.33px] px-6 whitespace-nowrap cursor-pointer"
               >
                 <Image
                   src={Export}

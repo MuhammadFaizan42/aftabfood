@@ -16,7 +16,7 @@ export default function Header({ toggleSidebar }) {
       {/* Mobile hamburger */}
       <button
         onClick={toggleSidebar}
-        className="lg:hidden focus:outline-none text-white"
+        className="cursor-pointer lg:hidden focus:outline-none text-white"
         aria-label="Toggle Sidebar"
       >
         <MenuIcon />
