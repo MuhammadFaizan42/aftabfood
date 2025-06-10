@@ -6,7 +6,7 @@ export default function Tabs({ tabs }) {
 
   return (
     <div className="w-full mx-auto mb-6">
-      <div className="flex space-x-4 border-b border-gray-200">
+      <div className="flex space-x-4 border-b border-white/[0.16]">
         {tabs.map((tab, index) => (
           <button
             key={index}
