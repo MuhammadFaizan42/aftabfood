@@ -5,34 +5,22 @@ import Link from 'next/link';
 import Image from 'next/image';
 import logo from '../assets/images/logo.png';
 import EN from '../assets/images/en.svg';
-import { MenuIcon } from '../assets';
+import ReusableButton from './Button';
+// import ChineseFlag from '../assets/images/ChineseFlag.svg';
+// import ArFlag from '../assets/images/ArFlag.svg';
 
-export default function Header({ toggleSidebar }) {
+export default function MainHeader() {
   const [langOpen, setLangOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
 
   return (
-    <header className="flex md:bg-black flex-row-reverse md:flex-row items-center justify-between px-6 py-[14px] border-b border-white/50 sticky top-0 z-10">
-      {/* Mobile hamburger */}
-      <button
-        onClick={toggleSidebar}
-        className="cursor-pointer lg:hidden focus:outline-none text-white"
-        aria-label="Toggle Sidebar"
-      >
-        <MenuIcon />
-      </button>
-
-      <div className="flex-1 hidden md:flex items-center justify-center lg:justify-start text-xl font-bold">
-        Users List
-      </div>
-      {/* Mobile View Starts Here */}
-      <div className="flex md:hidden items-center">
+    <header className="flex bg-black/10 items-center justify-between px-4 md:px-6 py-[14px] sticky top-0 z-10">
+      <div className="flex items-center">
         <Image src={logo} alt="WOW Earn Logo" width={50} height={50} className='w-8 h-8 md:w-[50px] md:h-[50px]' />
         <span className="text-base md:text-2xl font-bold tracking-wide ml-3">WOW EARN</span>
       </div>
-      {/* Mobile View Ends Here */}
 
-      <div className="hidden md:flex items-center gap-4">
+      <div className="flex items-center gap-4">
         <div className='h-8 w-[2px] bg-[#F7F9FC]'></div>
         <div className="relative">
           <button
@@ -60,7 +48,7 @@ export default function Header({ toggleSidebar }) {
           )}
         </div>
 
-        <div className='text-base font-bold'>Admin</div>
+        <ReusableButton text="Admin" />
       </div>
     </header>
   );

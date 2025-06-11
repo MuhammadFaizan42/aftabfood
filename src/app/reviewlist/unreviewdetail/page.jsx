@@ -1,21 +1,68 @@
 "use client";
 import React from "react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Sidebar from "../../../components/common/Sidebar";
 import Header from "../../../components/common/Header";
 import Image from "next/image";
 import Search from "../../../components/assets/images/search.svg";
 import Export from "../../../components/assets/images/export.svg";
 import BackArrow from "../../../components/assets/images/BackArrow.svg";
+import DownArrow from "../../../components/assets/images/DownArrow.svg";
 import ReusableTable from "../../../components/common/ReusableTable";
 import Dropdown from "../../../components/common/Dropdown";
+import ReusableButton from "../../../components/common/Button";
 
 
 export default function ReviewListDetail() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
+  const [selectedValue, setSelectedValue] = useState("Select Reason");
+  const handleSelectionChange = (value) => {
+    setSelectedValue(value);
+  };
+  const options = [
+    { value: "All" },
+    { value: "Active" },
+    { value: "Inactive" },
+  ];
+
+
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null); // Reference for the dropdown
+  const buttonRef = useRef(null); // Reference for the button
+
+  const toggleDropdown = () => setIsOpen(!isOpen);
+
+  const handleOptionClick = (value) => {
+    onChange(value); // Call the onChange prop to handle the selection
+    setIsOpen(false);
+  };
+
+  // Close dropdown if clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(event.target)
+      ) {
+        setIsOpen(false); // Close the dropdown if clicked outside
+      }
+    };
+
+    // Adding the event listener to the document
+    document.addEventListener("mousedown", handleClickOutside);
+
+    // Cleanup the event listener on component unmount
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // const buttonWidth = width || "w-40";
   return (
     <div className="flex min-h-screen text-white">
       <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
@@ -117,6 +164,45 @@ export default function ReviewListDetail() {
               </div>
             </div>
 
+            <div className="mb-4">
+              <div className="grid grid-cols-[30%_auto] gap-4 md:gap-6 items-center">
+                <p className="text-sm font-medium block text-end">Reason</p>
+                <div className="relative inline-block" ref={dropdownRef}>
+                  <button
+                    id="dropdown"
+                    onClick={toggleDropdown}
+                    ref={buttonRef}
+                    className={`bg-white/10 cursor-pointer rounded-lg shadow-md px-[14px] py-[13px] flex justify-between items-center focus:border-[var(--wow)] outline-none border border-white/[0.16] transition-colors duration-300 w-full`}
+                  >
+                    {selectedValue}
+                    <span className="ml-2">
+                      <Image src={DownArrow} width={24} height={24} alt="Dropdown Arrow" />
+                    </span>
+                  </button>
+
+                  {isOpen && (
+                    <div
+                      className="absolute left-0 mt-2 w-full bg-black border backdrop-blur-xl rounded-lg shadow-md z-10 transition-all duration-200 ease-in-out"
+                      style={{ animation: "fadeIn 0.2s ease-in-out" }}
+                    >
+                      {options.map((option, index) => (
+                        <div
+                          key={index}
+                          onClick={() => handleOptionClick(option.value)}
+                          className="px-4 py-2 hover:bg-[var(--wow)] first:rounded-t-md last:rounded-b-md cursor-pointer transition-colors duration-200"
+                        >
+                          {option.value}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-4 flex justify-end">
+              <ReusableButton text="Submit" />
+            </div>
           </div>
         </main>
       </div>

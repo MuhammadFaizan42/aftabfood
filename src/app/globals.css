@@ -101,9 +101,9 @@ th:last-child .t-head::after {
   transition: all 0.2s ease-in-out;
 }
 
-.radio-button:hover {
+/* .radio-button:hover {
   transform: translateY(-2px);
-}
+} */
 
 .radio-button input[type="radio"] {
   display: none;
@@ -115,7 +115,7 @@ th:last-child .t-head::after {
   width: 16px;
   height: 16px;
   margin-right: 10px;
-  border: 2px solid white;
+  border: 1px solid white;
   border-radius: 50%;
 }
 
@@ -128,12 +128,16 @@ th:last-child .t-head::after {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #097C73;
+  background-color: #04D590;
   transition: all 0.2s ease-in-out;
 }
 
 .radio-button input[type="radio"]:checked~.radio-checkmark:before {
   transform: translate(-50%, -50%) scale(1);
+}
+
+.radio-button input[type="radio"]:checked~.radio-checkmark {
+  border-color: #04D590;
 }
 
 .radio-label {
