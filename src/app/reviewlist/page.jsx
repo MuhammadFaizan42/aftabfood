@@ -66,7 +66,7 @@ export default function ReviewList() {
       tabName: "Reviewed",
       content: (
         <div >
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] xl:grid-cols-[25%_auto_auto] gap-6 items-center mb-6">
+          <div className="flex flex-wrap gap-6 items-center mb-6">
             <div className="relative">
               <input
                 type="text"
@@ -89,7 +89,7 @@ export default function ReviewList() {
             </div>
 
             <div className="flex items-center flex-wrap gap-4">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center flex-wrap gap-4">
                 <label htmlFor="date" className="text-sm font-bold">Time:</label>
                 <input
                   type="date"
