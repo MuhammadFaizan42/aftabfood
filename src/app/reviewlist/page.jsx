@@ -34,14 +34,14 @@ const data = [
     applicationTime: "2025-12-12 12:00:00",
     email: "example@gmail.com",
     status: (
-      <p className="text-[var(--wow)] bg-[var(--wow)]/[0.16] rounded-full px-3 py-1 text-xs font-normal transition-all duration-200" href="">
+      <p className="text-[var(--wow)] bg-[var(--wow)]/[0.16] rounded-full px-3 py-1 text-xs font-normal transition-all duration-200">
         Approved
       </p>
-      // <p className="text-[#DC2626] bg-[#DC262629] rounded-full px-3 py-1 text-xs font-normal transition-all duration-200" href="">
+      // <p className="text-[#DC2626] bg-[#DC262629] rounded-full px-3 py-1 text-xs font-normal transition-all duration-200">
       //   Denied
       // </p>
 
-      // <p className="text-[#FAE715] bg-[#FAE71529] rounded-full px-3 py-1 text-xs font-normal transition-all duration-200" href="">
+      // <p className="text-[#FAE715] bg-[#FAE71529] rounded-full px-3 py-1 text-xs font-normal transition-all duration-200">
       //   Unreviewed
       // </p>
     ),
