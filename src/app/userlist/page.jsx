@@ -26,7 +26,11 @@ const data = [
     wpass: 2,
     invited: 7,
     level: "Shareholder",
-    action: "Details",
+    action: (
+      <Link className="text-[var(--wow)] text-xs font-normal hover:text-[var(--hover-color)] transition-all duration-200 underline" href="/userlist/detail">
+        Details
+      </Link>
+    )
   },
 
 ];
@@ -55,7 +59,7 @@ export default function UserList() {
         <main className="p-6 m-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
           <h1 className="text-xl font-semibold mb-6">User List</h1>
           <div className="w-full">
-            <div className="mb-4 grid grid-cols-1 md:grid-cols-[auto_auto_auto] justify-between items-center gap-4">
+            <div className="mb-6 grid grid-cols-1 md:grid-cols-[auto_auto_auto] justify-between items-center gap-4">
               <div className="relative">
                 <input
                   type="text"
@@ -91,7 +95,6 @@ export default function UserList() {
             </div>
 
             <div className="table-section">
-              <h1 className="font-bold text-xl my-6">My Team</h1>
               <ReusableTable columns={columns} data={data} rowsPerPage={5} />
             </div>
           </div>

@@ -14,7 +14,7 @@ export default function MainHeader() {
   const [langMenuOpen, setLangMenuOpen] = useState(false);
 
   return (
-    <header className="flex bg-black/10 items-center justify-between px-4 md:px-6 py-[14px] sticky top-0 z-10">
+    <header className="flex bg-black/10 items-center justify-between px-4 md:px-6 py-[7px] sticky top-0 z-10">
       <div className="flex items-center">
         <Image src={logo} alt="WOW Earn Logo" width={50} height={50} className='w-8 h-8 md:w-[50px] md:h-[50px]' />
         <span className="text-base md:text-2xl font-bold tracking-wide ml-3">WOW EARN</span>
@@ -48,7 +48,7 @@ export default function MainHeader() {
           )}
         </div>
 
-        <ReusableButton text="Admin" />
+        <ReusableButton text="Admin" className='h-10 text-sm' />
       </div>
     </header>
   );

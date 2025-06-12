@@ -12,7 +12,7 @@ export default function Header({ toggleSidebar }) {
   const [langMenuOpen, setLangMenuOpen] = useState(false);
 
   return (
-    <header className="flex md:bg-black flex-row-reverse md:flex-row items-center justify-between px-6 py-[14px] border-b border-white/50 sticky top-0 z-10">
+    <header className="flex bg-[#1E1E1E99] md:bg-black flex-row-reverse md:flex-row items-center justify-between px-6 py-[14px] md:border-b border-white/50 sticky top-0 z-10">
       {/* Mobile hamburger */}
       <button
         onClick={toggleSidebar}

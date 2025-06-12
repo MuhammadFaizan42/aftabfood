@@ -3,20 +3,27 @@ import React from "react";
 import Link from "next/link";
 import { useState } from "react";
 import MainHeader from "../components/common/MainHeader";
+import Header from "../components/common/Header";
+import Sidebar from "../components/common/Sidebar";
 import ReusableButton from '../components/common/Button';
 
 
 export default function Home() {
-
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
   return (
     <div className="flex min-h-screen text-white">
       <div className="flex flex-col flex-1 overflow-hidden md:overflow-visible">
         <div className="hidden md:block">
           <MainHeader />
         </div>
+        <div className="block md:hidden">
+          <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
+          <Header toggleSidebar={toggleSidebar} />
+        </div>
 
         <main>
-          <div className="absolute top-1/2 left-1/2 -translate-1/2 bg-white/10 border border-white/[0.16] backdrop-blur-xl rounded-2xl p-6 mx-auto w-[90%] md:w-1/2">
+          <div className="absolute top-[164px] md:top-1/2 left-1/2 -translate-x-1/2 md:-translate-y-1/2 bg-white/10 border border-white/[0.16] backdrop-blur-xl rounded-2xl p-6 mx-auto w-[90%] md:w-1/2">
             <h1 className="text-center font-bold text-2xl mb-8">Log In</h1>
             <form className="flex flex-col gap-6">
               <div>

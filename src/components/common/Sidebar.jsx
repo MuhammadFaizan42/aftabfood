@@ -40,7 +40,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
             <Image src={UserList} width={24} height={24} alt='Media' />
             User List
           </Link>
-          <Link href="reviewlist" className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors">
+          <Link href="/reviewlist" className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors">
             <Image src={ReviewList} width={24} height={24} alt='Media' />
             Review List
           </Link>
