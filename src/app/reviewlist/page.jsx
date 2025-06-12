@@ -189,7 +189,6 @@ export default function ReviewList() {
           <div className="w-full">
 
             <div className="table-section">
-              {/* <ReusableTable columns={columns} data={data} rowsPerPage={5} /> */}
               <Tabs tabs={tabsData} />
             </div>
           </div>
