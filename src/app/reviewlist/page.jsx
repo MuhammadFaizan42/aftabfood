@@ -34,9 +34,16 @@ const data = [
     applicationTime: "2025-12-12 12:00:00",
     email: "example@gmail.com",
     status: (
-      <Link className="text-[var(--wow)] bg-[var(--wow)]/[0.16] rounded-full px-3 py-1 text-xs font-normal hover:bg-[var(--hover-color)] transition-all duration-200" href="">
+      <p className="text-[var(--wow)] bg-[var(--wow)]/[0.16] rounded-full px-3 py-1 text-xs font-normal transition-all duration-200" href="">
         Approved
-      </Link>
+      </p>
+      // <p className="text-[#DC2626] bg-[#DC262629] rounded-full px-3 py-1 text-xs font-normal transition-all duration-200" href="">
+      //   Denied
+      // </p>
+
+      // <p className="text-[#FAE715] bg-[#FAE71529] rounded-full px-3 py-1 text-xs font-normal transition-all duration-200" href="">
+      //   Unreviewed
+      // </p>
     ),
     action: (
       <Link className="text-[var(--wow)] text-xs font-normal hover:text-[var(--hover-color)] transition-all duration-200 underline" href="/reviewlist/detail">
@@ -66,7 +73,7 @@ export default function ReviewList() {
       tabName: "Reviewed",
       content: (
         <div >
-          <div className="flex flex-wrap gap-6 items-center mb-6">
+          <div className="grid grid-cols-1 md:flex flex-wrap gap-6 items-center mb-6">
             <div className="relative">
               <input
                 type="text"
@@ -119,7 +126,7 @@ export default function ReviewList() {
       tabName: "Unreviewed",
       content: (
         <div >
-          <div className="flex flex-wrap gap-6 items-center mb-6">
+          <div className="grid grid-cols-1 md:flex flex-wrap gap-6 items-center mb-6">
             <div className="relative">
               <input
                 type="text"
