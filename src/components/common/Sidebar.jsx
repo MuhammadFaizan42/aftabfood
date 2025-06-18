@@ -5,6 +5,8 @@ import Link from 'next/link';
 import logo from '../assets/images/logo.png';
 import Dashboard from '../assets/images/dashboard.svg';
 import DownArrow from '../assets/images/DownArrow.svg';
+import Configuration from '../assets/images/configuration.svg';
+import Ad from '../assets/images/ad.svg';
 import UpArrow from '../assets/images/UpArrow.svg';
 import UserList from '../assets/images/UserList.svg';
 import EN from '../assets/images/en.svg';
@@ -51,22 +53,21 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
           </Link>
 
           {/* Collapsible Configuration */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col">
             <button
               onClick={toggleConfig} // Toggle the collapsible state
               className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
             >
-              <Image src={Dashboard} width={24} height={24} alt='Configuration' />
+              <Image src={Configuration} width={24} height={24} alt='Configuration' />
               Configuration
               <span className="ml-auto">
-                {/* {isConfigOpen ? '▲' : '▼'} */}
                 <Image
                   src={isConfigOpen ? UpArrow : DownArrow}
                   width={24}
                   height={24}
                   alt="Toggle Arrow"
                 />
-              </span> {/* Arrow for expansion */}
+              </span>
             </button>
 
             {/* Collapsible Links with smooth transition */}
@@ -75,11 +76,46 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
             >
               {isConfigOpen && (
                 <>
-                  <Link href="/dapp-management" className="pl-6 flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors cursor-pointer">
+                  <Link href="/dapp-management" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
                     DApp Management
                   </Link>
-                  <Link href="/token-management" className="pl-6 flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors cursor-pointer">
+                  <Link href="/token-management" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
                     Token Management
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Collapsible Ad Slot Mangement */}
+          <div className="flex flex-col">
+            <button
+              onClick={toggleConfig} // Toggle the collapsible state
+              className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
+            >
+              <Image src={Ad} width={24} height={24} alt='Ad' />
+              Ad Slot Mangement
+              <span className="ml-auto">
+                <Image
+                  src={isConfigOpen ? UpArrow : DownArrow}
+                  width={24}
+                  height={24}
+                  alt="Toggle Arrow"
+                />
+              </span>
+            </button>
+
+            {/* Collapsible Links with smooth transition */}
+            <div
+              className={`overflow-hidden transition-all duration-300 ${isConfigOpen ? 'max-h-[1000px]' : 'max-h-0'}`} // Added smooth transition
+            >
+              {isConfigOpen && (
+                <>
+                  <Link href="/dapp-management" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
+                    Ad Slot Mangement
+                  </Link>
+                  <Link href="/token-management" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
+                    Ad Slot Mangement
                   </Link>
                 </>
               )}
@@ -89,7 +125,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
           <div className='w-full h-[1px] bg-white/50 mt-3'></div>
 
           {/* Language Selection */}
-          <div className="relative w-full">
+          <div className="relative w-full block md:hidden">
             <button
               onClick={() => setLangMenuOpen(!langMenuOpen)}
               className="flex w-full justify-between cursor-pointer items-center space-x-2 text-white hover:text-[var(--wow)] text-base font-bold uppercase focus:outline-none"
@@ -116,7 +152,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
             )}
           </div>
 
-          <div className='text-base font-bold mt-1'>Admin</div>
+          <div className='text-base font-bold mt-1 block md:hidden'>Admin</div>
         </nav>
       </aside>
     </>
