@@ -9,6 +9,7 @@ import Search from "../../components/assets/images/search.svg";
 import Export from "../../components/assets/images/export.svg";
 import ReusableTable from "../../components/common/ReusableTable";
 import Dropdown from "../../components/common/Dropdown";
+import SearchField from "../../components/common/SearchField";
 
 const columns = [
   { header: "Address", accessor: "address" },
@@ -36,6 +37,11 @@ const data = [
 ];
 
 export default function UserList() {
+  // You can change these dynamically based on your logic or UI interaction
+  const customPlaceholder = "Search DApp Name...";
+  // const customClass = "bg-blue-500 border border-blue-300 rounded-md pl-4 pr-11 py-[13px] flex-grow w-full outline-0 focus:border-blue-500 transition duration-300 focus:ring-0 text-base";
+
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
@@ -60,7 +66,7 @@ export default function UserList() {
           <h1 className="text-xl font-semibold mb-6">User List</h1>
           <div className="w-full">
             <div className="mb-6 grid grid-cols-1 md:grid-cols-[auto_auto_auto] justify-between items-center gap-4">
-              <div className="relative">
+              {/* <div className="relative">
                 <input
                   type="text"
                   placeholder="Address..."
@@ -69,8 +75,8 @@ export default function UserList() {
                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                   <Image src={Search} width={24} height={24} alt="Media" />
                 </div>
-              </div>
-
+              </div> */}
+              <SearchField placeholder={customPlaceholder} />
               <div>
                 <Dropdown
                   label="WBond"

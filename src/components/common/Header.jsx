@@ -22,8 +22,8 @@ export default function Header({ toggleSidebar }) {
         <MenuIcon />
       </button>
 
-      <div className="flex-1 hidden md:flex items-center justify-center lg:justify-start text-xl font-bold">
-        Users List
+      <div className="flex-1 hidden md:flex items-center justify-center lg:justify-start capitalize text-xl font-bold">
+        configuration
       </div>
       {/* Mobile View Starts Here */}
       <div className="flex md:hidden items-center">

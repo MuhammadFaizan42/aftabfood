@@ -15,7 +15,6 @@ import System from '../assets/images/system.svg';
 import UpArrow from '../assets/images/UpArrow.svg';
 import UserList from '../assets/images/UserList.svg';
 import EN from '../assets/images/en.svg';
-import ReviewList from '../assets/images/ReviewList.svg';
 import Image from 'next/image';
 
 export default function Sidebar({ isOpen, toggleSidebar }) {
@@ -60,12 +59,6 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
           <Link href="/userlist" className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-[var(--wow)]">
             <Image src={UserList} width={24} height={24} alt='Media' />
             User List
-          </Link>
-
-          {/* Review List */}
-          <Link href="/reviewlist" className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors">
-            <Image src={ReviewList} width={24} height={24} alt='Media' />
-            Review List
           </Link>
 
           {/* Collapsible Site Message */}
@@ -188,7 +181,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
             >
               {openSections.config && (
                 <>
-                  <Link href="/dapp-management" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
+                  <Link href="/configuration/dappmanagement" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
                     DApp Management
                   </Link>
                   <Link href="/token-management" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
