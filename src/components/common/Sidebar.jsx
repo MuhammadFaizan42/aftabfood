@@ -184,7 +184,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                   <Link href="/configuration/dappmanagement" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
                     DApp Management
                   </Link>
-                  <Link href="/token-management" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
+                  <Link href="/configuration/tokenmanagement" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
                     Token Management
                   </Link>
                 </>
