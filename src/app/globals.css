@@ -13,6 +13,7 @@
   --table-head: #353535;
   --mint: #06120F;
   --collapse: #2EBC84;
+  --dropdown: #191919;
 }
 
 .gradient {
@@ -99,7 +100,23 @@ nav::-webkit-scrollbar-corner {
   background-color: transparent;
 }
 
+.popup-style {
+  background-color: var(--popup);
+  border: 1px solid var(--wow);
+  box-shadow: 0px 0px 16px var(--wow);
+  backdrop-filter: blur(24px);
+}
+
+.shadow-custom {
+  box-shadow: 0px 0px 16px var(--wow);
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
+  box-sizing: border-box;
   background: var(--background);
   color: var(--foreground);
   font-family: "Inter", sans-serif;

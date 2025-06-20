@@ -40,11 +40,11 @@ export default function Dropdown({ label, options, selectedValue, onChange, widt
   const buttonWidth = width || "w-40"; // Set a default width if no width is passed
 
   return (
-    <div className="grid grid-cols-[auto_1fr] md:flex items-center gap-6">
+    <div >
       <label htmlFor="dropdown" className="text-sm font-bold">
         {label}
       </label>
-      <div className="relative inline-block" ref={dropdownRef}>
+      <div className="relative" ref={dropdownRef}>
         <button
           id="dropdown"
           onClick={toggleDropdown}
@@ -59,7 +59,7 @@ export default function Dropdown({ label, options, selectedValue, onChange, widt
 
         {isOpen && (
           <div
-            className="absolute left-0 mt-2 w-full bg-black border backdrop-blur-xl rounded-lg shadow-md z-10 transition-all duration-200 ease-in-out"
+            className="absolute left-0 mt-2 w-full bg-[var(--dropdown)] border backdrop-blur-xl rounded-lg shadow-md z-10 transition-all duration-200 ease-in-out"
             style={{ animation: "fadeIn 0.2s ease-in-out" }}
           >
             {options.map((option, index) => (

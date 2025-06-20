@@ -40,7 +40,7 @@ export default function ReusableTable({ columns, data, rowsPerPage = 5 }) {
                 }}
               >
                 {columns.map((col) => (
-                  <td key={col.accessor} className="px-4 py-[18px] word-break-all text-xs font-medium">
+                  <td key={col.accessor} className="px-4 py-2 word-break-all text-xs font-medium">
                     {row[col.accessor]}
                   </td>
                 ))}

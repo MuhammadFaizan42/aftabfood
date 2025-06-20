@@ -5,7 +5,7 @@ import Search from '../assets/images/search.svg';
 
 const SearchField = ({
   placeholder = "Address...",
-  className = "bg-white/10 border border-white/[0.16] rounded-md pl-4 pr-11 py-[13px] flex-grow w-full outline-0 focus:border-[var(--wow)] transition duration-300 focus:ring-0 text-base"
+  className = "bg-white/10 border border-white/[0.16] rounded-md pl-4 pr-11 py-[12px] flex-grow w-full outline-0 focus:border-[var(--wow)] transition duration-300 focus:ring-0 text-base"
 }) => {
   const [inputClass, setInputClass] = useState(className); // Dynamically set className
   const [inputPlaceholder, setInputPlaceholder] = useState(placeholder); // Dynamically set placeholder
