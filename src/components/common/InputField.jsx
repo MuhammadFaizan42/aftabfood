@@ -18,7 +18,7 @@ export default function InputField({
       <input
         type={type}
         placeholder={placeholder}
-        className={`bg-white/10 border border-white/[0.16] backdrop-blur-xl rounded-md px-[14px] py-3 flex-grow w-full outline-0 focus:border-[var(--wow)] transition duration-300 focus:ring-0 text-base ${className}`}
+        className={`bg-white/10 border border-white/[0.16] backdrop-blur-xl rounded-md px-[14px] py-3 flex-grow w-full outline-0 focus:border-[var(--wow)] transition duration-300 focus:ring-0 text-base h-[51.33px] ${className}`}
         {...props}  // Spread the rest of the props (e.g., value, onChange)
       />
     </div>

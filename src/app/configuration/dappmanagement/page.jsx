@@ -16,6 +16,8 @@ import ReusableTable from "../../../components/common/ReusableTable";
 import Dropdown from "../../../components/common/Dropdown";
 import SearchField from "../../../components/common/SearchField";
 import AddDappModal from "../../../components/layouts/Modals/AddDapp";
+import DeleteDAppModal from "../../../components/layouts/Modals/DeleteDApp";
+import AddSlotModal from "../../../components/layouts/Modals/AddSlot";
 
 const columns = [
   { header: "No.", accessor: "No" },
@@ -50,6 +52,8 @@ export default function DappManagement() {
   const customPlaceholder = "Search DApp Name...";
 
   const [showAddDappModal, setShowAddDappModal] = React.useState(false);
+  const [showDeleteDAppModal, setShowDeleteDAppModal] = React.useState(false);
+  const [showAddSlotModal, setShowAddSlotModal] = React.useState(false);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
@@ -70,20 +74,22 @@ export default function DappManagement() {
   return (
     <>
       {showAddDappModal && <AddDappModal setShowAddDappModal={setShowAddDappModal} />}
+      {showDeleteDAppModal && <DeleteDAppModal setShowDeleteDAppModal={setShowDeleteDAppModal} />}
+      {showAddSlotModal && <AddSlotModal setShowAddSlotModal={setShowAddSlotModal} />}
       <div className="flex min-h-screen text-white">
         <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
         <div className="flex flex-col flex-1 overflow-hidden md:overflow-visible">
           <Header toggleSidebar={toggleSidebar} />
 
           <main className="p-6 m-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
-            <h1 className="text-xl flex items-center gap-4 font-semibold mb-6">
+            <h1 onClick={() => setShowAddSlotModal(true)} className="text-xl flex items-center gap-4 font-semibold mb-6">
               {/* <Link href='/userlist' className="block">
               <Image src={BackArrow} width={24} height={24} alt="Media" />
             </Link> */}
               DApp Management
             </h1>
             <div className="w-full">
-              <div className="mb-6 flex justify-between items-center gap-4">
+              <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
                 <SearchField placeholder={customPlaceholder} />
                 {/* <Dropdown
                 label="WBond"

@@ -41,7 +41,7 @@ export default function Dropdown({ label, options, selectedValue, onChange, widt
 
   return (
     <div >
-      <label htmlFor="dropdown" className="text-sm font-bold">
+      <label htmlFor="dropdown" className="text-sm font-medium mb-2">
         {label}
       </label>
       <div className="relative" ref={dropdownRef}>
@@ -49,7 +49,7 @@ export default function Dropdown({ label, options, selectedValue, onChange, widt
           id="dropdown"
           onClick={toggleDropdown}
           ref={buttonRef}
-          className={`bg-white/10 cursor-pointer rounded-lg shadow-md px-[14px] py-[13px] flex justify-between items-center focus:border-[var(--wow)] outline-none border border-white/[0.16] transition-colors duration-300 ${buttonWidth}`}
+          className={`bg-white/10 mt-2 cursor-pointer rounded-lg shadow-md px-[14px] py-[13px] flex justify-between items-center focus:border-[var(--wow)] outline-none border border-white/[0.16] transition-colors duration-300 ${buttonWidth}`}
         >
           {selectedValue}
           <span className="ml-2">
