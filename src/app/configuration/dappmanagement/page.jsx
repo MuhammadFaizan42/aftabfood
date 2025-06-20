@@ -11,6 +11,7 @@ import Plus from "../../../components/assets/images/plus.svg";
 import Logo from "../../../components/assets/images/logo.png";
 import Edit from "../../../components/assets/images/edit.svg";
 import Delete from "../../../components/assets/images/delete.svg";
+import Save from "../../../components/assets/images/save.svg";
 import BackArrow from "../../../components/assets/images/BackArrow.svg";
 import ReusableTable from "../../../components/common/ReusableTable";
 import Dropdown from "../../../components/common/Dropdown";
@@ -38,10 +39,10 @@ const data = [
     Action: (
       <div className="flex gap-2 items-center">
         <button className="p-2 border rounded-lg border-white/10 bg-white/10 hover:border-[var(--wow)] transition-all duration-200 cursor-pointer hover:shadow-lg box-border">
-          <Image src={Edit} width={24} height={24} alt="Media" />
+          <Image src={Edit} width={24} height={24} className="min-w-6" alt="Media" />
         </button>
         <button className="p-2 border rounded-lg border-white/10 bg-white/10 hover:border-[var(--wow)] transition-all duration-200 cursor-pointer hover:shadow-lg box-border">
-          <Image src={Delete} width={24} height={24} alt="Media" />
+          <Image src={Delete} width={24} height={24} className="min-w-6" alt="Media" />
         </button>
       </div>
     ),
@@ -87,30 +88,101 @@ export default function DappManagement() {
             </Link> */}
               DApp Management
             </h1>
-            <div className="w-full">
-              <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
-                <SearchField placeholder={customPlaceholder} />
-                {/* <Dropdown
+
+            <div className="grid grid-cols-1 md:grid-cols-[200px_auto] gap-6">
+              <div className="dapp-category bg-white/10 border border-white/[0.16] rounded-[10px] p-2.5 backdrop-blur-xl">
+
+                <div className="flex justify-end gap-4">
+                  <button className="p-2 border rounded-lg border-white/[0.16] bg-white/10 hover:border-[var(--wow)] transition-all duration-200 cursor-pointer hover:shadow-lg box-border">
+                    <Image src={Edit} width={24} height={24} alt="Media" />
+                  </button>
+
+                  <button className="p-2 border rounded-lg border-white/[0.16] bg-white/10 hover:border-[var(--wow)] transition-all duration-200 cursor-pointer hover:shadow-lg box-border">
+                    <Image src={Delete} width={24} height={24} alt="Media" />
+                  </button>
+
+                  <button className="p-2 border rounded-lg border-white/[0.16] bg-white/10 hover:border-[var(--wow)] transition-all duration-200 cursor-pointer hover:shadow-lg box-border">
+                    <Image src={Save} width={24} height={24} alt="Media" />
+                  </button>
+                </div>
+
+                <div className="slot-lists my-6">
+                  <div className="px-3 py-2.5 border-b border-white/[0.16] text-xs font-medium">
+                    All
+                  </div>
+                  <div className="px-3 py-2.5 border-b border-white/[0.16] text-xs font-medium">
+                    Popular
+                  </div>
+                  <div className="px-3 py-2.5 border-b border-white/[0.16] text-xs font-medium">
+                    MEME
+                  </div>
+                  <div className="px-3 py-2.5 border-b border-white/[0.16] text-xs font-medium">
+                    Defi
+                  </div>
+                  <div className="px-3 py-2.5 border-b border-white/[0.16] text-xs font-medium">
+                    AirDrop
+                  </div>
+                  <div className="px-3 py-2.5 border-b border-white/[0.16] text-xs font-medium">
+                    NFT
+                  </div>
+                  <div className="px-3 py-2.5 border-b border-white/[0.16] text-xs font-medium">
+                    Other
+                  </div>
+                </div>
+
+                <div className="slot-actions">
+                  <button onClick={() => setShowAddSlotModal(true)}
+                    className="flex w-full gap-2 items-center text-sm font-semibold bg-btn-gradient border-2 border-[var(--wow)] hover:bg-black hover:border-[var(--hover-color)] rounded-full py-1.5 px-6 whitespace-nowrap cursor-pointer box-border mb-6"
+                  >
+                    <Image
+                      src={Plus}
+                      width={24}
+                      height={24}
+                      alt="Media" />
+                    Add Slot
+                  </button>
+
+                  <div className="add-slot-actions hidden">
+                    <button onClick={() => setShowAddSlotModal(true)}
+                      className="flex w-full gap-2 items-center text-sm font-semibold bg-btn-gradient border-2 border-[var(--wow)] justify-center hover:border-[var(--hover-color)] rounded-full py-1.5 px-6 whitespace-nowrap cursor-pointer box-border mb-6"
+                    >
+                      Confirm
+                    </button>
+
+                    <button onClick={() => setShowAddSlotModal(true)}
+                      className="flex w-full gap-2 items-center text-sm font-semibold bg-[#1f1f1f] border-2 border-black/[0.16] justify-center hover:border-black rounded-full py-1.5 px-6 whitespace-nowrap cursor-pointer box-border mb-6"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="w-full">
+                <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
+                  <SearchField placeholder={customPlaceholder} />
+                  {/* <Dropdown
                 label="WBond"
                 options={options}
                 selectedValue={selectedValue}
                 onChange={handleSelectionChange}
                 width="w-full md:w-[150px]"
               /> */}
-                <button onClick={() => setShowAddDappModal(true)}
-                  className="flex w-max gap-2 items-center text-sm font-semibold bg-btn-gradient border-2 border-[var(--wow)] hover:bg-black hover:border-[var(--hover-color)] rounded-full py-[11px] px-6 min-h-[50px] whitespace-nowrap cursor-pointer box-border"
-                >
-                  <Image
-                    src={Plus}
-                    width={24}
-                    height={24}
-                    alt="Media" />
-                  Add DApp
-                </button>
-              </div>
+                  <button onClick={() => setShowAddDappModal(true)}
+                    className="flex w-max gap-2 items-center text-sm font-semibold bg-btn-gradient border-2 border-[var(--wow)] hover:bg-black hover:border-[var(--hover-color)] rounded-full py-[11px] px-6 min-h-[50px] whitespace-nowrap cursor-pointer box-border"
+                  >
+                    <Image
+                      src={Plus}
+                      width={24}
+                      height={24}
+                      alt="Media" />
+                    Add DApp
+                  </button>
+                </div>
 
-              <div className="table-section">
-                <ReusableTable columns={columns} data={data} rowsPerPage={5} />
+                <div className="table-section">
+                  <ReusableTable columns={columns} data={data} rowsPerPage={5} />
+                </div>
               </div>
             </div>
           </main>
