@@ -70,7 +70,6 @@ export default function DappManagement() {
     { value: "3" },
   ];
 
-
   return (
     <>
       {showAddDappModal && <AddDappModal setShowAddDappModal={setShowAddDappModal} />}
@@ -82,7 +81,7 @@ export default function DappManagement() {
           <Header toggleSidebar={toggleSidebar} />
 
           <main className="p-6 m-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
-            <h1 onClick={() => setShowAddSlotModal(true)} className="text-xl flex items-center gap-4 font-semibold mb-6">
+            <h1 className="text-xl flex items-center gap-4 font-semibold mb-6">
               {/* <Link href='/userlist' className="block">
               <Image src={BackArrow} width={24} height={24} alt="Media" />
             </Link> */}

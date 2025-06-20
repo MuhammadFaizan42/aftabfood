@@ -35,7 +35,6 @@ export default function AddDappModal({ setShowAddDappModal }) {
     { value: "DeFi" },
     { value: "NFT" },
     { value: "Gaming" },
-    { value: "NFT" },
     { value: "Metaverse" },
   ];
 
