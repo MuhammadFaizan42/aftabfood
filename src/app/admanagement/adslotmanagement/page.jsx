@@ -24,6 +24,7 @@ import FileUpload from "../../../components/common/FileUpload";
 import ReusableButton from "../../../components/common/Button";
 import LanguageDropdown from "../../../components/common/LanguageDropdown";
 import DeleteAdModal from "../../../components/layouts/Modals/DeleteAd";
+import LanguageCheckbox from "../../../components/common/LanguageCheckbox";
 
 const columns = [
   { header: "No #.", accessor: "No" },
@@ -140,6 +141,26 @@ export default function AdSlotManagement() {
                     <Image src={BackArrow} width={24} height={24} alt="Back" />
                   </button>
                   <h2 className="text-xl font-semibold">Create Ad</h2>
+                </div>
+
+                <div className="flex flex-wrap gap-4 mb-6">
+                  {/* Using local image for German flag */}
+                  <LanguageCheckbox
+                    flagSrc="/flags/germany.svg"  // Local image path (stored in the public/flags directory)
+                    languageName="German (DE)"
+                  />
+
+                  {/* Using local image for USA flag */}
+                  <LanguageCheckbox
+                    flagSrc="https://toppng.com/uploads/preview/uk-round-flag-11563596900h0bvrmnyb2.png"  // Local image path (stored in the public/flags directory)
+                    languageName="English (USA)"
+                  />
+
+                  {/* Using local image for India flag */}
+                  <LanguageCheckbox
+                    flagSrc="/flags/india.svg"  // Local image path (stored in the public/flags directory)
+                    languageName="Hindi (IN)"
+                  />
                 </div>
 
                 <div className="md:w-[60%] xl:w-1/2 mx-auto">
