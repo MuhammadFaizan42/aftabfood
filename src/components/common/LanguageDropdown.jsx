@@ -95,7 +95,7 @@ export default function LanguageDropdown({
               <div
                 key={index}
                 onClick={() => handleOptionClick(option.value, option.flag)}
-                className="px-4 py-2 hover:bg-[var(--wow)] first:rounded-t-md last:rounded-b-md cursor-pointer transition-colors duration-200"
+                className="px-4 py-2 hover:bg-[var(--wow)]/20 first:rounded-t-md last:rounded-b-md cursor-pointer transition-colors duration-200"
               >
                 {/* Display flag image and language name */}
                 <div className="flex items-center gap-2">
