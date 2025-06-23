@@ -298,6 +298,10 @@ th:last-child .t-head::after {
   margin: 0;
 }
 
+.no-margin button {
+  margin: 0;
+}
+
 .add-token-dropdown>div label {
   text-align: end;
   margin: 0;
