@@ -17,6 +17,9 @@ import ReusableTable from "../../../components/common/ReusableTable";
 import Dropdown from "../../../components/common/Dropdown";
 import SearchField from "../../../components/common/SearchField";
 import DeleteTokenModal from "../../../components/layouts/Modals/DeleteToken";
+import InputField from "../../../components/common/InputField";
+import FileUpload from "../../../components/common/FileUpload";
+import ReusableButton from "../../../components/common/Button";
 
 const columns = [
   { header: "No #.", accessor: "No" },
@@ -58,7 +61,9 @@ export default function TokenManagement() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
-
+  const handleFileChange = (file) => {
+    console.log("Selected file:", file);
+  };
   return (
     <>
       {showDeleteTokenModal && <DeleteTokenModal setShowDeleteTokenModal={setShowDeleteTokenModal} />}
@@ -94,15 +99,116 @@ export default function TokenManagement() {
 
             {/* Add Token Wrapper */}
             {isAddTokenVisible && (
-              <div className="add-token-wrapper flex gap-4 items-center mb-6">
-                <button
-                  className="cursor-pointer"
-                  onClick={() => setIsAddTokenVisible(false)}
-                >
-                  <Image src={BackArrow} width={24} height={24} alt="Back" />
-                </button>
-                <h2 className="text-xl font-semibold">Add Token</h2>
-                {/* Add token form or content goes here */}
+              <div className="add-token-wrapper">
+                <div className="flex gap-4 items-center mb-6">
+                  <button
+                    className="cursor-pointer"
+                    onClick={() => setIsAddTokenVisible(false)}
+                  >
+                    <Image src={BackArrow} width={24} height={24} alt="Back" />
+                  </button>
+                  <h2 className="text-xl font-semibold">Add Token</h2>
+                </div>
+
+                <div className="md:w-[60%] xl:w-1/2 mx-auto">
+                  <div className="add-token-form">
+                    <div>
+                      <InputField
+                        label="Token Name"
+                        placeholder="Bitcoin"
+                        className="mb-4"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <InputField
+                        label="Token Symbol"
+                        placeholder="BTC"
+                        className="mb-4"
+                        // value={symbol}
+                        onChange={(e) => setSymbol(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="mb-4">
+                      <FileUpload
+                        buttonText="Choose File"
+                        label="Token Icon"
+                        onFileChange={handleFileChange}
+                      />
+                    </div>
+
+                    <div className="no-asteric">
+                      <InputField
+                        label="Image URL"
+                        placeholder="Enter Image URL"
+                        className="mb-4"
+                        // value={symbol}
+                        onChange={(e) => setSymbol(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="no-asteric">
+                      <InputField
+                        label="Contract Address"
+                        placeholder="Only for tokens that are not native to the chain."
+                        className="mb-4"
+                        // value={symbol}
+                        onChange={(e) => setSymbol(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="add-token-dropdown mb-4">
+                      <Dropdown
+                        label="Chain"
+                        isRequired={true}  // Adds the asterisk
+                        options={[{ value: "Ethereum" }, { value: "Bitcoin" }]}
+                        selectedValue="Bitcoin"
+                        onChange={(value) => console.log(value)}
+                        width={"w-full"}
+                      />
+                    </div>
+
+                    <div>
+                      <InputField
+                        label="Chain ID"
+                        placeholder="e.g., 1 for Ethereum, 56 for BSC"
+                        className="mb-4"
+                        // value={symbol}
+                        onChange={(e) => setSymbol(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <InputField
+                        label="Decimals"
+                        placeholder="e.g., 18"
+                        className="mb-4"
+                        // value={symbol}
+                        onChange={(e) => setSymbol(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <InputField
+                        label="Priority Level"
+                        placeholder="99"
+                        className="mb-4"
+                        // value={symbol}
+                        onChange={(e) => setSymbol(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="flex gap-4 justify-end">
+                      <button className="text-base font-semibold border-2 border-white/10 hover:border-white bg-white/10 rounded-full py-2 px-6 whitespace-nowrap cursor-pointer">Cancel</button>
+
+                      <ReusableButton text="Confirm" />
+                    </div>
+
+                  </div>
+                </div>
               </div>
             )}
           </main>

@@ -3,7 +3,14 @@ import Image from "next/image";
 import DownArrow from "../assets/images/DownArrow.svg";
 
 // Reusable dropdown component
-export default function Dropdown({ label, options, selectedValue, onChange, width }) {
+export default function Dropdown({
+  label,
+  isRequired = false, // Add this to conditionally add the asterisk
+  options,
+  selectedValue,
+  onChange,
+  width,
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null); // Reference for the dropdown
   const buttonRef = useRef(null); // Reference for the button
@@ -40,9 +47,10 @@ export default function Dropdown({ label, options, selectedValue, onChange, widt
   const buttonWidth = width || "w-40"; // Set a default width if no width is passed
 
   return (
-    <div >
+    <div>
       <label htmlFor="dropdown" className="text-sm font-medium mb-2">
         {label}
+        {isRequired && <span className="text-red-500">&nbsp;*</span>} {/* Add asterisk if required */}
       </label>
       <div className="relative" ref={dropdownRef}>
         <button

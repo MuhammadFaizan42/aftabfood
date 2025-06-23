@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-// import { FaPlus } from "react-icons/fa"; 
 import Image from "next/image";
 import Plus from "../assets/images/plus.svg"; // Assuming you have a plus icon in your assets
-const FileUpload = ({ buttonText = "Choose File", onFileChange }) => {
+
+const FileUpload = ({ buttonText = "Choose File", label = "Icon Upload", onFileChange }) => {
   const [fileName, setFileName] = useState("");
 
   const handleFileChange = (e) => {
@@ -16,7 +16,8 @@ const FileUpload = ({ buttonText = "Choose File", onFileChange }) => {
   return (
     <div className="flex flex-col">
       <label htmlFor="file-upload" className="text-sm font-medium mb-2">
-        Icon Upload
+        {label}
+        <span className="text-red-500">&nbsp;*</span> {/* Adding the asterisk */}
       </label>
       <div className="relative">
         <input

@@ -25,7 +25,7 @@ export default function AddSlotModal({ setShowAddSlotModal }) {
                 </button>
               </div>
               {/*body*/}
-              <div className="relative flex-auto">
+              <div className="relative flex-auto no-asteric">
                 <InputField
                   label="Slot Name"
                   placeholder="Enter slot name..."

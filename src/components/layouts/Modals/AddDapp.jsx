@@ -68,27 +68,19 @@ export default function AddDappModal({ setShowAddDappModal }) {
               </div>
               {/*body*/}
               <div className="relative flex-auto">
-                <InputField
-                  label="DApp Name"
-                  placeholder="WOW EARN XXXX"
-                  className="mb-4"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-
-                <div className="mb-4">
-                  <FileUpload buttonText="Choose File" onFileChange={handleFileChange} />
+                <div className="no-asteric">
+                  <InputField
+                    label="DApp Name"
+                    placeholder="WOW EARN XXXX"
+                    className="mb-4"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
                 </div>
 
-                {/* <div className="mb-4">
-                  <Dropdown
-                    label="WBond"
-                    options={options}
-                    selectedValue={selectedValue}
-                    onChange={handleSelectionChange}
-                    width="w-full"
-                  />
-                </div> */}
+                <div className="mb-4 no-asteric">
+                  <FileUpload buttonText="Choose File" onFileChange={handleFileChange} />
+                </div>
 
                 <div className="flex items-center flex-wrap md:flex-nowrap gap-4 w-full mb-4">
                   <div className="w-full">
@@ -111,7 +103,7 @@ export default function AddDappModal({ setShowAddDappModal }) {
                   </div>
                 </div>
 
-                <div>
+                <div className="no-asteric">
                   <InputField
                     label="DApp Description"
                     placeholder="Enter description (max 300 characters)"
@@ -141,7 +133,7 @@ export default function AddDappModal({ setShowAddDappModal }) {
                       width="w-full"
                     />
                   </div>
-                  <div className="w-full">
+                  <div className="w-full no-asteric">
                     <InputField
                       label="Priority Level"
                       placeholder="99"

@@ -279,3 +279,34 @@ th:last-child .t-head::after {
 .radio-label {
   font-size: 14px;
 }
+
+.add-token-form .flex.flex-col {
+  display: grid;
+  grid-template-columns: 35% auto;
+  gap: 24px;
+  align-items: center;
+}
+
+.add-token-dropdown>div {
+  display: grid;
+  grid-template-columns: 35% auto;
+  gap: 24px;
+  align-items: center;
+}
+
+.add-token-dropdown>div button {
+  margin: 0;
+}
+
+.add-token-dropdown>div label {
+  text-align: end;
+  margin: 0;
+}
+
+.add-token-form .flex.flex-col label {
+  text-align: end;
+}
+
+.no-asteric label span {
+  display: none;
+}
