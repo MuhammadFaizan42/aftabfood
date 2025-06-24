@@ -12,9 +12,9 @@ import Logo from "../../../components/assets/images/logo.png";
 import Edit from "../../../components/assets/images/edit.svg";
 import Delete from "../../../components/assets/images/delete.svg";
 import Save from "../../../components/assets/images/save.svg";
+import Drag from "../../../components/assets/images/drag.svg";
 import BackArrow from "../../../components/assets/images/BackArrow.svg";
 import ReusableTable from "../../../components/common/ReusableTable";
-import Dropdown from "../../../components/common/Dropdown";
 import SearchField from "../../../components/common/SearchField";
 import AddDappModal from "../../../components/layouts/Modals/AddDapp";
 import DeleteDAppModal from "../../../components/layouts/Modals/DeleteDApp";
@@ -59,17 +59,15 @@ export default function DappManagement() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
-
   const [selectedValue, setSelectedValue] = useState("0");
   const handleSelectionChange = (value) => {
     setSelectedValue(value);
   };
-  const options = [
-    { value: "0" },
-    { value: "1" },
-    { value: "2" },
-    { value: "3" },
-  ];
+
+  function toggleCheckbox(optionId) {
+    const checkbox = document.getElementById(optionId);
+    checkbox.checked = !checkbox.checked; // Toggle the checkbox state
+  }
 
   return (
     <>
@@ -103,29 +101,135 @@ export default function DappManagement() {
                   </button>
                 </div>
 
-                <div className="slot-lists my-6">
-                  <div className="px-3 py-2.5 border-b border-white/[0.16] text-xs font-medium">
+                <div className="slot-lists mt-8 mb-6">
+                  <div className="px-3 py-4 border-b border-white/[0.16] text-xs font-medium">
                     All
                   </div>
-                  <div className="px-3 py-2.5 border-b border-white/[0.16] text-xs font-medium">
+                  <div className="px-3 py-4 border-b border-white/[0.16] text-xs font-medium">
                     Popular
                   </div>
-                  <div className="px-3 py-2.5 border-b border-white/[0.16] text-xs font-medium">
+                  <div className="px-3 py-4 border-b border-white/[0.16] text-xs font-medium">
                     MEME
                   </div>
-                  <div className="px-3 py-2.5 border-b border-white/[0.16] text-xs font-medium">
+                  <div className="px-3 py-4 border-b border-white/[0.16] text-xs font-medium">
                     Defi
                   </div>
-                  <div className="px-3 py-2.5 border-b border-white/[0.16] text-xs font-medium">
+                  <div className="px-3 py-4 border-b border-white/[0.16] text-xs font-medium">
                     AirDrop
                   </div>
-                  <div className="px-3 py-2.5 border-b border-white/[0.16] text-xs font-medium">
+                  <div className="px-3 py-4 border-b border-white/[0.16] text-xs font-medium">
                     NFT
                   </div>
-                  <div className="px-3 py-2.5 border-b border-white/[0.16] text-xs font-medium">
+                  <div className="px-3 py-4 border-b border-white/[0.16] text-xs font-medium">
                     Other
                   </div>
                 </div>
+
+                {/* Draggable List Starts Here */}
+                <div className="hidden draggable-list mt-8 mb-6">
+                  <div className="px-3 py-4 border-b border-white/[0.16]">
+                    <div className="checkbox-item cursor-pointer" onClick={() => toggleCheckbox('all')}>
+                      <div className="flex items-center gap-2 text-xs font-medium">
+                        <div className="round flex items-center">
+                          <input type="checkbox" id="all" className="checkbox hidden" />
+                          <label htmlFor="all" className="checkbox-label"></label>
+                        </div>
+                        All
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="px-3 py-4 border-b border-white/[0.16] flex justify-between items-center">
+                    <div className="checkbox-item cursor-pointer" onClick={() => toggleCheckbox('popular')}>
+                      <div className="flex items-center gap-2 text-xs font-medium">
+                        <div className="round flex items-center">
+                          <input type="checkbox" id="popular" className="checkbox hidden" />
+                          <label htmlFor="popular" className="checkbox-label"></label>
+                        </div>
+                        Popular
+                      </div>
+                    </div>
+                    <button className="cursor-pointer">
+                      <Image src={Drag} width={12} height={9} alt="Media" />
+                    </button>
+                  </div>
+
+                  <div className="px-3 py-4 border-b border-white/[0.16] flex justify-between items-center">
+                    <div className="checkbox-item cursor-pointer" onClick={() => toggleCheckbox('meme')}>
+                      <div className="flex items-center gap-2 text-xs font-medium">
+                        <div className="round flex items-center">
+                          <input type="checkbox" id="meme" className="checkbox hidden" />
+                          <label htmlFor="meme" className="checkbox-label"></label>
+                        </div>
+                        MEME
+                      </div>
+                    </div>
+                    <button className="cursor-pointer">
+                      <Image src={Drag} width={12} height={9} alt="Media" />
+                    </button>
+                  </div>
+
+                  <div className="px-3 py-4 border-b border-white/[0.16] flex justify-between items-center">
+                    <div className="checkbox-item cursor-pointer" onClick={() => toggleCheckbox('defi')}>
+                      <div className="flex items-center gap-2 text-xs font-medium">
+                        <div className="round flex items-center">
+                          <input type="checkbox" id="defi" className="checkbox hidden" />
+                          <label htmlFor="defi" className="checkbox-label"></label>
+                        </div>
+                        Defi
+                      </div>
+                    </div>
+                    <button className="cursor-pointer">
+                      <Image src={Drag} width={12} height={9} alt="Media" />
+                    </button>
+                  </div>
+
+                  <div className="px-3 py-4 border-b border-white/[0.16] flex justify-between items-center">
+                    <div className="checkbox-item cursor-pointer" onClick={() => toggleCheckbox('airdrop')}>
+                      <div className="flex items-center gap-2 text-xs font-medium">
+                        <div className="round flex items-center">
+                          <input type="checkbox" id="airdrop" className="checkbox hidden" />
+                          <label htmlFor="airdrop" className="checkbox-label"></label>
+                        </div>
+                        AirDrop
+                      </div>
+                    </div>
+                    <button className="cursor-pointer">
+                      <Image src={Drag} width={12} height={9} alt="Media" />
+                    </button>
+                  </div>
+
+                  <div className="px-3 py-4 border-b border-white/[0.16] flex justify-between items-center">
+                    <div className="checkbox-item cursor-pointer" onClick={() => toggleCheckbox('nft')}>
+                      <div className="flex items-center gap-2 text-xs font-medium">
+                        <div className="round flex items-center">
+                          <input type="checkbox" id="nft" className="checkbox hidden" />
+                          <label htmlFor="nft" className="checkbox-label"></label>
+                        </div>
+                        NFT
+                      </div>
+                    </div>
+                    <button className="cursor-pointer">
+                      <Image src={Drag} width={12} height={9} alt="Media" />
+                    </button>
+                  </div>
+
+                  <div className="px-3 py-4 border-b border-white/[0.16] flex justify-between items-center">
+                    <div className="checkbox-item cursor-pointer" onClick={() => toggleCheckbox('other')}>
+                      <div className="flex items-center gap-2 text-xs font-medium">
+                        <div className="round flex items-center">
+                          <input type="checkbox" id="other" className="checkbox hidden" />
+                          <label htmlFor="other" className="checkbox-label"></label>
+                        </div>
+                        Other
+                      </div>
+                    </div>
+                    <button className="cursor-pointer">
+                      <Image src={Drag} width={12} height={9} alt="Media" />
+                    </button>
+                  </div>
+                </div>
+                {/* Draggable List Ends Here */}
 
                 <div className="slot-actions">
                   <button onClick={() => setShowAddSlotModal(true)}

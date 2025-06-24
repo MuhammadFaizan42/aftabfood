@@ -17,17 +17,17 @@ export default function LanguageCheckbox({ flagSrc, languageName }) {
           alt="Flag"
           className="w-6 h-6"
         />
-        <span className="text-sm">{languageName}</span> {/* Dynamically set the language */}
+        <span className="text-sm font-medium">{languageName}</span> {/* Dynamically set the language */}
       </div>
 
       {/* Green Round Checkbox */}
       <div
-        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isChecked ? 'bg-[var(--wow)] border-[var(--wow)]' : 'bg-transparent border-white'}`}
+        className={`w-5 h-5 rounded-full border flex items-center justify-center ${isChecked ? 'bg-[var(--wow)] border-[var(--wow)]' : 'bg-transparent border-white'}`}
       >
         {isChecked && (
-          <div className="w-4 h-4 rounded-full bg-[var(--wow)] flex items-center justify-center">
-            <span className="text-green-500">
-              <Image src={Check} alt="Check Mark" width={16} height={16} />
+          <div className="w-3 h-3 rounded-full bg-[var(--wow)] flex items-center justify-center">
+            <span>
+              <Image src={Check} alt="Check Mark" width={12} height={12} />
             </span>
           </div>
         )}

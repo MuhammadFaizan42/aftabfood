@@ -146,20 +146,20 @@ export default function AdSlotManagement() {
                 <div className="flex flex-wrap gap-4 mb-6">
                   {/* Using local image for German flag */}
                   <LanguageCheckbox
-                    flagSrc="/flags/germany.svg"  // Local image path (stored in the public/flags directory)
-                    languageName="German (DE)"
+                    flagSrc="/flags/FlagUSA.svg"  // Local image path (stored in the public/flags directory)
+                    languageName="English (USA)"
                   />
 
                   {/* Using local image for USA flag */}
                   <LanguageCheckbox
-                    flagSrc="https://toppng.com/uploads/preview/uk-round-flag-11563596900h0bvrmnyb2.png"  // Local image path (stored in the public/flags directory)
-                    languageName="English (USA)"
+                    flagSrc="/flags/FlagIndia.svg"  // Local image path (stored in the public/flags directory)
+                    languageName="INR - India"
                   />
 
                   {/* Using local image for India flag */}
                   <LanguageCheckbox
-                    flagSrc="/flags/india.svg"  // Local image path (stored in the public/flags directory)
-                    languageName="Hindi (IN)"
+                    flagSrc="/flags/FlagChina.svg"  // Local image path (stored in the public/flags directory)
+                    languageName="中国手语 (CSL)"
                   />
                 </div>
 
