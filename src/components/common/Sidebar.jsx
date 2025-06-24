@@ -55,19 +55,13 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
         </div>
 
         <nav className="flex flex-col mt-6 space-y-2 px-4 h-[calc(100vh-122px)] overflow-y-auto">
-          {/* User List */}
-          <Link href="/userlist" className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-[var(--wow)]">
-            <Image src={UserList} width={24} height={24} alt='Media' />
-            User List
-          </Link>
-
           {/* Collapsible Site Message */}
           <div className="flex flex-col">
             <button
               onClick={() => toggleSection('siteMessage')} // Toggle the collapsible state for Configuration
               className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
             >
-              <Image src={sms} width={24} height={24} alt='Site Message' />
+              <Image src={sms} width={24} height={24} alt="Site Message" />
               Site Message
               <span className="ml-auto">
                 <Image
@@ -81,11 +75,14 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
             {/* Collapsible Links with smooth transition */}
             <div
-              className={`overflow-hidden transition-all duration-300 ${openSections.siteMessage ? 'max-h-[1000px]' : 'max-h-0'}`} // Added smooth transition
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${openSections.siteMessage ? 'max-h-[1000px]' : 'max-h-0'}`}
             >
               {openSections.siteMessage && (
                 <>
-                  <Link href="/dapp-management" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
+                  <Link
+                    href="/dapp-management"
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
                     Site Message
                   </Link>
                 </>
@@ -99,7 +96,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
               onClick={() => toggleSection('versionUpdate')} // Toggle the collapsible state for Configuration
               className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
             >
-              <Image src={Update} width={24} height={24} alt='Version Update' />
+              <Image src={Update} width={24} height={24} alt="Version Update" />
               Version Update
               <span className="ml-auto">
                 <Image
@@ -113,11 +110,14 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
             {/* Collapsible Links with smooth transition */}
             <div
-              className={`overflow-hidden transition-all duration-300 ${openSections.versionUpdate ? 'max-h-[1000px]' : 'max-h-0'}`} // Added smooth transition
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${openSections.versionUpdate ? 'max-h-[1000px]' : 'max-h-0'}`}
             >
               {openSections.versionUpdate && (
                 <>
-                  <Link href="/dapp-management" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
+                  <Link
+                    href="/dapp-management"
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
                     Version Update
                   </Link>
                 </>
@@ -125,13 +125,13 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
             </div>
           </div>
 
-          {/* Collapsible Event Platorm */}
+          {/* Collapsible Event Platform */}
           <div className="flex flex-col">
             <button
               onClick={() => toggleSection('eventPlatform')} // Toggle the collapsible state for Configuration
               className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
             >
-              <Image src={Calendar} width={24} height={24} alt='Event Platform' />
+              <Image src={Calendar} width={24} height={24} alt="Event Platform" />
               Event Platform
               <span className="ml-auto">
                 <Image
@@ -145,11 +145,14 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
             {/* Collapsible Links with smooth transition */}
             <div
-              className={`overflow-hidden transition-all duration-300 ${openSections.eventPlatform ? 'max-h-[1000px]' : 'max-h-0'}`} // Added smooth transition
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${openSections.eventPlatform ? 'max-h-[1000px]' : 'max-h-0'}`}
             >
               {openSections.eventPlatform && (
                 <>
-                  <Link href="/dapp-management" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
+                  <Link
+                    href="/dapp-management"
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
                     Event Platform
                   </Link>
                 </>
@@ -163,7 +166,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
               onClick={() => toggleSection('config')} // Toggle the collapsible state for Configuration
               className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
             >
-              <Image src={Configuration} width={24} height={24} alt='Configuration' />
+              <Image src={Configuration} width={24} height={24} alt="Configuration" />
               Configuration
               <span className="ml-auto">
                 <Image
@@ -177,14 +180,20 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
             {/* Collapsible Links with smooth transition */}
             <div
-              className={`overflow-hidden transition-all duration-300 ${openSections.config ? 'max-h-[1000px]' : 'max-h-0'}`} // Added smooth transition
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${openSections.config ? 'max-h-[1000px]' : 'max-h-0'}`}
             >
               {openSections.config && (
                 <>
-                  <Link href="/configuration/dappmanagement" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
+                  <Link
+                    href="/configuration/dappmanagement"
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
                     DApp Management
                   </Link>
-                  <Link href="/configuration/tokenmanagement" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
+                  <Link
+                    href="/configuration/tokenmanagement"
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
                     Token Management
                   </Link>
                 </>
@@ -192,13 +201,13 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
             </div>
           </div>
 
-          {/* Collapsible Ad Slot Mangement */}
+          {/* Collapsible Ad Slot Management */}
           <div className="flex flex-col">
             <button
               onClick={() => toggleSection('adSlot')} // Toggle the collapsible state for Ad Slot Management
               className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
             >
-              <Image src={Ad} width={24} height={24} alt='Ad' />
+              <Image src={Ad} width={24} height={24} alt="Ad" />
               Ad Slot Management
               <span className="ml-auto">
                 <Image
@@ -212,11 +221,14 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
             {/* Collapsible Links with smooth transition */}
             <div
-              className={`overflow-hidden transition-all duration-300 ${openSections.adSlot ? 'max-h-[1000px]' : 'max-h-0'}`} // Added smooth transition
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${openSections.adSlot ? 'max-h-[1000px]' : 'max-h-0'}`}
             >
               {openSections.adSlot && (
                 <>
-                  <Link href="/admanagement/adslotmanagement" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
+                  <Link
+                    href="/admanagement/adslotmanagement"
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-all duration-200 cursor-pointer mb-1"
+                  >
                     Ad Slot Management
                   </Link>
                 </>
@@ -230,7 +242,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
               onClick={() => toggleSection('dataManagement')} // Toggle the collapsible state for Ad Slot Management
               className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
             >
-              <Image src={Data} width={24} height={24} alt='Data' />
+              <Image src={Data} width={24} height={24} alt="Data" />
               Data Dashboard
               <span className="ml-auto">
                 <Image
@@ -244,11 +256,14 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
             {/* Collapsible Links with smooth transition */}
             <div
-              className={`overflow-hidden transition-all duration-300 ${openSections.dataManagement ? 'max-h-[1000px]' : 'max-h-0'}`} // Added smooth transition
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${openSections.dataManagement ? 'max-h-[1000px]' : 'max-h-0'}`}
             >
               {openSections.dataManagement && (
                 <>
-                  <Link href="/ad-management" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
+                  <Link
+                    href="/ad-management"
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
                     Data Management
                   </Link>
                 </>
@@ -262,7 +277,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
               onClick={() => toggleSection('system')} // Toggle the collapsible state for Ad Slot Management
               className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
             >
-              <Image src={System} width={24} height={24} alt='System' />
+              <Image src={System} width={24} height={24} alt="System" />
               System
               <span className="ml-auto">
                 <Image
@@ -276,11 +291,14 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
             {/* Collapsible Links with smooth transition */}
             <div
-              className={`overflow-hidden transition-all duration-300 ${openSections.system ? 'max-h-[1000px]' : 'max-h-0'}`} // Added smooth transition
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${openSections.system ? 'max-h-[1000px]' : 'max-h-0'}`}
             >
               {openSections.system && (
                 <>
-                  <Link href="/ad-management" className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1">
+                  <Link
+                    href="/ad-management"
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
                     System
                   </Link>
                 </>
@@ -288,7 +306,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
             </div>
           </div>
 
-          <div className='w-full h-[1px] bg-white/50 mt-3'></div>
+          <div className="w-full h-[1px] bg-white/50 mt-3"></div>
 
           {/* Language Selection */}
           <div className="relative w-full block md:hidden">
@@ -296,8 +314,8 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
               onClick={() => setLangMenuOpen(!langMenuOpen)}
               className="flex w-full justify-between cursor-pointer items-center space-x-2 text-white hover:text-[var(--wow)] text-base font-bold uppercase focus:outline-none"
             >
-              <div className='flex items-center gap-2'>
-                <Image src={EN} width={24} height={24} alt='Media' />
+              <div className="flex items-center gap-2">
+                <Image src={EN} width={24} height={24} alt="Media" />
                 <span>EN</span>
               </div>
               <svg
@@ -318,8 +336,9 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
             )}
           </div>
 
-          <div className='text-base font-bold mt-1 block md:hidden'>Admin</div>
+          <div className="text-base font-bold mt-1 block md:hidden">Admin</div>
         </nav>
+
       </aside>
     </>
   );
