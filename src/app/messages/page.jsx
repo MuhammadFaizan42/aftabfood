@@ -153,7 +153,7 @@ export default function Messages() {
                 />
               </div>
             </div>
-            <button className="text-base font-bold bg-btn-gradient border-2 border-[var(--wow)] hover:border-[var(--hover-color)] rounded-full py-2 px-6 cursor-pointer min-h-[50px]">
+            <button className="text-sm font-bold bg-btn-gradient border-2 border-[var(--wow)] hover:border-[var(--hover-color)] rounded-full py-2 px-6 cursor-pointer min-h-[50px]">
               <Image src={Plus} width={24} height={24} alt="Add" className="inline-block mr-2" />
               Add
             </button>
@@ -247,7 +247,7 @@ export default function Messages() {
                 />
               </div>
             </div>
-            <button className="text-base font-bold bg-btn-gradient border-2 border-[var(--wow)] hover:border-[var(--hover-color)] rounded-full py-2 px-6 cursor-pointer min-h-[50px]">
+            <button className="text-sm font-bold bg-btn-gradient border-2 border-[var(--wow)] hover:border-[var(--hover-color)] rounded-full py-2 px-6 cursor-pointer min-h-[50px]">
               <Image src={Plus} width={24} height={24} alt="Add" className="inline-block mr-2" />
               Add
             </button>
