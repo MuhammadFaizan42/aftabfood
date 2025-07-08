@@ -65,7 +65,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
         <nav className="flex flex-col mt-6 space-y-2 px-4 h-[calc(100vh-122px)] overflow-y-auto">
           {/* Collapsible Site Message */}
-          <Link href=" "
+          <Link href="/messages"
             className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
           >
             <Image src={sms} width={24} height={24} alt="Site Message" />
