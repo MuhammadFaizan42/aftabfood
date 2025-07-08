@@ -24,7 +24,11 @@ export default function ReusableTable({ columns, data, rowsPerPage = 5 }) {
           <thead className="">
             <tr>
               {columns.map((col) => (
-                <th key={col.accessor} className="relative px-4 py-[18px] text-left text-xs font-bold first:rounded-tl-xl bg-white/20 backdrop-blur-xl last:rounded-tr-xl word-break-all">
+                <th
+                  key={col.accessor}
+                  className="relative px-4 py-[18px] text-left text-xs font-bold first:rounded-tl-xl bg-white/20 backdrop-blur-xl last:rounded-tr-xl word-break-all"
+                  style={{ padding: col.padding || "18px 16px" }}
+                >
                   <p className="t-head">{col.header}</p>
                 </th>
               ))}
@@ -40,7 +44,11 @@ export default function ReusableTable({ columns, data, rowsPerPage = 5 }) {
                 }}
               >
                 {columns.map((col) => (
-                  <td key={col.accessor} className="px-4 py-2 word-break-all text-xs font-medium">
+                  <td key={col.accessor} className="px-4 py-2 word-break-all text-xs font-medium"
+                    style={{
+                      padding: col.padding || "8px 16px",
+                    }}
+                  >
                     {row[col.accessor]}
                   </td>
                 ))}
