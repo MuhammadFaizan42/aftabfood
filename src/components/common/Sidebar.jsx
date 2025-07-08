@@ -11,6 +11,10 @@ import sms from '../assets/images/sms.svg';
 import Update from '../assets/images/update.svg';
 import Calendar from '../assets/images/calendar.svg';
 import Data from '../assets/images/data.svg';
+import Wallet from '../assets/images/wallet.svg';
+import Event from '../assets/images/event.svg';
+import DappIcon from '../assets/images/dapp.svg';
+import Banner from '../assets/images/banner.svg';
 import System from '../assets/images/system.svg';
 import UpArrow from '../assets/images/UpArrow.svg';
 import UserList from '../assets/images/UserList.svg';
@@ -27,6 +31,11 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
     config: false,
     adSlot: false,
     dataManagement: false,
+    walletDashboard: false,
+    eventDashboard: false,
+    dappDashboard: false,
+    adDashboard: false,
+    bannerDashboard: false,
     system: false,
   }); // State for tracking which section is open
 
@@ -56,39 +65,12 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
         <nav className="flex flex-col mt-6 space-y-2 px-4 h-[calc(100vh-122px)] overflow-y-auto">
           {/* Collapsible Site Message */}
-          <div className="flex flex-col">
-            <button
-              onClick={() => toggleSection('siteMessage')} // Toggle the collapsible state for Configuration
-              className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
-            >
-              <Image src={sms} width={24} height={24} alt="Site Message" />
-              Site Message
-              <span className="ml-auto">
-                <Image
-                  src={openSections.siteMessage ? UpArrow : DownArrow}
-                  width={24}
-                  height={24}
-                  alt="Toggle Arrow"
-                />
-              </span>
-            </button>
-
-            {/* Collapsible Links with smooth transition */}
-            <div
-              className={`overflow-hidden transition-all duration-300 ease-in-out ${openSections.siteMessage ? 'max-h-[1000px]' : 'max-h-0'}`}
-            >
-              {openSections.siteMessage && (
-                <>
-                  <Link
-                    href="/dapp-management"
-                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
-                  >
-                    Site Message
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
+          <Link href=" "
+            className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
+          >
+            <Image src={sms} width={24} height={24} alt="Site Message" />
+            Messages
+          </Link>
 
           {/* Collapsible Version Update */}
           <div className="flex flex-col">
@@ -265,6 +247,199 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                     className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
                   >
                     Data Management
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Collapsible Wallet Dashboard */}
+          <div className="flex flex-col">
+            <button
+              onClick={() => toggleSection('walletDashboard')}
+              className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
+            >
+              <Image src={Wallet} width={24} height={24} alt="Wallet" />
+              Wallet Dashboard
+              <span className="ml-auto">
+                <Image
+                  src={openSections.walletDashboard ? UpArrow : DownArrow}
+                  width={24}
+                  height={24}
+                  alt="Toggle Arrow"
+                />
+              </span>
+            </button>
+
+            {/* Collapsible Links with smooth transition */}
+            <div
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${openSections.walletDashboard ? 'max-h-[1000px]' : 'max-h-0'}`}
+            >
+              {openSections.walletDashboard && (
+                <>
+                  <Link
+                    href="/ad-management"
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
+                    Address Stats
+                  </Link>
+                  <Link
+                    href="/ad-management"
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
+                    Daily Visits
+                  </Link>
+                  <Link
+                    href="/ad-management"
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
+                    Transaction Stats
+                  </Link>
+                  <Link
+                    href="/ad-management"
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
+                    Swap Stats
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Collapsible Event Dashboard */}
+          <div className="flex flex-col">
+            <button
+              onClick={() => toggleSection('eventDashboard')}
+              className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
+            >
+              <Image src={Event} width={24} height={24} alt="Event" />
+              Event Dashboard
+              <span className="ml-auto">
+                <Image
+                  src={openSections.eventDashboard ? UpArrow : DownArrow}
+                  width={24}
+                  height={24}
+                  alt="Toggle Arrow"
+                />
+              </span>
+            </button>
+
+            {/* Collapsible Links with smooth transition */}
+            <div
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${openSections.eventDashboard ? 'max-h-[1000px]' : 'max-h-0'}`}
+            >
+              {openSections.eventDashboard && (
+                <>
+                  <Link
+                    href="/ad-management"
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
+                    Event Visits
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Collapsible DApp Dashboard */}
+          <div className="flex flex-col">
+            <button
+              onClick={() => toggleSection('dappDashboard')}
+              className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
+            >
+              <Image src={DappIcon} width={24} height={24} alt="Media" />
+              DApp Dashboard
+              <span className="ml-auto">
+                <Image
+                  src={openSections.dappDashboard ? UpArrow : DownArrow}
+                  width={24}
+                  height={24}
+                  alt="Toggle Arrow"
+                />
+              </span>
+            </button>
+
+            {/* Collapsible Links with smooth transition */}
+            <div
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${openSections.dappDashboard ? 'max-h-[1000px]' : 'max-h-0'}`}
+            >
+              {openSections.dappDashboard && (
+                <>
+                  <Link
+                    href="/ad-management"
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
+                    Daily Visits
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Collapsible Ad Dashboard */}
+          <div className="flex flex-col">
+            <button
+              onClick={() => toggleSection('adDashboard')}
+              className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
+            >
+              <Image src={Ad} width={24} height={24} alt="Media" />
+              Ad Dashboard
+              <span className="ml-auto">
+                <Image
+                  src={openSections.adDashboard ? UpArrow : DownArrow}
+                  width={24}
+                  height={24}
+                  alt="Toggle Arrow"
+                />
+              </span>
+            </button>
+
+            {/* Collapsible Links with smooth transition */}
+            <div
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${openSections.adDashboard ? 'max-h-[1000px]' : 'max-h-0'}`}
+            >
+              {openSections.adDashboard && (
+                <>
+                  <Link
+                    href=" "
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
+                    AD Slot Stats
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Collapsible Banner Dashboard */}
+          <div className="flex flex-col">
+            <button
+              onClick={() => toggleSection('bannerDashboard')}
+              className="flex items-center cursor-pointer gap-2 px-4 py-2 text-sm font-medium rounded-md hover:bg-[var(--wow)] transition-colors"
+            >
+              <Image src={Banner} width={24} height={24} alt="Media" />
+              Banner Dashboard
+              <span className="ml-auto">
+                <Image
+                  src={openSections.bannerDashboard ? UpArrow : DownArrow}
+                  width={24}
+                  height={24}
+                  alt="Toggle Arrow"
+                />
+              </span>
+            </button>
+
+            {/* Collapsible Links with smooth transition */}
+            <div
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${openSections.bannerDashboard ? 'max-h-[1000px]' : 'max-h-0'}`}
+            >
+              {openSections.bannerDashboard && (
+                <>
+                  <Link
+                    href=" "
+                    className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
+                  >
+                    Banner Stats
                   </Link>
                 </>
               )}
