@@ -262,6 +262,7 @@ export default function Messages() {
       {showAddDappModal && <AddDappModal setShowAddDappModal={setShowAddDappModal} />}
       {showDeleteDAppModal && <DeleteDAppModal setShowDeleteDAppModal={setShowDeleteDAppModal} />}
       {showAddSlotModal && <AddSlotModal setShowAddSlotModal={setShowAddSlotModal} />}
+
       <div className="flex min-h-screen text-white">
         <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
         <div className="flex flex-col flex-1 overflow-hidden md:overflow-visible">

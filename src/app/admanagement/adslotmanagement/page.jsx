@@ -194,7 +194,6 @@ export default function AdSlotManagement() {
                         label="Ad Name"
                         placeholder="e.g., WOWEARN"
                         className="mb-4"
-                        value={name}
                         onChange={(e) => setName(e.target.value)}
                       />
                     </div>
@@ -215,7 +214,6 @@ export default function AdSlotManagement() {
                         label="URL (Optional)"
                         placeholder="https://example.com"
                         className="mb-4"
-                        // value={symbol}
                         onChange={(e) => setSymbol(e.target.value)}
                       />
                     </div>
@@ -255,7 +253,6 @@ export default function AdSlotManagement() {
                         label="Priority Level"
                         placeholder="99"
                         className="mb-4"
-                        // value={symbol}
                         onChange={(e) => setSymbol(e.target.value)}
                       />
                     </div>
