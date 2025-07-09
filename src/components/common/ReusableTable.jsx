@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-
+import Image from "next/image";
 export default function ReusableTable({ columns, data, rowsPerPage = 5 }) {
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -29,7 +29,19 @@ export default function ReusableTable({ columns, data, rowsPerPage = 5 }) {
                   className="relative px-4 py-[18px] text-left text-xs font-bold first:rounded-tl-xl bg-white/20 backdrop-blur-xl last:rounded-tr-xl word-break-all"
                   style={{ padding: col.padding || "18px 16px" }}
                 >
-                  <p className="t-head">{col.header}</p>
+                  <div className="flex items-center w-max">
+                    {col.headerImages && col.headerImages.map((image, index) => (
+                      <Image
+                        key={index}
+                        src={image.src}
+                        alt={image.alt}
+                        width={24}
+                        height={24}
+                        className="mr-2"
+                      />
+                    ))}
+                    <p className="t-head">{col.header}</p>
+                  </div>
                 </th>
               ))}
             </tr>
