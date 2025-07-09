@@ -71,7 +71,7 @@ export default function ReusableTable({ columns, data, rowsPerPage = 5 }) {
       </div>
 
       {/* Pagination */}
-      <div className="my-4 flex justify-between items-center">
+      <div className="mt-4 flex justify-between items-center">
         <div className="text-sm font-medium">Showing {paginatedData.length} results</div>
         <div>
           <button
