@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import Image from "next/image";
+
 export default function ReusableTable({ columns, data, rowsPerPage = 5 }) {
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -19,7 +20,7 @@ export default function ReusableTable({ columns, data, rowsPerPage = 5 }) {
 
   return (
     <div className="table-container">
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto max-w-full">
         <table className="w-full border border-[#f5f5f5]/[0.16] rounded-xl border-separate border-spacing-0 backdrop-blur-xl">
           <thead className="">
             <tr>
@@ -29,17 +30,18 @@ export default function ReusableTable({ columns, data, rowsPerPage = 5 }) {
                   className="relative px-4 py-[18px] text-left text-xs font-bold first:rounded-tl-xl bg-white/20 backdrop-blur-xl last:rounded-tr-xl word-break-all"
                   style={{ padding: col.padding || "18px 16px" }}
                 >
-                  <div className="flex items-center w-max">
-                    {col.headerImages && col.headerImages.map((image, index) => (
-                      <Image
-                        key={index}
-                        src={image.src}
-                        alt={image.alt}
-                        width={24}
-                        height={24}
-                        className="mr-2"
-                      />
-                    ))}
+                  <div className="flex items-center w-auto min-w-16">
+                    {col.headerImages &&
+                      col.headerImages.map((image, index) => (
+                        <Image
+                          key={index}
+                          src={image.src}
+                          alt={image.alt}
+                          width={24}
+                          height={24}
+                          className="mr-2"
+                        />
+                      ))}
                     <p className="t-head">{col.header}</p>
                   </div>
                 </th>
@@ -52,11 +54,16 @@ export default function ReusableTable({ columns, data, rowsPerPage = 5 }) {
                 key={idx}
                 className="backdrop-blur-xl"
                 style={{
-                  backgroundColor: idx % 2 === 0 ? "rgba(255, 255, 255, 0)" : "rgba(255, 255, 255, 0.1)",
+                  backgroundColor:
+                    idx % 2 === 0
+                      ? "rgba(255, 255, 255, 0)"
+                      : "rgba(255, 255, 255, 0.1)",
                 }}
               >
                 {columns.map((col) => (
-                  <td key={col.accessor} className="px-4 py-2 word-break-all text-xs font-medium"
+                  <td
+                    key={col.accessor}
+                    className="px-4 py-2 word-break-all text-xs font-medium"
                     style={{
                       padding: col.padding || "8px 16px",
                     }}
@@ -72,7 +79,9 @@ export default function ReusableTable({ columns, data, rowsPerPage = 5 }) {
 
       {/* Pagination */}
       <div className="mt-4 flex justify-between items-center">
-        <div className="text-sm font-medium">Showing {paginatedData.length} results</div>
+        <div className="text-sm font-medium">
+          Showing {paginatedData.length} results
+        </div>
         <div>
           <button
             onClick={() => handlePageChange(currentPage - 1)}
