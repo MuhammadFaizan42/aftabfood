@@ -83,6 +83,63 @@ const data = [
   },
 ];
 
+const columnsBannerTable = [
+  { header: "Date", accessor: "Date" },
+  { header: "Marketing Slot", accessor: "marketingSlot" },
+  { header: "Image", accessor: "Image" },
+  { header: "Total Visits", accessor: "totalVisits" },
+  {
+    header: "US Visits", accessor: "uSVisits",
+    headerImages: [
+      { src: FlagUSA, alt: 'Image 1' },  // First image
+    ]
+  },
+  {
+    header: "UK Visits", accessor: "uKVisits",
+    headerImages: [
+      { src: FlagUK, alt: 'Image 1' },  // First image
+    ]
+  },
+  { header: "Status", accessor: "status" },
+];
+
+const dataBannerTable = [
+  {
+    Date: '2025-12-12',
+    marketingSlot: 'Test Slot Name',
+    Image:
+      (
+        <div>
+          <Image
+            width={100}
+            height={100}
+            className="min-w-[150px] h-9 object-cover rounded"
+            src={PlaceholderIcon}
+          />
+        </div>
+      ),
+    totalVisits: "116,000",
+    uSVisits: "116,000",
+    uKVisits: "116,000",
+    status:
+      (
+        <div>
+          <div className="py-1 px-5 w-[90px] text-[var(--wow)] bg-[var(--wow)]/[0.16] text-center rounded-full text-xs font-normal">
+            Listed
+          </div>
+
+          {/* <div className="py-1 px-5 w-[90px] text-[#FAE715] bg-[#FAE715]/[0.16] text-center rounded-full text-xs font-normal">
+            Unlisted
+          </div>
+          <div className="py-1 px-5 w-[90px] text-[#DC2626] bg-[#DC2626]/[0.16] text-center rounded-full text-xs font-normal">
+            Delisted
+          </div> */}
+        </div>
+      ),
+
+  },
+];
+
 export default function BannerStats() {
   const customPlaceholder = "Search Slot..."; // Custom placeholder for the search field
 
@@ -161,23 +218,36 @@ export default function BannerStats() {
                   Daily Banner Data
                 </h1>
                 <div className="w-full">
-                  <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
+                  <div className="mb-6 flex flex-wrap items-center gap-4">
                     <div className="flex flex-wrap items-center gap-6">
                       <div className="w-full md:w-auto">
                         <SearchField placeholder="Search Slot..."
                           className="bg-white/10 border border-white/[0.16] rounded-md pl-4 pr-11 py-[13px] flex-grow w-full outline-0 focus:border-[var(--wow)] transition duration-300 focus:ring-0 text-base"
                         />
                       </div>
-                      <div className="no-margin w-full md:w-auto">
-                        <Dropdown
-                          // label="Label"
-                          options={options}
-                          selectedValue={selectedValue}
-                          onChange={handleSelectionChange}
-                          width="w-full md:min-w-[150px] text-sm"
+                    </div>
+
+                    <div className="flex items-center flex-wrap gap-4">
+                      <div className="flex items-center flex-wrap gap-4">
+                        <label htmlFor="date" className="text-sm font-bold">Time:</label>
+                        <input
+                          type="date"
+                          id="date"
+                          className="px-4 py-[13px] rounded-md bg-white/10 border border-white/[0.16] focus:outline-none focus:ring focus:ring-[var(--wow)] transition duration-300 text-base"
+                        />
+                      </div>
+
+                      <div className="text-base">-</div>
+
+                      <div>
+                        <input
+                          type="date"
+                          id="date"
+                          className="px-4 py-[13px] rounded-md bg-white/10 border border-white/[0.16] focus:outline-none focus:ring focus:ring-[var(--wow)] transition duration-300 text-base"
                         />
                       </div>
                     </div>
+
                     <button
                       onClick={() => setIsAddTokenVisible(true)}
                       className="flex w-max gap-2 items-center text-sm font-semibold bg-btn-gradient border-2 border-[var(--wow)] hover:bg-black hover:border-[var(--hover-color)] rounded-full py-[11px] px-6 min-h-[50px] whitespace-nowrap cursor-pointer box-border"
@@ -188,7 +258,7 @@ export default function BannerStats() {
                   </div>
 
                   <div className="table-section">
-                    <ReusableTable columns={columns} data={data} rowsPerPage={5} />
+                    <ReusableTable columns={columnsBannerTable} data={dataBannerTable} rowsPerPage={5} />
                   </div>
                 </div>
               </div>
