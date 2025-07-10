@@ -18,6 +18,7 @@ import FlagDubai from "../../../components/assets/images/FlagDubai.svg";
 import FlagTurkey from "../../../components/assets/images/FlagTurkey.svg";
 import FlagIndia from "../../../components/assets/images/FlagIndia.svg";
 import BackArrow from "../../../components/assets/images/BackArrow.svg";
+import EventChart from "../../../components/assets/images/EventChart.svg";
 import PlaceholderIcon from "../../../components/assets/images/placeholder.png";
 import ReusableTable from "../../../components/common/ReusableTable";
 import Dropdown from "../../../components/common/Dropdown";
@@ -73,6 +74,7 @@ const dataEventTable = [
 
 export default function EventVisits() {
   const customPlaceholder = "Search Slot..."; // Custom placeholder for the search field
+  const [isEventDataVisible, setIsEventDataVisible] = useState(false); // State to control the visibility of the Add Token section
 
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
   const toggleDropdown = () => {
@@ -104,24 +106,78 @@ export default function EventVisits() {
           <Header toggleSidebar={toggleSidebar} />
 
           <main>
-            <div className="m-6 p-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
-              <div className="token-wrapper">
-                <div className="flex items-center justify-between gap-6 flex-wrap mb-6">
-                  <h1 className="text-xl font-semibold">
-                    Event Visit Data Statistics
-                  </h1>
-                  <ReusableButton text="Visual Chart" />
-                </div>
-                <div className="w-full">
-                  <div className="mb-6 flex flex-wrap items-center gap-4">
-                    <div className="flex flex-wrap items-center gap-6">
-                      <div className="w-full md:w-auto">
-                        <SearchField placeholder="Search Event..."
-                          className="bg-white/10 border border-white/[0.16] rounded-md pl-4 pr-11 py-[13px] flex-grow w-full outline-0 focus:border-[var(--wow)] transition duration-300 focus:ring-0 text-base"
-                        />
+            {!isEventDataVisible && (
+              <div className="m-6 p-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
+                <div className="token-wrapper">
+                  <div className="flex items-center justify-between gap-6 flex-wrap mb-6">
+                    <h1 className="text-xl font-semibold">
+                      Event Visit Data Statistics
+                    </h1>
+                    <ReusableButton onClick={() => setIsEventDataVisible(true)} text="Visual Chart" />
+                  </div>
+                  <div className="w-full">
+                    <div className="mb-6 flex flex-wrap items-center gap-4">
+                      <div className="flex flex-wrap items-center gap-6">
+                        <div className="w-full md:w-auto">
+                          <SearchField placeholder="Search Event..."
+                            className="bg-white/10 border border-white/[0.16] rounded-md pl-4 pr-11 py-[13px] flex-grow w-full outline-0 focus:border-[var(--wow)] transition duration-300 focus:ring-0 text-base"
+                          />
+                        </div>
                       </div>
+
+                      <div className="flex items-center flex-wrap gap-4">
+                        <div className="flex items-center flex-wrap gap-4">
+                          <label htmlFor="date" className="text-sm font-bold">Time:</label>
+                          <input
+                            type="date"
+                            id="date"
+                            className="px-4 py-[13px] rounded-md bg-white/10 border border-white/[0.16] focus:outline-none focus:ring focus:ring-[var(--wow)] transition duration-300 text-base"
+                          />
+                        </div>
+
+                        <div className="text-base">-</div>
+
+                        <div>
+                          <input
+                            type="date"
+                            id="date"
+                            className="px-4 py-[13px] rounded-md bg-white/10 border border-white/[0.16] focus:outline-none focus:ring focus:ring-[var(--wow)] transition duration-300 text-base"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        className="flex w-max gap-2 items-center text-sm font-semibold bg-btn-gradient border-2 border-[var(--wow)] hover:bg-black hover:border-[var(--hover-color)] rounded-full py-[11px] px-6 min-h-[50px] whitespace-nowrap cursor-pointer box-border"
+                      >
+                        <Image src={Export} width={24} height={24} alt="Media" />
+                        Export
+                      </button>
                     </div>
 
+                    <div className="table-section">
+                      <ReusableTable columns={columnsEventTable} data={dataEventTable} rowsPerPage={5} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Add Token Wrapper */}
+            {isEventDataVisible && (
+              <div className="m-6">
+                <div className="flex gap-4 items-center mb-6">
+                  <button
+                    className="cursor-pointer"
+                    onClick={() => setIsEventDataVisible(false)}
+                  >
+                    <Image src={BackArrow} width={24} height={24} alt="Back" />
+                  </button>
+                  <h2 className="text-xl">Analysis of Visit Data for Each Event</h2>
+                </div>
+                <div className="p-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
+                  <h2 className="text-xl font-semibold mb-6">Visit Data Analysis by Event</h2>
+
+                  <div className="event-wrapper">
                     <div className="flex items-center flex-wrap gap-4">
                       <div className="flex items-center flex-wrap gap-4">
                         <label htmlFor="date" className="text-sm font-bold">Time:</label>
@@ -143,20 +199,13 @@ export default function EventVisits() {
                       </div>
                     </div>
 
-                    <button
-                      className="flex w-max gap-2 items-center text-sm font-semibold bg-btn-gradient border-2 border-[var(--wow)] hover:bg-black hover:border-[var(--hover-color)] rounded-full py-[11px] px-6 min-h-[50px] whitespace-nowrap cursor-pointer box-border"
-                    >
-                      <Image src={Export} width={24} height={24} alt="Media" />
-                      Export
-                    </button>
-                  </div>
-
-                  <div className="table-section">
-                    <ReusableTable columns={columnsEventTable} data={dataEventTable} rowsPerPage={5} />
+                    <div className="mt-6">
+                      <Image src={EventChart} width={100} height={100} alt="Event Chart" className="w-full h-auto" />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
           </main>
         </div>
       </div>
