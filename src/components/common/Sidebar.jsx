@@ -278,25 +278,25 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
               {openSections.walletDashboard && (
                 <>
                   <Link
-                    href="/ad-management"
+                    href="/walletdashboard/addressstats"
                     className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
                   >
                     Address Stats
                   </Link>
                   <Link
-                    href="/ad-management"
+                    href="/walletdashboard/addressstats"
                     className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
                   >
                     Daily Visits
                   </Link>
                   <Link
-                    href="/ad-management"
+                    href="/walletdashboard/addressstats"
                     className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
                   >
                     Transaction Stats
                   </Link>
                   <Link
-                    href="/ad-management"
+                    href="/walletdashboard/addressstats"
                     className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
                   >
                     Swap Stats
