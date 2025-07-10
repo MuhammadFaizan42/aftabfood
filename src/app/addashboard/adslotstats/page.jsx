@@ -140,7 +140,7 @@ const dataBannerTable = [
   },
 ];
 
-export default function BannerStats() {
+export default function AdSlotStats() {
   const customPlaceholder = "Search Slot..."; // Custom placeholder for the search field
 
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);

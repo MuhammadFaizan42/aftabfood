@@ -14,6 +14,8 @@ import Delete from "../../../components/assets/images/delete.svg";
 import FlagUSA from "../../../components/assets/images/FlagUSA.svg";
 import FlagUK from "../../../components/assets/images/FlagUK.svg";
 import FlagChina from "../../../components/assets/images/FlagChina.svg";
+import FlagDubai from "../../../components/assets/images/FlagDubai.svg";
+import FlagTurkey from "../../../components/assets/images/FlagTurkey.svg";
 import FlagIndia from "../../../components/assets/images/FlagIndia.svg";
 import BackArrow from "../../../components/assets/images/BackArrow.svg";
 import PlaceholderIcon from "../../../components/assets/images/placeholder.png";
@@ -28,26 +30,48 @@ import LanguageDropdown from "../../../components/common/LanguageDropdown";
 import DeleteAdModal from "../../../components/layouts/Modals/DeleteAd";
 import LanguageCheckbox from "../../../components/common/LanguageCheckbox";
 
-const columns = [
-  { header: "Date", accessor: "Date", padding: "18px 16px" },
-  { header: "DApp", accessor: "DApp", padding: "18px 16px" },
-  { header: "Total Visits", accessor: "totalVisits", padding: "18px 16px" },
-  { header: "IOS Visits", accessor: "iosVisits", padding: "18px 16px" },
-  { header: "Android Visits", accessor: "androidVisits", padding: "18px 16px" },
-];
-
-const data = [
+const columnsEventTable = [
+  { header: "Event", accessor: "Event", padding: "18px 16px" },
+  { header: "Total Visits", accessor: "totalVisits" },
   {
-    Date: '2025-12-12',
-    DApp: "WOW EARN",
-    totalVisits: "116,000",
-    iosVisits: "116,000",
-    androidVisits: "116,000",
+    header: "US Address Count", accessor: "uSAddressCount", padding: "18px 16px",
+    headerImages: [
+      { src: FlagUSA, alt: 'Flag' },
+    ]
+  },
+  {
+    header: "Dubai Address Count", accessor: "dubaiAddressCount", padding: "18px 16px",
+    headerImages: [
+      { src: FlagDubai, alt: 'Flag' },
+    ]
+  },
+  {
+    header: "Turkey Address Count", accessor: "turkeyAddressCount", padding: "18px 16px",
+    headerImages: [
+      { src: FlagTurkey, alt: 'Flag' },
+    ]
+  },
+  {
+    header: "India Address Count", accessor: "indiaAddressCount", padding: "18px 16px",
+    headerImages: [
+      { src: FlagIndia, alt: 'Flag' },
+    ]
   },
 ];
 
+const dataEventTable = [
+  {
+    Event: 'Twitter',
+    totalVisits: "116,000",
+    marketingSlot: 'Test Slot Name',
+    uSAddressCount: "116,000",
+    dubaiAddressCount: "116,000",
+    turkeyAddressCount: "116,000",
+    indiaAddressCount: "116,000",
+  },
+];
 
-export default function DailyVisits() {
+export default function EventVisits() {
   const customPlaceholder = "Search Slot..."; // Custom placeholder for the search field
 
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
@@ -79,12 +103,12 @@ export default function DailyVisits() {
         <div className="flex flex-col flex-1 overflow-hidden md:overflow-visible">
           <Header toggleSidebar={toggleSidebar} />
 
-          <main className="m-6">
-            <div className="p-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
+          <main>
+            <div className="m-6 p-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
               <div className="token-wrapper">
                 <div className="flex items-center justify-between gap-6 flex-wrap mb-6">
                   <h1 className="text-xl font-semibold">
-                    Daily DAPP Visit Data Statistics
+                    Event Visit Data Statistics
                   </h1>
                   <ReusableButton text="Visual Chart" />
                 </div>
@@ -92,7 +116,7 @@ export default function DailyVisits() {
                   <div className="mb-6 flex flex-wrap items-center gap-4">
                     <div className="flex flex-wrap items-center gap-6">
                       <div className="w-full md:w-auto">
-                        <SearchField placeholder="Search DApp..."
+                        <SearchField placeholder="Search Event..."
                           className="bg-white/10 border border-white/[0.16] rounded-md pl-4 pr-11 py-[13px] flex-grow w-full outline-0 focus:border-[var(--wow)] transition duration-300 focus:ring-0 text-base"
                         />
                       </div>
@@ -128,7 +152,7 @@ export default function DailyVisits() {
                   </div>
 
                   <div className="table-section">
-                    <ReusableTable columns={columns} data={data} rowsPerPage={5} />
+                    <ReusableTable columns={columnsEventTable} data={dataEventTable} rowsPerPage={5} />
                   </div>
                 </div>
               </div>

@@ -331,7 +331,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
               {openSections.eventDashboard && (
                 <>
                   <Link
-                    href="/ad-management"
+                    href="/eventdashboard/eventvisits"
                     className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
                   >
                     Event Visits
