@@ -176,7 +176,7 @@ export default function BannerStats() {
             <div className="p-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
               <div className="token-wrapper">
                 <h1 className="text-xl flex items-center gap-4 font-semibold mb-6">
-                  Banner Data Statistics
+                  Ad Slot Data Statistics
                 </h1>
                 <div className="w-full">
                   <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
@@ -214,7 +214,7 @@ export default function BannerStats() {
             <div className="mt-6 p-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
               <div className="token-wrapper">
                 <h1 className="text-xl flex items-center gap-4 font-semibold mb-6">
-                  Daily Banner Data
+                  Daily Ad Slot Data
                 </h1>
                 <div className="w-full">
                   <div className="mb-6 flex flex-wrap items-center gap-4">

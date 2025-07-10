@@ -29,116 +29,23 @@ import DeleteAdModal from "../../../components/layouts/Modals/DeleteAd";
 import LanguageCheckbox from "../../../components/common/LanguageCheckbox";
 
 const columns = [
-  { header: "Marketing Slot", accessor: "marketingSlot" },
-  { header: "Image", accessor: "Image" },
-  { header: "Total Visits", accessor: "totalVisits" },
-  {
-    header: "US Visits", accessor: "uSVisits",
-    headerImages: [
-      { src: FlagUSA, alt: 'Image 1' },  // First image
-    ]
-  },
-  {
-    header: "UK Visits", accessor: "uKVisits",
-    headerImages: [
-      { src: FlagUK, alt: 'Image 1' },  // First image
-    ]
-  },
-  { header: "Status", accessor: "status" },
+  { header: "Date", accessor: "Date", padding: "18px 16px" },
+  { header: "DApp", accessor: "DApp", padding: "18px 16px" },
+  { header: "Total Visits", accessor: "totalVisits", padding: "18px 16px" },
+  { header: "IOS Visits", accessor: "iosVisits", padding: "18px 16px" },
+  { header: "Android Visits", accessor: "androidVisits", padding: "18px 16px" },
 ];
 
 const data = [
   {
-    marketingSlot: 'Test Slot Name',
-    Image:
-      (
-        <div>
-          <Image
-            width={100}
-            height={100}
-            className="min-w-[150px] h-9 object-cover rounded"
-            src={PlaceholderIcon}
-          />
-        </div>
-      ),
-    totalVisits: "116,000",
-    uSVisits: "116,000",
-    uKVisits: "116,000",
-    status:
-      (
-        <div>
-          <div className="py-1 px-5 w-[90px] text-[var(--wow)] bg-[var(--wow)]/[0.16] text-center rounded-full text-xs font-normal">
-            Listed
-          </div>
-
-          {/* <div className="py-1 px-5 w-[90px] text-[#FAE715] bg-[#FAE715]/[0.16] text-center rounded-full text-xs font-normal">
-            Unlisted
-          </div>
-          <div className="py-1 px-5 w-[90px] text-[#DC2626] bg-[#DC2626]/[0.16] text-center rounded-full text-xs font-normal">
-            Delisted
-          </div> */}
-        </div>
-      ),
-
-  },
-];
-
-const columnsBannerTable = [
-  { header: "Date", accessor: "Date" },
-  { header: "Marketing Slot", accessor: "marketingSlot" },
-  { header: "Image", accessor: "Image" },
-  { header: "Total Visits", accessor: "totalVisits" },
-  {
-    header: "US Visits", accessor: "uSVisits",
-    headerImages: [
-      { src: FlagUSA, alt: 'Image 1' },  // First image
-    ]
-  },
-  {
-    header: "UK Visits", accessor: "uKVisits",
-    headerImages: [
-      { src: FlagUK, alt: 'Image 1' },  // First image
-    ]
-  },
-  { header: "Status", accessor: "status" },
-];
-
-const dataBannerTable = [
-  {
     Date: '2025-12-12',
-    marketingSlot: 'Test Slot Name',
-    Image:
-      (
-        <div>
-          <Image
-            width={100}
-            height={100}
-            className="min-w-[150px] h-9 object-cover rounded"
-            src={PlaceholderIcon}
-          />
-        </div>
-      ),
+    DApp: "WOW EARN",
     totalVisits: "116,000",
-    uSVisits: "116,000",
-    uKVisits: "116,000",
-    status:
-      (
-        <div>
-          <div className="py-1 px-5 w-[90px] text-[var(--wow)] bg-[var(--wow)]/[0.16] text-center rounded-full text-xs font-normal">
-            Listed
-          </div>
-
-          {/* <div className="py-1 px-5 w-[90px] text-[#FAE715] bg-[#FAE715]/[0.16] text-center rounded-full text-xs font-normal">
-            Unlisted
-          </div>
-          <div className="py-1 px-5 w-[90px] text-[#DC2626] bg-[#DC2626]/[0.16] text-center rounded-full text-xs font-normal">
-            Delisted
-          </div> */}
-        </div>
-      ),
-
+    iosVisits: "116,000",
+    androidVisits: "116,000",
   },
 ];
+
 
 export default function BannerStats() {
   const customPlaceholder = "Search Slot..."; // Custom placeholder for the search field
@@ -175,47 +82,12 @@ export default function BannerStats() {
           <main className="m-6">
             <div className="p-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
               <div className="token-wrapper">
-                <h1 className="text-xl flex items-center gap-4 font-semibold mb-6">
-                  Banner Data Statistics
-                </h1>
-                <div className="w-full">
-                  <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
-                    <div className="flex flex-wrap items-center gap-6">
-                      <div className="w-full md:w-auto">
-                        <SearchField placeholder="Search Slot..."
-                          className="bg-white/10 border border-white/[0.16] rounded-md pl-4 pr-11 py-[13px] flex-grow w-full outline-0 focus:border-[var(--wow)] transition duration-300 focus:ring-0 text-base"
-                        />
-                      </div>
-                      <div className="no-margin w-full md:w-auto">
-                        <Dropdown
-                          // label="Label"
-                          options={options}
-                          selectedValue={selectedValue}
-                          onChange={handleSelectionChange}
-                          width="w-full md:min-w-[150px] text-sm"
-                        />
-                      </div>
-                    </div>
-                    <button
-                      className="flex w-max gap-2 items-center text-sm font-semibold bg-btn-gradient border-2 border-[var(--wow)] hover:bg-black hover:border-[var(--hover-color)] rounded-full py-[11px] px-6 min-h-[50px] whitespace-nowrap cursor-pointer box-border"
-                    >
-                      <Image src={Export} width={24} height={24} alt="Media" />
-                      Export
-                    </button>
-                  </div>
-
-                  <div className="table-section">
-                    <ReusableTable columns={columns} data={data} rowsPerPage={5} />
-                  </div>
+                <div className="flex items-center justify-between gap-6 flex-wrap mb-6">
+                  <h1 className="text-xl font-semibold">
+                    Daily DAPP Visit Data Statistics
+                  </h1>
+                  <ReusableButton text="visual Chart" />
                 </div>
-              </div>
-            </div>
-
-            <div className="mt-6 p-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
-              <div className="token-wrapper">
-                <h1 className="text-xl flex items-center gap-4 font-semibold mb-6">
-                  Daily Banner Data
-                </h1>
                 <div className="w-full">
                   <div className="mb-6 flex flex-wrap items-center gap-4">
                     <div className="flex flex-wrap items-center gap-6">
@@ -256,7 +128,7 @@ export default function BannerStats() {
                   </div>
 
                   <div className="table-section">
-                    <ReusableTable columns={columnsBannerTable} data={dataBannerTable} rowsPerPage={5} />
+                    <ReusableTable columns={columns} data={data} rowsPerPage={5} />
                   </div>
                 </div>
               </div>

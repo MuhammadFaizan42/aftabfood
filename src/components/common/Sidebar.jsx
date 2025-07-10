@@ -366,7 +366,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
               {openSections.dappDashboard && (
                 <>
                   <Link
-                    href="/ad-management"
+                    href="/dappdashboard/dailyvisits"
                     className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
                   >
                     Daily Visits
@@ -401,7 +401,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
               {openSections.adDashboard && (
                 <>
                   <Link
-                    href=" "
+                    href="/addashboard/adslotstats"
                     className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
                   >
                     AD Slot Stats
