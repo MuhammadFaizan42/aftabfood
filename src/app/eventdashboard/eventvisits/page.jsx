@@ -162,7 +162,6 @@ export default function EventVisits() {
               </div>
             )}
 
-            {/* Add Token Wrapper */}
             {isEventDataVisible && (
               <div className="m-6">
                 <div className="flex gap-4 items-center mb-6">
