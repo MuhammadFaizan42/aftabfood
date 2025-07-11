@@ -284,19 +284,19 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
                     Address Stats
                   </Link>
                   <Link
-                    href="/walletdashboard/addressstats"
+                    href="/walletdashboard/dailyvisits"
                     className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
                   >
                     Daily Visits
                   </Link>
                   <Link
-                    href="/walletdashboard/addressstats"
+                    href="/walletdashboard/transactionstats"
                     className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
                   >
                     Transaction Stats
                   </Link>
                   <Link
-                    href="/walletdashboard/addressstats"
+                    href="/walletdashboard/swapstats"
                     className="flex items-center gap-2 pl-12 pr-4 py-2.5 text-sm font-medium rounded-md hover:text-[var(--wow)] hover:bg-[var(--collapse)]/10 transition-colors cursor-pointer mb-1"
                   >
                     Swap Stats
