@@ -30,8 +30,23 @@ import ReusableButton from "../../../components/common/Button";
 import LanguageDropdown from "../../../components/common/LanguageDropdown";
 import DeleteAdModal from "../../../components/layouts/Modals/DeleteAd";
 import LanguageCheckbox from "../../../components/common/LanguageCheckbox";
+const columnsAddressDataTable = [
+  { header: "Date", accessor: "Date", padding: "18px 16px" },
+  { header: "Chain", accessor: "Chain" },
+  { header: "Total Address Count", accessor: "totalAddressCount" },
+  { header: "Daily New Address Count", accessor: "dailyNewAddressCount" },
+];
 
-const columnsEventTable = [
+const dataAddressDataTable = [
+  {
+    Date: '2025-06-01',
+    Chain: "EVM",
+    totalAddressCount: "116,000",
+    dailyNewAddressCount: '116,000',
+  },
+];
+
+const columnsAddressDistributionTable = [
   { header: "Date", accessor: "Date", padding: "18px 16px" },
   { header: "Transaction Address Count", accessor: "transactionAddressCount" },
   {
@@ -60,7 +75,7 @@ const columnsEventTable = [
   },
 ];
 
-const dataEventTable = [
+const dataAddressDistributionTable = [
   {
     Date: '2025-06-01',
     transactionAddressCount: "116,000",
@@ -104,21 +119,34 @@ export default function AddressStats() {
         <div className="flex flex-col flex-1 overflow-hidden md:overflow-visible">
           <Header toggleSidebar={toggleSidebar} />
 
-          <main>
-            <div className="m-6 p-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
+          <main className="m-6">
+            <div className="mb-6 p-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
               <div className="token-wrapper">
                 <h1 className="text-xl font-semibold mb-6">
-                  Daily Transaction Address Distribution by Country
+                  Address Data Overview
                 </h1>
                 <div className="w-full">
-                  <div className="mb-6 flex flex-wrap items-center gap-4">
-                    <div className="flex items-center flex-wrap gap-4">
-                      <div className="flex items-center flex-wrap gap-4">
-                        <label htmlFor="date" className="text-sm font-bold">Time:</label>
+                  <div className="table-section">
+                    <ReusableTable columns={columnsAddressDataTable} data={dataAddressDataTable} rowsPerPage={5} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-6 p-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
+              <div className="token-wrapper">
+                <h1 className="text-xl font-semibold mb-6">
+                  Daily Address Data
+                </h1>
+                <div className="w-full">
+                  <div className="mb-6 flex flex-wrap items-center md:grid md:grid-cols-[1fr_auto] gap-4">
+                    <div className="flex items-center flex-wrap md:grid md:grid-cols-[auto_1fr_auto_1fr] gap-4">
+                      <label htmlFor="date" className="text-sm font-bold block">Time:</label>
+                      <div>
                         <input
                           type="date"
                           id="date"
-                          className="px-4 py-[13px] rounded-md bg-white/10 border border-white/[0.16] focus:outline-none focus:ring focus:ring-[var(--wow)] transition duration-300 text-base"
+                          className="w-full px-4 py-[13px] rounded-md bg-white/10 border border-white/[0.16] focus:outline-none focus:ring focus:ring-[var(--wow)] transition duration-300 text-base"
                         />
                       </div>
 
@@ -128,7 +156,7 @@ export default function AddressStats() {
                         <input
                           type="date"
                           id="date"
-                          className="px-4 py-[13px] rounded-md bg-white/10 border border-white/[0.16] focus:outline-none focus:ring focus:ring-[var(--wow)] transition duration-300 text-base"
+                          className="w-full px-4 py-[13px] rounded-md bg-white/10 border border-white/[0.16] focus:outline-none focus:ring focus:ring-[var(--wow)] transition duration-300 text-base"
                         />
                       </div>
                     </div>
@@ -142,7 +170,50 @@ export default function AddressStats() {
                   </div>
 
                   <div className="table-section">
-                    <ReusableTable columns={columnsEventTable} data={dataEventTable} rowsPerPage={5} />
+                    <ReusableTable columns={columnsAddressDataTable} data={dataAddressDataTable} rowsPerPage={5} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 flex-1 overflow-auto rounded-md border border-white/[0.16] backdrop-blur-xl">
+              <div className="token-wrapper">
+                <h1 className="text-xl font-semibold mb-6">
+                  Daily Transaction Address Distribution by Country
+                </h1>
+                <div className="w-full">
+                  <div className="mb-6 flex flex-wrap items-center md:grid md:grid-cols-[1fr_auto] gap-4">
+                    <div className="flex items-center flex-wrap md:grid md:grid-cols-[auto_1fr_auto_1fr] gap-4">
+                      <label htmlFor="date" className="text-sm font-bold block">Time:</label>
+                      <div>
+                        <input
+                          type="date"
+                          id="date"
+                          className="w-full px-4 py-[13px] rounded-md bg-white/10 border border-white/[0.16] focus:outline-none focus:ring focus:ring-[var(--wow)] transition duration-300 text-base"
+                        />
+                      </div>
+
+                      <div className="text-base">-</div>
+
+                      <div>
+                        <input
+                          type="date"
+                          id="date"
+                          className="w-full px-4 py-[13px] rounded-md bg-white/10 border border-white/[0.16] focus:outline-none focus:ring focus:ring-[var(--wow)] transition duration-300 text-base"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      className="flex w-max gap-2 items-center text-sm font-semibold bg-btn-gradient border-2 border-[var(--wow)] hover:bg-black hover:border-[var(--hover-color)] rounded-full py-[11px] px-6 min-h-[50px] whitespace-nowrap cursor-pointer box-border"
+                    >
+                      <Image src={Export} width={24} height={24} alt="Media" />
+                      Export
+                    </button>
+                  </div>
+
+                  <div className="table-section">
+                    <ReusableTable columns={columnsAddressDistributionTable} data={dataAddressDistributionTable} rowsPerPage={5} />
                   </div>
                 </div>
               </div>

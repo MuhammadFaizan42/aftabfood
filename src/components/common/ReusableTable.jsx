@@ -30,7 +30,7 @@ export default function ReusableTable({ columns, data, rowsPerPage = 5 }) {
                   className="relative px-4 py-[18px] text-left text-xs font-bold first:rounded-tl-xl bg-white/20 backdrop-blur-xl last:rounded-tr-xl word-break-all"
                   style={{ padding: col.padding || "18px 16px" }}
                 >
-                  <div className="flex items-center w-auto min-w-16">
+                  <div className="flex items-center w-auto min-w-16 pr-4 md:pr-0">
                     {col.headerImages &&
                       col.headerImages.map((image, index) => (
                         <Image
