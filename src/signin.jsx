@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const styles = {
   container: {
@@ -122,6 +123,7 @@ export default function SignIn() {
   const [showPassword, setShowPassword] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const navigate = useNavigate();
 
   // Handles form submission
   const handleSignIn = (e) => {
@@ -156,12 +158,15 @@ export default function SignIn() {
   // Toggle password visibility
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
+    if (email && password) {
+      navigate("/orderby");
+    }
   };
 
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <h1 style={styles.title}>Welcome Back</h1>
+        <h1 style={styles.title}>Welcome</h1>
 
         <form onSubmit={handleSignIn} style={styles.form}>
           {/* Email Address Input */}
@@ -229,23 +234,6 @@ export default function SignIn() {
             Sign In
           </button>
         </form>
-
-        {/* Don't have an account section */}
-        <div style={styles.signupText}>
-          Don't have an account?{" "}
-          <a
-            href="#"
-            style={styles.signupLink}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.color = styles.signupLinkHover.color)
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.color = styles.signupLink.color)
-            }
-          >
-            Sign Up
-          </a>
-        </div>
       </div>
     </div>
   );

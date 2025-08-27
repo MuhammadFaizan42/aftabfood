@@ -6,7 +6,12 @@ import OrderPage from "./order";
 function App() {
   return (
     <>
-      <OrderPage />
+      <Router>
+        <Routes>
+          <Route path="/" element={<SignIn />} />
+          <Route path="/orderby" element={<OrderPage />} />
+        </Routes>
+      </Router>
     </>
   );
 }
