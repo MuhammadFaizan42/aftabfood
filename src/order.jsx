@@ -178,6 +178,8 @@ export default function OrderPage() {
           border-radius: 9999px;
           transition-property: background-color, color;
           transition-duration: 300ms;
+          background: none;
+          border: none;
         }
 
         .edit-button { color: #3b82f6; }
