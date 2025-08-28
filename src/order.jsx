@@ -1,58 +1,21 @@
-// OrderPage.jsx
-import React, { useState, useRef, useCallback, useEffect } from "react";
-import { DataGrid } from "@mui/x-data-grid";
-import useMediaQuery from "@mui/material/useMediaQuery";
+// OrderPagePrint.jsx  (drop into your project or replace your current file)
+import React, { useState, useRef } from "react";
 import { Plus, Trash2, Edit } from "lucide-react";
 
 export default function OrderPage() {
-  // inputs
   const [product, setProduct] = useState("");
   const [orderBy, setOrderBy] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("");
   const [price, setPrice] = useState("");
-
-  // data rows (each row MUST have a unique id for DataGrid)
   const [addedProducts, setAddedProducts] = useState([]);
-  const idRef = useRef(1); // simple incremental id generator
 
-  // responsive: detect small screens
-  const isSmall = useMediaQuery("(max-width:600px)");
+  const printRef = useRef(); // reference to printable DOM
 
-  // column visibility model (controlled). we update on screen-size changes
-  const [columnVisibilityModel, setColumnVisibilityModel] = useState({});
-
-  useEffect(() => {
-    if (isSmall) {
-      // hide less-important columns on mobile
-      setColumnVisibilityModel({
-        orderBy: false,
-        unit: false,
-        price: false,
-      });
-    } else {
-      // show all columns on larger screens
-      setColumnVisibilityModel({
-        orderBy: true,
-        unit: true,
-        price: true,
-      });
-    }
-  }, [isSmall]);
-
-  // add a product (creates a row with unique id)
   const handleAddProduct = () => {
     if (product && orderBy && quantity && unit && price) {
-      const newRow = {
-        id: idRef.current++,
-        product,
-        orderBy,
-        quantity,
-        unit,
-        price,
-      };
-      setAddedProducts((prev) => [...prev, newRow]);
-      // clear inputs
+      const newProduct = { product, orderBy, quantity, unit, price };
+      setAddedProducts([...addedProducts, newProduct]);
       setProduct("");
       setOrderBy("");
       setQuantity("");
@@ -61,159 +24,92 @@ export default function OrderPage() {
     }
   };
 
-  // remove by id
-  const handleRemoveProduct = (id) => {
-    setAddedProducts((prev) => prev.filter((r) => r.id !== id));
+  const handleRemoveProduct = (index) => {
+    const updated = addedProducts.filter((_, i) => i !== index);
+    setAddedProducts(updated);
   };
 
-  // load row into inputs for edit (keeps same Add button UX)
-  const handleEditProduct = (id) => {
-    const row = addedProducts.find((r) => r.id === id);
-    if (!row) return;
-    setProduct(row.product);
-    setOrderBy(row.orderBy);
-    setQuantity(row.quantity);
-    setUnit(row.unit);
-    setPrice(row.price);
-    // remove old row (we will add a new row on Save so ID will change)
-    setAddedProducts((prev) => prev.filter((r) => r.id !== id));
+  const handleEditProduct = (index) => {
+    const item = addedProducts[index];
+    if (!item) return;
+    // load into inputs for editing (simple UX)
+    setProduct(item.product);
+    setOrderBy(item.orderBy);
+    setQuantity(item.quantity);
+    setUnit(item.unit);
+    setPrice(item.price);
+    // remove original row so saving will re-add it
+    setAddedProducts((prev) => prev.filter((_, i) => i !== index));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // DataGrid inline edit persistence handler (row editing API)
-  // This function is called by DataGrid when a row edit finishes.
-  const processRowUpdate = useCallback((newRow) => {
-    // Persist the edited row to React state
-    setAddedProducts((prev) =>
-      prev.map((r) => (r.id === newRow.id ? newRow : r))
-    );
-    return newRow;
-  }, []);
+  // ---------- Printing ----------
+  const handlePrint = () => {
+    window.print(); // browser print preview — CSS ensures printable area shows only that content
+  };
 
-  // columns definition
-  const columns = [
-    {
-      field: "product",
-      headerName: "Product",
-      flex: 1,
-      minWidth: 140,
-      editable: true,
-    },
-    {
-      field: "orderBy",
-      headerName: "Order By",
-      flex: 1,
-      minWidth: 140,
-      editable: true,
-    },
-    {
-      field: "quantity",
-      headerName: "Qty",
-      type: "number",
-      flex: 0.5,
-      minWidth: 90,
-      editable: true,
-    },
-    {
-      field: "unit",
-      headerName: "Unit",
-      flex: 0.6,
-      minWidth: 100,
-      editable: true,
-    },
-    {
-      field: "price",
-      headerName: "Price",
-      type: "number",
-      flex: 0.6,
-      minWidth: 100,
-      editable: true,
-    },
-    {
-      field: "actions",
-      headerName: "Actions",
-      sortable: false,
-      filterable: false,
-      width: 110,
-      renderCell: (params) => {
-        const onEdit = (e) => {
-          e.stopPropagation();
-          handleEditProduct(params.row.id);
-        };
-        const onDelete = (e) => {
-          e.stopPropagation();
-          handleRemoveProduct(params.row.id);
-        };
-        return (
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={onEdit}
-              aria-label="Edit"
-              style={{
-                background: "transparent",
-                border: "none",
-                padding: 6,
-                cursor: "pointer",
-                color: "#2563eb",
-              }}
-            >
-              <Edit size={16} />
-            </button>
-            <button
-              onClick={onDelete}
-              aria-label="Delete"
-              style={{
-                background: "transparent",
-                border: "none",
-                padding: 6,
-                cursor: "pointer",
-                color: "#ef4444",
-              }}
-            >
-              <Trash2 size={16} />
-            </button>
-          </div>
-        );
-      },
-    },
-  ];
-
-  // rows for DataGrid
-  const rows = addedProducts;
+  const totalAmount = addedProducts.reduce(
+    (sum, product) => sum + Number(product.price),
+    0
+  );
 
   return (
     <div>
       <style>{`
+        /* basic page + your previous styles (trimmed) */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        *,*::before,*::after{box-sizing:border-box}
-        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; margin:0; }
-        .container {
-          width: 100%;
-          max-width: 980px;
-          margin: 28px auto;
-          background: #fff;
-          border-radius: 16px;
-          padding: 22px;
-          box-shadow: 0 10px 15px rgba(0,0,0,0.06);
+        *,*::before,*::after { box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; margin:0; background:#f3f4f6; }
+
+        .container { width:100%; max-width:960px; margin:24px auto; background:#fff; border-radius:16px; padding:24px; box-shadow:0 8px 20px rgba(0,0,0,0.06); }
+        .header { display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+        .header-title { font-size:1.25rem; font-weight:700; margin:0; color:#111827; }
+
+        /* input grid (responsive) */
+        .input-grid { display:grid; gap:12px; margin-bottom:12px; }
+        @media(min-width:768px){ .input-grid{ grid-template-columns: repeat(6, minmax(0,1fr)); } .col-2 { grid-column: span 2; } .col-1 { grid-column: span 1; } }
+        .input-field { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #e6e9ee; outline:none; }
+        .add-button { display:inline-flex; gap:8px; align-items:center; justify-content:center; padding:10px 12px; background:#000; color:#fff; border-radius:10px; border:none; cursor:pointer; font-weight:600; }
+
+        /* small helpers */
+        .controls { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+        .btn-outline { background:#fff; color:#111; border:1px solid #e5e7eb; }
+        .btn-primary { background:#0b74ff; color:#fff; border:none; }
+
+        /* visible table on screen (keeps current UI) */
+        .table-container { background:#f9fafb; border-radius:10px; padding:12px; overflow-x:auto; }
+        .styled-table { width:100%; border-collapse:collapse; }
+        .styled-table th, .styled-table td { padding:8px 10px; border-bottom:1px solid #eaecef; text-align:left; }
+        .actions-cell { text-align:right; }
+
+        /* ---------- Printable area (off-screen during normal view) ---------- */
+        #export-area {
+          display: none;  
+          width: 210mm;    
+          padding: 18px;
+          background: white;
         }
-        .header { display:flex; align-items:center; gap:10px; margin-bottom: 14px; }
-        .header-title { font-size: 1.4rem; font-weight:700; color:#111827; margin:0; }
-        .input-grid { display:grid; gap:12px; margin-bottom:16px; }
-        @media(min-width:768px){
-          .input-grid { grid-template-columns: repeat(6, minmax(0,1fr)); }
-          .col-2 { grid-column: span 2 / span 2; }
-          .col-1 { grid-column: span 1 / span 1; }
-        }
-        .input-field { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #e5e7eb; outline:none; }
-        .input-field:focus{ box-shadow: 0 0 0 3px rgba(59,130,246,0.08); border-color:#3b82f6; }
-        .add-button { display:flex; gap:8px; align-items:center; justify-content:center; width:100%; background:#000; color:#fff; padding:10px; border-radius:10px; border:none; cursor:pointer; font-weight:600; }
-        .add-button:hover{ background:#111827; }
-        /* DataGrid wrapper */
-        .grid-wrapper { width:100%; margin-top:12px; background: #f9fafb; border-radius:10px; padding:10px; }
-        /* ensure DataGrid cells wrap when narrow */
-        .MuiDataGrid-cell { white-space: normal; line-height:1.25; }
-        /* small-screen tweaks */
-        @media(max-width:600px){
-          .container{ padding:14px; border-radius:12px; }
+        .print-header { text-align: left; margin-bottom: 12px; }
+        .print-title { font-size: 18px; font-weight:700; margin:0; }
+        .print-meta { font-size: 12px; color: #6b7280; margin-top:4px; }
+
+        .print-table { width:100%; border-collapse: collapse; margin-top: 8px; }
+        .print-table th, .print-table td { border: 1px solid #ddd; padding: 8px; font-size: 12px; }
+        .print-table th { background: #f3f4f6; font-weight:700; }
+
+        .print-summary { margin-top: 12px; font-weight:700; text-align:right; }
+
+        /* page-break control when printing */
+        .print-table tr { page-break-inside: avoid; }
+        .print-table thead { display: table-header-group; } /* ensures header repeats on pages */
+
+        /* ---------- Hide everything except export-area in print preview ---------- */
+        @media print {
+          body * { visibility: hidden !important; }
+          #export-area, #export-area * { visibility: visible !important; }
+          #export-area { display: block; position: relative; width: auto; margin: 0 auto; }
+          /* ensure page margins for printing */
+          @page { margin: 12mm; }
         }
       `}</style>
 
@@ -231,16 +127,16 @@ export default function OrderPage() {
             <circle cx="19" cy="21" r="1" />
             <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
           </svg>
-          <h2 className="header-title">Order Booking</h2>
+          <h1 className="header-title">Order Booking</h1>
         </div>
 
-        {/* Inputs (responsive grid) */}
+        {/* Inputs */}
         <div className="input-grid">
           <div className="col-2">
             <select
-              className="input-field"
               value={product}
               onChange={(e) => setProduct(e.target.value)}
+              className="input-field"
             >
               <option value="">Select Product</option>
               <option value="Laptop">Laptop</option>
@@ -252,9 +148,9 @@ export default function OrderPage() {
 
           <div className="col-2">
             <select
-              className="input-field"
               value={orderBy}
               onChange={(e) => setOrderBy(e.target.value)}
+              className="input-field"
             >
               <option value="">Select Customer</option>
               <option value="Jane Doe">Jane Doe</option>
@@ -266,19 +162,19 @@ export default function OrderPage() {
 
           <div className="col-1">
             <input
-              className="input-field"
-              placeholder="Qty"
               type="number"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
+              placeholder="Qty"
+              className="input-field"
             />
           </div>
 
           <div className="col-1">
             <select
-              className="input-field"
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
+              className="input-field"
             >
               <option value="">Unit</option>
               <option value="Pieces">Pieces</option>
@@ -289,45 +185,142 @@ export default function OrderPage() {
 
           <div className="col-1">
             <input
-              className="input-field"
-              placeholder="Price"
               type="number"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
+              placeholder="Price"
+              className="input-field"
             />
           </div>
         </div>
 
-        {/* Add button */}
-        <div style={{ marginBottom: 12 }}>
+        {/* Buttons: Add | Print | Export PDF */}
+        <div className="controls">
           <button onClick={handleAddProduct} className="add-button">
             <Plus size={16} /> Add Product
           </button>
+
+          <button
+            onClick={handlePrint}
+            className="add-button btn-outline"
+            title="Open print preview"
+          >
+            Print
+          </button>
         </div>
 
-        {/* DataGrid */}
-        <div className="grid-wrapper">
-          <DataGrid
-            rows={rows}
-            columns={columns}
-            autoHeight
-            density="comfortable"
-            pageSizeOptions={[5, 10, 25]}
-            initialState={{ pagination: { paginationModel: { pageSize: 5 } } }}
-            disableRowSelectionOnClick
-            processRowUpdate={processRowUpdate}
-            onProcessRowUpdateError={(err) =>
-              console.error("row update error", err)
-            }
-            experimentalFeatures={{ newEditingApi: true }}
-            columnVisibilityModel={columnVisibilityModel}
-            onColumnVisibilityModelChange={(newModel) =>
-              setColumnVisibilityModel(newModel)
-            }
-            sx={{
-              ".MuiDataGrid-virtualScroller": { background: "transparent" },
-            }}
-          />
+        {/* On-screen table (keeps current UI) */}
+        <div className="table-container">
+          <table className="styled-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Order By</th>
+                <th>Qty</th>
+                <th>Unit</th>
+                <th>Price</th>
+                <th className="actions-cell">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {addedProducts.length > 0 ? (
+                addedProducts.map((item, index) => (
+                  <tr key={index}>
+                    <td>{item.product}</td>
+                    <td>{item.orderBy}</td>
+                    <td>{item.quantity}</td>
+                    <td>{item.unit}</td>
+                    <td>{item.price}</td>
+                    <td className="actions-cell">
+                      <button
+                        onClick={() => handleEditProduct(index)}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          marginRight: 8,
+                        }}
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleRemoveProduct(index)}
+                        style={{ background: "transparent", border: "none" }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan="6"
+                    style={{
+                      textAlign: "center",
+                      padding: 16,
+                      color: "#6b7280",
+                      fontStyle: "italic",
+                    }}
+                  >
+                    No products added yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ---------- Printable / PDF area (off-screen during normal browsing) ---------- */}
+      <div id="export-area" ref={printRef}>
+        <div className="print-header">
+          <div>
+            <div className="print-title">Order Booking</div>
+            <div className="print-meta">
+              Generated: {new Date().toLocaleString()}
+            </div>
+          </div>
+          <div style={{ textAlign: "right", fontSize: 12 }}>
+            <div>
+              Prepared by: {/* put username if you have it */ "Aftab Foods"}
+            </div>
+          </div>
+        </div>
+
+        <table className="print-table">
+          <thead>
+            <tr>
+              <th style={{ width: "35%" }}>Product</th>
+              <th style={{ width: "25%" }}>Order By</th>
+              <th style={{ width: "10%" }}>Qty</th>
+              <th style={{ width: "15%" }}>Unit</th>
+              <th style={{ width: "15%" }}>Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            {addedProducts.length > 0 ? (
+              addedProducts.map((item, idx) => (
+                <tr key={idx}>
+                  <td>{item.product}</td>
+                  <td>{item.orderBy}</td>
+                  <td style={{ textAlign: "right" }}>{item.quantity}</td>
+                  <td style={{ textAlign: "right" }}>{item.unit}</td>
+                  <td style={{ textAlign: "right" }}>{item.price}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="5" style={{ textAlign: "center", padding: 20 }}>
+                  No products
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
+        <div className="print-summary">
+          Total items: {addedProducts.length} <br />
+          Total amount: {totalAmount.toFixed(2)}
         </div>
       </div>
     </div>
