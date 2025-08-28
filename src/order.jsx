@@ -1,6 +1,7 @@
 // OrderPagePrint.jsx  (drop into your project or replace your current file)
 import React, { useState, useRef } from "react";
 import { Plus, Trash2, Edit } from "lucide-react";
+import { DataGrid } from "@mui/x-data-grid";
 
 export default function OrderPage() {
   const [product, setProduct] = useState("");
@@ -23,26 +24,6 @@ export default function OrderPage() {
       setPrice("");
     }
   };
-
-  const handleRemoveProduct = (index) => {
-    const updated = addedProducts.filter((_, i) => i !== index);
-    setAddedProducts(updated);
-  };
-
-  const handleEditProduct = (index) => {
-    const item = addedProducts[index];
-    if (!item) return;
-    // load into inputs for editing (simple UX)
-    setProduct(item.product);
-    setOrderBy(item.orderBy);
-    setQuantity(item.quantity);
-    setUnit(item.unit);
-    setPrice(item.price);
-    // remove original row so saving will re-add it
-    setAddedProducts((prev) => prev.filter((_, i) => i !== index));
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
   // ---------- Printing ----------
   const handlePrint = () => {
     window.print(); // browser print preview — CSS ensures printable area shows only that content
@@ -72,9 +53,11 @@ export default function OrderPage() {
         .add-button { display:inline-flex; gap:8px; align-items:center; justify-content:center; padding:10px 12px; background:#000; color:#fff; border-radius:10px; border:none; cursor:pointer; font-weight:600; }
 
         /* small helpers */
-        .controls { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+        .controls { display:flex; gap:50px; margin-bottom:12px; flex-wrap:wrap; }
         .btn-outline { background:#fff; color:#111; border:1px solid #e5e7eb; }
         .btn-primary { background:#0b74ff; color:#fff; border:none; }
+        .controls-right { justify-content: flex-end;}
+
 
         /* visible table on screen (keeps current UI) */
         .table-container { background:#f9fafb; border-radius:10px; padding:12px; overflow-x:auto; }
@@ -195,11 +178,7 @@ export default function OrderPage() {
         </div>
 
         {/* Buttons: Add | Print | Export PDF */}
-        <div className="controls">
-          <button onClick={handleAddProduct} className="add-button">
-            <Plus size={16} /> Add Product
-          </button>
-
+        <div className="controls controls-right">
           <button
             onClick={handlePrint}
             className="add-button btn-outline"
@@ -207,67 +186,33 @@ export default function OrderPage() {
           >
             Print
           </button>
+          <button onClick={handleAddProduct} className="add-button">
+            <Plus size={16} /> Add Product
+          </button>
         </div>
 
         {/* On-screen table (keeps current UI) */}
-        <div className="table-container">
-          <table className="styled-table">
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Order By</th>
-                <th>Qty</th>
-                <th>Unit</th>
-                <th>Price</th>
-                <th className="actions-cell">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {addedProducts.length > 0 ? (
-                addedProducts.map((item, index) => (
-                  <tr key={index}>
-                    <td>{item.product}</td>
-                    <td>{item.orderBy}</td>
-                    <td>{item.quantity}</td>
-                    <td>{item.unit}</td>
-                    <td>{item.price}</td>
-                    <td className="actions-cell">
-                      <button
-                        onClick={() => handleEditProduct(index)}
-                        style={{
-                          background: "transparent",
-                          border: "none",
-                          marginRight: 8,
-                        }}
-                      >
-                        <Edit size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleRemoveProduct(index)}
-                        style={{ background: "transparent", border: "none" }}
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td
-                    colSpan="6"
-                    style={{
-                      textAlign: "center",
-                      padding: 16,
-                      color: "#6b7280",
-                      fontStyle: "italic",
-                    }}
-                  >
-                    No products added yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        {/* On-screen grid using Material UI */}
+        <div style={{ height: 400, width: "100%" }}>
+          <DataGrid
+            rows={addedProducts.map((item, index) => ({
+              id: index + 1,
+              product: item.product,
+              orderBy: item.orderBy,
+              quantity: item.quantity,
+              unit: item.unit,
+              price: item.price,
+            }))}
+            columns={[
+              { field: "product", headerName: "Product", flex: 1 },
+              { field: "orderBy", headerName: "Order By", flex: 1 },
+              { field: "quantity", headerName: "Qty", width: 100 },
+              { field: "unit", headerName: "Unit", width: 120 },
+              { field: "price", headerName: "Price", width: 120 },
+            ]}
+            pageSize={5}
+            rowsPerPageOptions={[5, 10, 20]}
+          />
         </div>
       </div>
 
