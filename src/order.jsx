@@ -2,6 +2,7 @@
 import React, { useState, useRef } from "react";
 import { Plus, Trash2, Edit } from "lucide-react";
 import { DataGrid } from "@mui/x-data-grid";
+import { IconButton } from "@mui/material";
 
 export default function OrderPage() {
   const [product, setProduct] = useState("");
@@ -24,6 +25,24 @@ export default function OrderPage() {
       setPrice("");
     }
   };
+  // Edit handler
+  const handleEditRow = (row) => {
+    // Example: load values into form for editing
+    setProduct(row.product);
+    setOrderBy(row.orderBy);
+    setQuantity(row.quantity);
+    setUnit(row.unit);
+    setPrice(row.price);
+
+    // Optionally: remove row temporarily so "Save" updates it
+    setAddedProducts((prev) => prev.filter((_, index) => index + 1 !== row.id));
+  };
+
+  // Delete handler
+  const handleDeleteRow = (id) => {
+    setAddedProducts((prev) => prev.filter((_, index) => index + 1 !== id));
+  };
+
   // ---------- Printing ----------
   const handlePrint = () => {
     window.print(); // browser print preview — CSS ensures printable area shows only that content
@@ -177,7 +196,7 @@ export default function OrderPage() {
           </div>
         </div>
 
-        {/* Buttons: Add | Print | Export PDF */}
+        {/* Buttons: Add | Print*/}
         <div className="controls controls-right">
           <button
             onClick={handlePrint}
@@ -205,10 +224,33 @@ export default function OrderPage() {
             }))}
             columns={[
               { field: "product", headerName: "Product", flex: 1 },
-              { field: "orderBy", headerName: "Order By", flex: 1 },
+              { field: "orderBy", headerName: "Customer Name", flex: 1 },
               { field: "quantity", headerName: "Qty", width: 100 },
               { field: "unit", headerName: "Unit", width: 120 },
               { field: "price", headerName: "Price", width: 120 },
+              { field: "order", headerName: "Order By", width: 70 },
+              {
+                field: "actions",
+                headerName: "Actions",
+                width: 150,
+                sortable: false,
+                renderCell: (params) => (
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <IconButton
+                      color="primary"
+                      onClick={() => handleEditRow(params.row)}
+                    >
+                      <Edit size={18} />
+                    </IconButton>
+                    <IconButton
+                      color="error"
+                      onClick={() => handleDeleteRow(params.row.id)}
+                    >
+                      <Trash2 size={18} />
+                    </IconButton>
+                  </div>
+                ),
+              },
             ]}
             pageSize={5}
             rowsPerPageOptions={[5, 10, 20]}
@@ -236,10 +278,11 @@ export default function OrderPage() {
           <thead>
             <tr>
               <th style={{ width: "35%" }}>Product</th>
-              <th style={{ width: "25%" }}>Order By</th>
+              <th style={{ width: "25%" }}>Customer Name</th>
               <th style={{ width: "10%" }}>Qty</th>
               <th style={{ width: "15%" }}>Unit</th>
               <th style={{ width: "15%" }}>Price</th>
+              <th style={{ width: "15%" }}>Order By</th>
             </tr>
           </thead>
           <tbody>
@@ -251,6 +294,7 @@ export default function OrderPage() {
                   <td style={{ textAlign: "right" }}>{item.quantity}</td>
                   <td style={{ textAlign: "right" }}>{item.unit}</td>
                   <td style={{ textAlign: "right" }}>{item.price}</td>
+                  <td style={{ textAlign: "right" }}>{item.order}</td>
                 </tr>
               ))
             ) : (
