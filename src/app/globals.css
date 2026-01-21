@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
+  --background: #ffffff;
+  --foreground: #000000;
   --header: #18181880;
 }
 
 @theme {
   --header: #18181880;
-  --wow: #04D590;
+  --wow: #2f2fef;
   --hover-color: #00FFC2;
   --table-head: #353535;
   --mint: #06120F;
@@ -16,58 +16,8 @@
   --dropdown: #191919;
 }
 
-/* Style for round checkbox container */
-.round {
-  position: relative;
-}
-
-.checkbox-label {
-  background-color: transparent;
-  border: 1px solid #ffffff;
-  /* White border when unchecked */
-  border-radius: 50%;
-  /* Make it round */
-  cursor: pointer;
-  height: 16px;
-  width: 16px;
-  display: inline-block;
-  position: relative;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
-}
-
-.checkbox-label:after {
-  content: "";
-  position: absolute;
-  top: 4px;
-  left: 2px;
-  width: 10px;
-  height: 5px;
-  border-right: 2px solid white;
-  border-top: 2px solid white;
-  transform: rotate(132deg);
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-input[type="checkbox"] {
-  visibility: hidden;
-  /* Hide the actual checkbox */
-}
-
-input[type="checkbox"]:checked+label {
-  background-color: #2EBC84;
-  /* Green background when checked */
-  border-color: #2EBC84;
-  /* Green border when checked */
-}
-
-input[type="checkbox"]:checked+label:after {
-  opacity: 1;
-  /* Show checkmark when checked */
-}
-
 .gradient {
-  background: linear-gradient(90deg, #04D590 0%, #026F4B 100%);
+  background: linear-gradient(90deg, #2f2fef 0%, #026F4B 100%);
 }
 
 @theme inline {
@@ -77,8 +27,8 @@ input[type="checkbox"]:checked+label:after {
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #000000;
-    --foreground: #ffffff;
+    --background: #ffffff;
+    --foreground: #000000;
   }
 }
 
@@ -113,40 +63,6 @@ input[type="checkbox"]:checked+label:after {
 
 /* Style for the scrollbar corner (where the two scrollbars meet) */
 ::-webkit-scrollbar-corner {
-  background-color: transparent;
-}
-
-/* Style for the custom scrollbar */
-nav::-webkit-scrollbar {
-  width: .5px;
-  /* Width of the vertical scrollbar */
-  height: .5px;
-  /* Height of the horizontal scrollbar */
-}
-
-/* Style the scrollbar track (background) */
-nav::-webkit-scrollbar-track {
-  background-color: rgba(255, 255, 255, 0.1);
-  /* Lighter track background */
-  border-radius: 5px;
-}
-
-/* Style the scrollbar thumb (the draggable part) */
-nav::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.6);
-  /* Scrollbar thumb color */
-  border-radius: 5px;
-  transition: background-color 0.3s ease;
-}
-
-/* Style the scrollbar thumb when hovered */
-nav::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.8);
-  /* Thumb hover effect */
-}
-
-/* Style for the scrollbar corner (where the two scrollbars meet) */
-nav::-webkit-scrollbar-corner {
   background-color: transparent;
 }
 
@@ -197,120 +113,4 @@ body::after {
   transform: translate(-50%, 0%);
   background: var(--wow);
   z-index: -1;
-}
-
-.t-head::after {
-  position: absolute;
-  width: 1px;
-  height: 39px;
-  background: #ffffff;
-  right: 0;
-  top: 50%;
-  content: " ";
-  z-index: 999;
-  transform: translate(0, -50%);
-}
-
-th:last-child .t-head::after {
-  content: none;
-}
-
-.shadow-custom {
-  box-shadow: 0px 0px 16px var(--wow);
-}
-
-.bg-btn-gradient {
-  background: linear-gradient(to bottom, #081519 12%, #026F4B 100%);
-}
-
-/* From Uiverse.io by JkHuger */
-.radio-container {
-  margin: 0 auto;
-  /* max-width: 300px; */
-  color: white;
-}
-
-.radio-button {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  transition: all 0.2s ease-in-out;
-}
-
-/* .radio-button:hover {
-  transform: translateY(-2px);
-} */
-
-.radio-button input[type="radio"] {
-  display: none;
-}
-
-.radio-checkmark {
-  display: inline-block;
-  position: relative;
-  width: 16px;
-  height: 16px;
-  margin-right: 10px;
-  border: 1px solid white;
-  border-radius: 50%;
-}
-
-.radio-checkmark:before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) scale(0);
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: #04D590;
-  transition: all 0.2s ease-in-out;
-}
-
-.radio-button input[type="radio"]:checked~.radio-checkmark:before {
-  transform: translate(-50%, -50%) scale(1);
-}
-
-.radio-button input[type="radio"]:checked~.radio-checkmark {
-  border-color: #04D590;
-}
-
-.radio-label {
-  font-size: 14px;
-}
-
-.add-token-form .flex.flex-col {
-  display: grid;
-  grid-template-columns: 35% auto;
-  gap: 24px;
-  align-items: center;
-}
-
-.add-token-dropdown>div {
-  display: grid;
-  grid-template-columns: 35% auto;
-  gap: 24px;
-  align-items: center;
-}
-
-.add-token-dropdown>div button {
-  margin: 0;
-}
-
-.no-margin button {
-  margin: 0;
-}
-
-.add-token-dropdown>div label {
-  text-align: end;
-  margin: 0;
-}
-
-.add-token-form .flex.flex-col label {
-  text-align: end;
-}
-
-.no-asteric label span {
-  display: none;
 }

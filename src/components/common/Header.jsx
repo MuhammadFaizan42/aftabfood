@@ -3,64 +3,47 @@ import { useState, useEffect } from 'react';
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import logo from '../assets/images/logo.png';
-import EN from '../assets/images/en.svg';
-import { MenuIcon } from '../assets';
 
 export default function Header({ toggleSidebar }) {
-  const [langOpen, setLangOpen] = useState(false);
-  const [langMenuOpen, setLangMenuOpen] = useState(false);
-
   return (
-    <header className="flex bg-[#1E1E1E99] md:bg-black flex-row-reverse md:flex-row items-center justify-between px-6 py-[14px] md:border-b border-white/50 sticky top-0 z-10">
-      {/* Mobile hamburger */}
-      <button
-        onClick={toggleSidebar}
-        className="cursor-pointer lg:hidden focus:outline-none text-white"
-        aria-label="Toggle Sidebar"
-      >
-        <MenuIcon />
-      </button>
-
-      <div className="flex-1 hidden md:flex items-center justify-center lg:justify-start capitalize text-xl font-bold">
-        configuration
-      </div>
-      {/* Mobile View Starts Here */}
-      <div className="flex md:hidden items-center">
-        <Image src={logo} alt="WOW Earn Logo" width={50} height={50} className='w-8 h-8 md:w-[50px] md:h-[50px]' />
-        <span className="text-base md:text-2xl font-bold tracking-wide ml-3">WOW EARN</span>
-      </div>
-      {/* Mobile View Ends Here */}
-
-      <div className="hidden md:flex items-center gap-4">
-        <div className='h-8 w-[2px] bg-[#F7F9FC]'></div>
-        <div className="relative">
-          <button
-            onClick={() => setLangMenuOpen(!langMenuOpen)}
-            className="flex cursor-pointer items-center space-x-2 text-white hover:text-[var(--wow)] text-base font-bold uppercase focus:outline-none"
-          >
-            <Image src={EN} width={24} height={24} alt='Media' />
-            <span>EN</span>
+    <header className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-10">
+      <div className="max-w-7xl mx-auto flex items-center justify-between">
+        {/* Logo and App Name */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-teal-500 rounded-lg flex items-center justify-center">
             <svg
-              className={`w-4 h-4 transform transition-transform ${langMenuOpen ? 'rotate-180' : 'rotate-0'
-                }`}
+              className="w-6 h-6 text-white"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
             >
-              <path strokeWidth="2" d="M19 9l-7 7-7-7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+              />
             </svg>
-          </button>
-          {langMenuOpen && (
-            <ul className="absolute right-0 mt-2 bg-black border border-white/50 rounded-[10px] shadow-md z-10 w-24">
-              <li className="px-3 py-1 rounded-tl-[10px] rounded-tr-[10px] border-b border-white/50 hover:bg-[var(--wow)] cursor-pointer">EN</li>
-              <li className="px-3 py-1 border-b border-white/50 hover:bg-[var(--wow)] cursor-pointer">FR</li>
-              <li className="px-3 py-1 rounded-bl-[10px] rounded-br-[10px] hover:bg-[var(--wow)] cursor-pointer">DE</li>
-            </ul>
-          )}
+          </div>
+          <span className="text-xl font-semibold text-gray-900">SalesApp</span>
         </div>
 
-        <div className='text-base font-bold'>Admin</div>
+        {/* User Info */}
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <div className="text-sm font-semibold text-gray-900">John Doe</div>
+            <div className="text-xs text-gray-500">Sales Representative</div>
+          </div>
+          <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center overflow-hidden">
+            <svg
+              className="w-6 h-6 text-gray-600"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+            </svg>
+          </div>
+        </div>
       </div>
     </header>
   );
