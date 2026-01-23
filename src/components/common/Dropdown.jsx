@@ -1,87 +1,95 @@
-import { useState, useEffect, useRef } from "react";
-import Image from "next/image";
-import DownArrow from "../assets/images/DownArrow.svg";
+"use client";
+import React from "react";
 
-// Reusable dropdown component
 export default function Dropdown({
   label,
-  isRequired = false, // Add this to conditionally add the asterisk
-  options,
-  selectedValue,
+  name,
+  value,
   onChange,
-  width,
+  options,
+  placeholder = "Select an option",
+  required = false,
+  className = "",
+  error = "",
+  disabled = false,
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null); // Reference for the dropdown
-  const buttonRef = useRef(null); // Reference for the button
-
-  const toggleDropdown = () => setIsOpen(!isOpen);
-
-  const handleOptionClick = (value) => {
-    onChange(value); // Call the onChange prop to handle the selection
-    setIsOpen(false);
-  };
-
-  // Close dropdown if clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(event.target)
-      ) {
-        setIsOpen(false); // Close the dropdown if clicked outside
-      }
-    };
-
-    // Adding the event listener to the document
-    document.addEventListener("mousedown", handleClickOutside);
-
-    // Cleanup the event listener on component unmount
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  const buttonWidth = width || "w-40"; // Set a default width if no width is passed
-
   return (
-    <div>
-      <label htmlFor="dropdown" className="text-sm font-medium mb-2">
-        {label}
-        {isRequired && <span className="text-red-500">&nbsp;*</span>} {/* Add asterisk if required */}
-      </label>
-      <div className="relative" ref={dropdownRef}>
-        <button
-          id="dropdown"
-          onClick={toggleDropdown}
-          ref={buttonRef}
-          className={`bg-white/10 mt-2 cursor-pointer rounded-lg shadow-md px-[14px] py-[13px] flex justify-between items-center focus:border-[var(--wow)] outline-none border border-white/[0.16] transition-colors duration-300 ${buttonWidth}`}
+    <div className={className}>
+      {label && (
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          {label} {required && <span className="text-red-500">*</span>}
+        </label>
+      )}
+      <div className="relative">
+        <select
+          name={name}
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          className={`w-full px-4 py-3 pr-10 bg-white border text-gray-900 focus:outline-none focus:ring-2 appearance-none cursor-pointer transition-all hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed ${error
+            ? "border-red-300 focus:ring-red-500 focus:border-transparent"
+            : "border-gray-200 focus:ring-blue-500 focus:border-transparent"
+            }`}
+          style={{
+            borderRadius: "8px",
+            fontSize: "15px",
+          }}
         >
-          {selectedValue}
-          <span className="ml-2">
-            <Image src={DownArrow} width={24} height={24} alt="Dropdown Arrow" />
-          </span>
-        </button>
-
-        {isOpen && (
-          <div
-            className="absolute left-0 mt-2 w-full bg-[var(--dropdown)] border backdrop-blur-xl rounded-lg shadow-md z-10 transition-all duration-200 ease-in-out"
-            style={{ animation: "fadeIn 0.2s ease-in-out" }}
+          <option value="" disabled={required}>
+            {placeholder}
+          </option>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
+          <svg
+            className="w-4 h-4 text-blue-600"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
           >
-            {options.map((option, index) => (
-              <div
-                key={index}
-                onClick={() => handleOptionClick(option.value)}
-                className="px-4 py-2 hover:bg-[var(--wow)] first:rounded-t-md last:rounded-b-md cursor-pointer transition-colors duration-200"
-              >
-                {option.value}
-              </div>
-            ))}
-          </div>
-        )}
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 9l-7 7-7-7"
+            />
+          </svg>
+        </div>
       </div>
+      {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+
+      <style jsx>{`
+        select {
+          background-color: white;
+          color: #1f2937;
+          font-weight: 400;
+        }
+        select option {
+          background-color: white;
+          color: #1f2937;
+          padding: 12px 16px;
+          font-size: 15px;
+          font-weight: 400;
+          line-height: 1.6;
+        }
+        select option:hover {
+          background-color: #f9fafb !important;
+        }
+        select option:checked,
+        select option:checked:hover {
+          background-color: white !important;
+          color: #1f2937;
+          font-weight: 400;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+          background-repeat: no-repeat;
+          background-position: right 16px center;
+          padding-right: 45px;
+        }
+      `}</style>
     </div>
   );
 }

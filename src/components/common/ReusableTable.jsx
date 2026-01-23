@@ -1,8 +1,13 @@
 "use client";
 import React, { useState } from "react";
-import Image from "next/image";
 
-export default function ReusableTable({ columns, data, rowsPerPage = 5 }) {
+export default function ReusableTable({
+  columns,
+  data,
+  rowsPerPage = 5,
+  totalAmount = null,
+  totalLabel = "Total Amount"
+}) {
   const [currentPage, setCurrentPage] = useState(1);
 
   const totalPages = Math.ceil(data.length / rowsPerPage);
@@ -19,124 +24,99 @@ export default function ReusableTable({ columns, data, rowsPerPage = 5 }) {
   );
 
   return (
-    <div className="table-container">
-      <div className="overflow-x-auto max-w-full">
-        <table className="w-full border border-[#f5f5f5]/[0.16] rounded-xl border-separate border-spacing-0 backdrop-blur-xl">
-          <thead className="">
-            <tr>
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Table Container with Horizontal Scroll */}
+      <div className="overflow-x-auto">
+        <div className="min-w-max">
+          {/* Table Header */}
+          <div className="bg-blue-50 border-b border-gray-200">
+            <div className="grid gap-4 px-6 py-4" style={{ gridTemplateColumns: columns.map(col => col.width || '1fr').join(' ') }}>
               {columns.map((col) => (
-                <th
-                  key={col.accessor}
-                  className="relative px-4 py-[18px] text-left text-xs font-bold first:rounded-tl-xl bg-white/20 backdrop-blur-xl last:rounded-tr-xl word-break-all"
-                  style={{ padding: col.padding || "18px 16px" }}
-                >
-                  <div className="flex items-center w-auto min-w-16 pr-4 md:pr-0">
-                    {col.headerImages &&
-                      col.headerImages.map((image, index) => (
-                        <Image
-                          key={index}
-                          src={image.src}
-                          alt={image.alt}
-                          width={24}
-                          height={24}
-                          className="mr-2"
-                        />
-                      ))}
-                    <p className="t-head">{col.header}</p>
-                  </div>
-                </th>
+                <div key={col.accessor} className="text-sm font-semibold text-blue-700 whitespace-nowrap">
+                  {col.header}
+                </div>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </div>
+          </div>
+
+          {/* Table Body */}
+          <div className="divide-y divide-gray-200">
             {paginatedData.map((row, idx) => (
-              <tr
+              <div
                 key={idx}
-                className="backdrop-blur-xl"
-                style={{
-                  backgroundColor:
-                    idx % 2 === 0
-                      ? "rgba(255, 255, 255, 0)"
-                      : "rgba(255, 255, 255, 0.1)",
-                }}
+                className="grid items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors"
+                style={{ gridTemplateColumns: columns.map(col => col.width || '1fr').join(' ') }}
               >
                 {columns.map((col) => (
-                  <td
-                    key={col.accessor}
-                    className="px-4 py-2 word-break-all text-xs font-medium"
-                    style={{
-                      padding: col.padding || "8px 16px",
-                    }}
-                  >
-                    {row[col.accessor]}
-                  </td>
+                  <div key={col.accessor} className="text-sm">
+                    {col.render ? col.render(row) : row[col.accessor]}
+                  </div>
                 ))}
-              </tr>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+        </div>
       </div>
 
-      {/* Pagination */}
-      <div className="mt-4 flex justify-between items-center">
-        <div className="text-sm font-medium">
-          Showing {paginatedData.length} results
+      {/* Total Section */}
+      {totalAmount !== null && (
+        <div className="bg-blue-50 border-t border-gray-200 px-6 py-4">
+          <div className="flex justify-end items-center space-x-4">
+            <span className="text-sm font-medium text-gray-600">
+              {totalLabel}:
+            </span>
+            <span className="text-xl font-bold text-gray-900">
+              {totalAmount}
+            </span>
+          </div>
         </div>
-        <div>
+      )}
+
+      {/* Pagination */}
+      <div className="border-t border-gray-200 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div className="text-sm text-gray-600">
+          Showing {(currentPage - 1) * rowsPerPage + 1} to {Math.min(currentPage * rowsPerPage, data.length)} of {data.length} results
+        </div>
+        <div className="flex items-center space-x-2">
           <button
             onClick={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1}
-            style={{
-              marginRight: 8,
-              cursor: currentPage === 1 ? "not-allowed" : "pointer",
-              backgroundColor: "transparent",
-              border: "none",
-              color: currentPage === 1 ? "#555" : "#fff",
-            }}
+            className="px-3 py-1 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            &lt;
+            Previous
           </button>
 
-          {/* Simple page numbers */}
-          {[...Array(totalPages)].map((_, i) => {
-            const page = i + 1;
-            if (page === 1 || page === totalPages || Math.abs(currentPage - page) <= 1) {
-              return (
-                <button
-                  key={page}
-                  onClick={() => handlePageChange(page)}
-                  style={{
-                    margin: "0 4px",
-                    fontWeight: page === currentPage ? "bold" : "normal",
-                    cursor: "pointer",
-                    backgroundColor: "transparent",
-                    fontSize: "14px",
-                    border: "none",
-                    color: page === currentPage ? "#0f9" : "#fff",
-                  }}
-                >
-                  {page}
-                </button>
-              );
-            }
-            if (page === currentPage - 2 || page === currentPage + 2) {
-              return <span key={page} style={{ margin: "0 4px" }}>...</span>;
-            }
-            return null;
-          })}
+          {/* Page numbers */}
+          <div className="flex items-center space-x-1">
+            {[...Array(totalPages)].map((_, i) => {
+              const page = i + 1;
+              if (page === 1 || page === totalPages || Math.abs(currentPage - page) <= 1) {
+                return (
+                  <button
+                    key={page}
+                    onClick={() => handlePageChange(page)}
+                    className={`px-3 py-1 rounded-lg transition-colors ${page === currentPage
+                      ? "bg-blue-600 text-white font-semibold"
+                      : "text-gray-700 hover:bg-gray-100"
+                      }`}
+                  >
+                    {page}
+                  </button>
+                );
+              }
+              if (page === currentPage - 2 || page === currentPage + 2) {
+                return <span key={page} className="px-2 text-gray-500">...</span>;
+              }
+              return null;
+            })}
+          </div>
 
           <button
             onClick={() => handlePageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
-            style={{
-              marginLeft: 8,
-              cursor: currentPage === totalPages ? "not-allowed" : "pointer",
-              backgroundColor: "transparent",
-              border: "none",
-              color: currentPage === totalPages ? "#555" : "#fff",
-            }}
+            className="px-3 py-1 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            &gt;
+            Next
           </button>
         </div>
       </div>

@@ -12,7 +12,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* New Order Card */}
           <Link href="/new-order">
-            <div className="bg-white rounded-2xl shadow-sm border-2 border-teal-500 p-8 hover:shadow-md transition-shadow cursor-pointer h-full">
+            <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 hover:border-teal-500 p-8 hover:shadow-lg transition-shadow cursor-pointer h-full">
               <div className="flex flex-col items-center text-center">
                 <div className="w-16 h-16 bg-teal-500 rounded-full flex items-center justify-center mb-4">
                   <svg
@@ -41,7 +41,7 @@ export default function Dashboard() {
 
           {/* Existing Orders Card */}
           <Link href="/existing-orders">
-            <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 p-8 hover:shadow-md transition-shadow cursor-pointer h-full">
+            <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 hover:border-teal-500 p-8 hover:shadow-lg transition-shadow cursor-pointer h-full">
               <div className="flex flex-col items-center text-center">
                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                   <svg
@@ -70,7 +70,7 @@ export default function Dashboard() {
 
           {/* Logout Card */}
           <Link href="/">
-            <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 p-8 hover:shadow-md transition-shadow cursor-pointer h-full">
+            <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 hover:border-teal-500 p-8 hover:shadow-lg transition-shadow cursor-pointer h-full">
               <div className="flex flex-col items-center text-center">
                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                   <svg
