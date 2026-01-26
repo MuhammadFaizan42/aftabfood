@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Inter } from "next/font/google";
 
@@ -33,10 +32,6 @@ export default function RootLayout({
       <body className={inter.className}>
         {/* Header Section Starts Here */}
         {/* <Header /> */}
-        {/* Right Sidebar(Connect Wallet) Starts Here */}
-
-        {/* <Sidebar /> */}
-        {/* Main Section Starts Here */}
         {children}
         {/* Footer Section Starts Here */}
         {/* <Footer /> */}
