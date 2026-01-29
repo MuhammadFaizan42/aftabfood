@@ -8,7 +8,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-100">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-6 py-12">
+      <main className="max-w-7xl mx-auto px-6 pt-12 pb-8 lg:pb-0">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* New Order Card */}
           <Link href="/new-order">

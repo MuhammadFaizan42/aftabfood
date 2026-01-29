@@ -485,7 +485,7 @@ export default function Products() {
                   ) : (
                     <button
                       onClick={() => handleAddToCart(product.id)}
-                      className="cursor-pointer w-full h-11 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg border border-gray-300 transition-colors"
+                      className="cursor-not-allowed w-full h-11 bg-blue-200 text-gray-700 text-sm font-medium rounded-lg border border-gray-300 transition-colors"
                     >
                       Add to Cart
                     </button>
@@ -501,8 +501,8 @@ export default function Products() {
       <button
         onClick={() => router.push('/cart')}
         disabled={isCartEmpty}
-        className={`fixed bottom-6 right-6 px-6 py-3 rounded-lg font-medium shadow-lg transition-all flex items-center gap-2 cursor-pointer ${isCartEmpty
-          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+        className={`fixed bottom-14 right-6 px-6 py-3 rounded-lg font-medium shadow-lg transition-all flex items-center gap-2 ${isCartEmpty
+          ? 'bg-blue-300 text-gray-900 cursor-not-allowed'
           : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-xl'
           }`}
       >
