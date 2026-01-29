@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 
 export default function Dropdown({
   label,
@@ -13,40 +13,54 @@ export default function Dropdown({
   error = "",
   disabled = false,
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Get selected option label
+  const selectedOption = options.find((opt) => opt.value === value);
+  const displayText = selectedOption ? selectedOption.label : placeholder;
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSelect = (optionValue) => {
+    onChange({ target: { name, value: optionValue } });
+    setIsOpen(false);
+  };
+
   return (
-    <div className={className}>
+    <div className={className} ref={dropdownRef}>
       {label && (
         <label className="block text-sm font-medium text-gray-700 mb-2">
           {label} {required && <span className="text-red-500">*</span>}
         </label>
       )}
       <div className="relative">
-        <select
-          name={name}
-          value={value}
-          onChange={onChange}
+        {/* Dropdown Trigger */}
+        <button
+          type="button"
+          onClick={() => !disabled && setIsOpen(!isOpen)}
           disabled={disabled}
-          className={`w-full px-4 py-3 pr-10 bg-white border text-gray-900 focus:outline-none focus:ring-2 appearance-none cursor-pointer transition-all hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed ${error
+          className={`cursor-pointer w-full px-4 py-3 pr-10 bg-white border text-left focus:outline-none focus:ring-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-[15px] ${error
             ? "border-red-300 focus:ring-red-500 focus:border-transparent"
-            : "border-gray-200 focus:ring-blue-500 focus:border-transparent"
-            }`}
-          style={{
-            borderRadius: "8px",
-            fontSize: "15px",
-          }}
+            : "border-gray-200 focus:ring-blue-500 focus:border-transparent hover:border-gray-300"
+            } ${!selectedOption ? "text-gray-400" : "text-gray-900"}`}
         >
-          <option value="" disabled={required}>
-            {placeholder}
-          </option>
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          {displayText}
+        </button>
+
+        {/* Dropdown Arrow */}
         <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
           <svg
-            className="w-4 h-4 text-blue-600"
+            className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -59,37 +73,45 @@ export default function Dropdown({
             />
           </svg>
         </div>
+
+        {/* Dropdown Menu */}
+        {isOpen && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+            <ul className="max-h-60 overflow-auto">
+              {options.map((option) => (
+                <li key={option.value}>
+                  <button
+                    type="button"
+                    onClick={() => handleSelect(option.value)}
+                    className={`cursor-pointer w-full px-4 py-3 text-left text-[15px] flex items-center justify-between hover:bg-gray-200 transition-colors ${value === option.value
+                      ? "text-gray-900 bg-white"
+                      : "text-gray-700"
+                      }`}
+                  >
+                    <span>{option.label}</span>
+                    {value === option.value && (
+                      <svg
+                        className="w-5 h-5 text-blue-500"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
       {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
-
-      <style jsx>{`
-        select {
-          background-color: white;
-          color: #1f2937;
-          font-weight: 400;
-        }
-        select option {
-          background-color: white;
-          color: #1f2937;
-          padding: 12px 16px;
-          font-size: 15px;
-          font-weight: 400;
-          line-height: 1.6;
-        }
-        select option:hover {
-          background-color: #f9fafb !important;
-        }
-        select option:checked,
-        select option:checked:hover {
-          background-color: white !important;
-          color: #1f2937;
-          font-weight: 400;
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
-          background-repeat: no-repeat;
-          background-position: right 16px center;
-          padding-right: 45px;
-        }
-      `}</style>
     </div>
   );
 }

@@ -1,9 +1,11 @@
 "use client";
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 
 export default function ExistingOrders() {
+  const router = useRouter();
   const [fromDate, setFromDate] = useState("2023-10-27");
   const [toDate, setToDate] = useState("2023-10-27");
 
@@ -116,7 +118,11 @@ export default function ExistingOrders() {
       width: "1fr",
       render: (row) => (
         <div className="flex items-center space-x-2">
-          <button className="cursor-pointer p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="View Detail">
+          <button
+            className="cursor-pointer p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            title="View Detail"
+            onClick={() => router.push("/review")}
+          >
             <svg
               className="w-5 h-5"
               fill="none"
@@ -138,7 +144,11 @@ export default function ExistingOrders() {
             </svg>
           </button>
           {row.canEdit && (
-            <button className="cursor-pointer p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Edit">
+            <button
+              className="cursor-pointer p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Edit"
+              onClick={() => router.push("/cart")}
+            >
               <svg
                 className="w-5 h-5"
                 fill="none"
@@ -164,6 +174,27 @@ export default function ExistingOrders() {
       <Header />
 
       <main className="max-w-7xl mx-auto px-6 py-12">
+        {/* Back to Dashboard Button */}
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 cursor-pointer"
+        >
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M10 19l-7-7m0 0l7-7m-7 7h18"
+            />
+          </svg>
+          <span className="font-medium">Back to Dashboard</span>
+        </button>
+
         {/* Page Title */}
         <h1 className="text-3xl font-bold text-gray-900 mb-8">
           Existing Orders

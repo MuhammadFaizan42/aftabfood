@@ -72,7 +72,7 @@ export default function CreateCustomer({ isOpen, onClose }) {
           </div>
 
           {/* Post Code and Town */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Post code <span className="text-red-500">*</span>
@@ -109,7 +109,7 @@ export default function CreateCustomer({ isOpen, onClose }) {
           </p> */}
 
           {/* Contact Person and Mobile */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Contact Person Name <span className="text-red-500">*</span>

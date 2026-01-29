@@ -2,6 +2,7 @@
 import React from "react";
 import Link from "next/link";
 import Header from "../../components/common/Header";
+import ReusableTable from "../../components/common/ReusableTable";
 
 export default function CustomerDashboard() {
   // Sample data
@@ -89,6 +90,32 @@ export default function CustomerDashboard() {
       <Header />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
+        {/* Back Link and Title */}
+        <div className="mb-6">
+          <Link
+            href="/new-order"
+            className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+              />
+            </svg>
+            Back to Customers List
+          </Link>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+            Customer Dashboard
+          </h1>
+        </div>
+
         {/* Search and Action Bar */}
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-1">
@@ -139,106 +166,116 @@ export default function CustomerDashboard() {
           </div>
 
           {/* New Order Button */}
-          <button className="w-full cursor-pointer lg:w-auto h-11 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 rounded-lg transition-colors">
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            New Order
-          </button>
+          <Link href="/products" className="w-full lg:w-auto">
+            <button className="w-full cursor-pointer h-11 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 rounded-lg transition-colors">
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              New Order
+            </button>
+          </Link>
         </div>
 
         {/* Customer Header Section */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold text-gray-900 mb-4">
-                {customerInfo.name}
-              </h1>
-              <div className="flex flex-wrap gap-6 text-sm text-gray-600">
-                <div className="flex items-center gap-2">
-                  <svg
-                    className="w-4 h-4 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                    />
-                  </svg>
-                  <span>Retail Store</span>
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            <div className="flex flex-col md:flex-row items-center md:items-start gap-4">
+              {/* Profile Avatar with Initials - Centered on mobile/tablet */}
+              <div className="flex justify-center md:justify-start w-full md:w-auto">
+                <div className="w-14 h-14 rounded-full bg-teal-500 flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
+                  {customerInfo.name.split(' ').map(word => word[0]).join('').slice(0, 2).toUpperCase()}
                 </div>
-                <div className="flex items-center gap-2">
-                  <svg
-                    className="w-4 h-4 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                  </svg>
-                  <span>{customerInfo.address}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <svg
-                    className="w-4 h-4 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                    />
-                  </svg>
-                  <span>Contact: {customerInfo.contact}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <svg
-                    className="w-4 h-4 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                    />
-                  </svg>
-                  <span>{customerInfo.phone}</span>
+              </div>
+              <div className="flex-1">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
+                  {customerInfo.name}
+                </h1>
+                <div className="flex flex-col md:flex-row flex-wrap gap-3 md:gap-6 text-sm text-gray-600">
+                  <div className="flex items-center gap-2">
+                    <svg
+                      className="w-4 h-4 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                      />
+                    </svg>
+                    <span>Retail Store</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg
+                      className="w-4 h-4 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                    </svg>
+                    <span>{customerInfo.address}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg
+                      className="w-4 h-4 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                      />
+                    </svg>
+                    <span>Contact: {customerInfo.contact}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg
+                      className="w-4 h-4 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                      />
+                    </svg>
+                    <span>{customerInfo.phone}</span>
+                  </div>
                 </div>
               </div>
             </div>
-            <div>
-              <span className="inline-block bg-green-500 text-white text-sm font-medium px-4 py-2 rounded-lg">
+            <div className="w-full md:w-auto">
+              <span className="block md:inline-block w-full md:w-auto text-center bg-green-500 text-white text-sm font-medium px-4 py-2 rounded-lg">
                 {customerInfo.status}
               </span>
             </div>
@@ -255,7 +292,13 @@ export default function CustomerDashboard() {
                 </h3>
                 {metric.hasLink && (
                   <Link
-                    href={metric.title === "Receivable Amount" ? "/receivable-amount" : "#"}
+                    href={
+                      metric.title === "Receivable Amount"
+                        ? "/receivable-amount"
+                        : metric.title === "Sales Return Amount"
+                          ? "/sales-return-history"
+                          : "#"
+                    }
                     className="cursor-pointer"
                   >
                     <svg
@@ -367,72 +410,77 @@ export default function CustomerDashboard() {
                 View All
               </button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left text-xs font-medium text-gray-500 pb-3 px-3 whitespace-nowrap">
-                      Order #
-                    </th>
-                    <th className="text-left text-xs font-medium text-gray-500 pb-3 px-3 whitespace-nowrap">
-                      Date
-                    </th>
-                    <th className="text-left text-xs font-medium text-gray-500 pb-3 px-3 whitespace-nowrap">
-                      Amount
-                    </th>
-                    <th className="text-left text-xs font-medium text-gray-500 pb-3 px-3 whitespace-nowrap">
-                      Status
-                    </th>
-                    <th className="text-left text-xs font-medium text-gray-500 pb-3 px-3 whitespace-nowrap">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentOrders.map((order, index) => (
-                    <tr key={index} className="border-b border-gray-100">
-                      <td className="py-4 px-3 whitespace-nowrap text-sm text-gray-900">
-                        {order.orderNum}
-                      </td>
-                      <td className="py-4 px-3 whitespace-nowrap text-sm text-gray-600">
-                        {order.date}
-                      </td>
-                      <td className="py-4 px-3 whitespace-nowrap text-sm text-gray-900 font-medium">
-                        {order.amount}
-                      </td>
-                      <td className="py-4 px-3 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded ${order.status === "Completed"
-                            ? "text-green-700 bg-green-50"
-                            : "text-gray-500 bg-gray-100"
-                            }`}
+            <ReusableTable
+              columns={[
+                {
+                  header: "Order #",
+                  accessor: "orderNum",
+                  width: "140px",
+                  render: (row) => (
+                    <span className="text-gray-900 font-medium">{row.orderNum}</span>
+                  ),
+                },
+                {
+                  header: "Date",
+                  accessor: "date",
+                  width: "140px",
+                  render: (row) => (
+                    <span className="text-gray-600">{row.date}</span>
+                  ),
+                },
+                {
+                  header: "Amount",
+                  accessor: "amount",
+                  width: "120px",
+                  render: (row) => (
+                    <span className="text-gray-900 font-semibold">{row.amount}</span>
+                  ),
+                },
+                {
+                  header: "Status",
+                  accessor: "status",
+                  width: "130px",
+                  render: (row) => (
+                    <span
+                      className={`inline-flex items-center text-xs font-medium px-2.5 py-1 rounded ${row.status === "Completed"
+                        ? "text-green-700 bg-green-50"
+                        : "text-gray-500 bg-gray-100"
+                        }`}
+                    >
+                      {row.status}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Action",
+                  accessor: "action",
+                  width: "140px",
+                  minWidth: "140px",
+                  render: (row) => (
+                    <Link href="/cart">
+                      <button className="cursor-pointer flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50 transition-colors">
+                        <svg
+                          className="w-3 h-3"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          {order.status}
-                        </span>
-                      </td>
-                      <td className="py-4 px-3 whitespace-nowrap">
-                        <button className="cursor-pointer flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50">
-                          <svg
-                            className="w-3 h-3"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                            />
-                          </svg>
-                          Duplicate
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                          />
+                        </svg>
+                        Duplicate
+                      </button>
+                    </Link>
+                  ),
+                },
+              ]}
+              data={recentOrders}
+              rowsPerPage={5}
+            />
           </div>
         </div>
       </main>

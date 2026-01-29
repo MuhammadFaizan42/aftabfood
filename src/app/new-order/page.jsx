@@ -1,10 +1,12 @@
 "use client";
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Header from "../../components/common/Header";
 import CreateCustomer from "../../components/layouts/Modals/CreateCustomer";
 
 export default function NewOrder() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [showModal, setShowModal] = useState(false);
 
@@ -67,6 +69,26 @@ export default function NewOrder() {
       <Header />
 
       <main className="max-w-4xl mx-auto px-6 py-12">
+        {/* Back to Dashboard Button */}
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 cursor-pointer"
+        >
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M10 19l-7-7m0 0l7-7m-7 7h18"
+            />
+          </svg>
+          <span className="font-medium">Back to Dashboard</span>
+        </button>
         {/* Header Section */}
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
@@ -164,7 +186,7 @@ export default function NewOrder() {
                 </div>
 
                 {/* Select Button */}
-                <Link href={`/order-details/${customer.id}`} className="w-full sm:w-auto">
+                <Link href='/customer-dashboard' className="w-full sm:w-auto">
                   <button className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2 rounded-lg transition-colors w-full">
                     Select
                   </button>
