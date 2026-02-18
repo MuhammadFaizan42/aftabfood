@@ -1,6 +1,8 @@
 import React, { Suspense } from "react";
 import SalesReturnHistoryClient from "./SalesReturnHistoryClient";
 
+export const dynamic = "force-dynamic";
+
 export default function SalesReturnHistoryPage() {
   return (
     <Suspense

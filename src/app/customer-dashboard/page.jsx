@@ -1,6 +1,8 @@
 import React, { Suspense } from "react";
 import CustomerDashboardClient from "./CustomerDashboardClient";
 
+export const dynamic = "force-dynamic";
+
 export default function CustomerDashboardPage() {
   return (
     <Suspense
