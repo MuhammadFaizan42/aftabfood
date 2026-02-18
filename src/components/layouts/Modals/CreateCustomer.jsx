@@ -1,24 +1,86 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Dropdown from "../../common/Dropdown";
+import { getCustomerCategories, createCustomer } from "@/services/shetApi";
 
-export default function CreateCustomer({ isOpen, onClose }) {
+export default function CreateCustomer({ isOpen, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     name: "",
+    address: "",
     postCode: "",
     town: "",
     contactPerson: "",
     mobile: "",
     category: "",
   });
+  const [categories, setCategories] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setError(null);
+    let cancelled = false;
+    setCategoriesLoading(true);
+    getCustomerCategories()
+      .then((res) => {
+        if (cancelled) return;
+        if (!res?.success) {
+          setCategories([]);
+          return;
+        }
+        const raw = res.data;
+        const list = Array.isArray(raw) ? raw : raw?.categories ?? raw?.data ?? [];
+        const options = list.map((c) => {
+          if (typeof c === "string") return { value: c, label: c };
+          return { value: c.value ?? c.id ?? c.CATEGORY ?? c.name ?? "", label: c.label ?? c.name ?? c.CATEGORY ?? c.value ?? "" };
+        }).filter((o) => o.value);
+        setCategories(options);
+      })
+      .catch(() => {
+        if (!cancelled) setCategories([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCategoriesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [isOpen]);
+
+  const handleSave = async () => {
+    const { name, address, postCode, town, contactPerson, mobile, category } = formData;
+    if (!name?.trim() || !address?.trim() || !postCode?.trim() || !town?.trim() || !contactPerson?.trim() || !mobile?.trim() || !category) {
+      setError("All mandatory fields are required.");
+      return;
+    }
+    setError(null);
+    setSaveLoading(true);
+    try {
+      const payload = {
+        name: name.trim(),
+        post_code: postCode.trim(),
+        address: address.trim(),
+        town: town.trim(),
+        contact_person_name: contactPerson.trim(),
+        mobile: mobile.trim(),
+        customer_category: category,
+      };
+      const res = await createCustomer(payload);
+      if (!res?.success) {
+        setError(res?.message || "Failed to create customer.");
+        return;
+      }
+      setFormData({ name: "", address: "", postCode: "", town: "", contactPerson: "", mobile: "", category: "" });
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create customer.");
+    } finally {
+      setSaveLoading(false);
+    }
+  };
 
   if (!isOpen) return null;
-
-  const handleSave = () => {
-    // Handle save customer logic here
-    console.log("Save customer:", formData);
-    onClose();
-  };
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -55,6 +117,11 @@ export default function CreateCustomer({ isOpen, onClose }) {
 
         {/* Modal Body */}
         <div className="p-6 space-y-4">
+          {error && (
+            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
           {/* Name Field */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -66,6 +133,22 @@ export default function CreateCustomer({ isOpen, onClose }) {
               value={formData.name}
               onChange={(e) =>
                 setFormData({ ...formData, name: e.target.value })
+              }
+              className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Address Field */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Address <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="Street address, area"
+              value={formData.address}
+              onChange={(e) =>
+                setFormData({ ...formData, address: e.target.value })
               }
               className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
@@ -143,7 +226,7 @@ export default function CreateCustomer({ isOpen, onClose }) {
             </div>
           </div>
 
-          {/* Customer Category */}
+          {/* Customer Category – API se fetch (customer.php?category_only=1) */}
           <Dropdown
             label="Customer Category (from ERP)"
             name="category"
@@ -151,12 +234,8 @@ export default function CreateCustomer({ isOpen, onClose }) {
             onChange={(e) =>
               setFormData({ ...formData, category: e.target.value })
             }
-            options={[
-              { value: "retail", label: "Retail" },
-              { value: "wholesale", label: "Wholesale" },
-              { value: "distributor", label: "Distributor" },
-            ]}
-            placeholder="Select category"
+            options={categories}
+            placeholder={categoriesLoading ? "Loading categories..." : "Select category"}
             required
           />
 
@@ -176,9 +255,10 @@ export default function CreateCustomer({ isOpen, onClose }) {
           </button>
           <button
             onClick={handleSave}
-            className="cursor-pointer px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+            disabled={saveLoading}
+            className="cursor-pointer px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium rounded-lg transition-colors"
           >
-            Save Customer
+            {saveLoading ? "Saving..." : "Save Customer"}
           </button>
         </div>
       </div>

@@ -1,9 +1,38 @@
 "use client";
 import React, { useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { login } from "@/services/shetApi";
+import { setAuthToken } from "@/lib/api";
 
 export default function Home() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [loginId, setLoginId] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!loginId.trim() || !password.trim()) {
+      setError("Login ID and password are required.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await login(loginId.trim(), password);
+      if (!res?.success) {
+        throw new Error(res?.message || "Login failed.");
+      }
+      setAuthToken(res.data.token, res.data.user);
+      router.push("/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -30,16 +59,25 @@ export default function Home() {
           </div>
 
           {/* Login Form */}
-          <form className="space-y-5">
-            {/* Username Field */}
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            {error && (
+              <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+            {/* Login ID Field */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Username
+                Login
               </label>
               <input
                 type="text"
-                placeholder="salesman@company.com"
+                placeholder="e.g. FAHAD"
+                value={loginId}
+                onChange={(e) => setLoginId(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                disabled={loading}
+                autoComplete="username"
               />
             </div>
 
@@ -52,7 +90,11 @@ export default function Home() {
                 <input
                   type={showPassword ? "text" : "password"}
                   placeholder="············"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  disabled={loading}
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
@@ -99,14 +141,13 @@ export default function Home() {
             </div>
 
             {/* Login Button */}
-            <Link href="/dashboard">
-              <button
-                type="button"
-                className="w-full cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors duration-200 mt-6"
-              >
-                Login
-              </button>
-            </Link>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full cursor-pointer bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium py-2.5 px-4 rounded-lg transition-colors duration-200 mt-6"
+            >
+              {loading ? "Logging in..." : "Login"}
+            </button>
           </form>
         </div>
       </div>

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Header from "../../components/common/Header";
@@ -7,178 +7,110 @@ import Dropdown from "../../components/common/Dropdown";
 import Image from "next/image";
 import TwoGrid from "../../components/assets/images/two-grid.svg";
 import FourGrid from "../../components/assets/images/four-grid.svg";
+import { getProducts } from "@/services/shetApi";
+
+const DEFAULT_PRODUCT_IMAGE = "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop";
+
+function mapApiProduct(p) {
+  const id = p.PK_ID ?? p.PRODUCT_ID ?? p.id ?? p.SKU ?? String(Math.random());
+  const name = p.PRODUCT_NAME ?? p.ITEM_NAME ?? p.name ?? "—";
+  const sku = p.SKU ?? p.PRODUCT_CODE ?? p.CODE ?? p.PRODUCT_ID ?? "";
+  const category = p.CATEGORY ?? p.category ?? "";
+  const priceVal = p.PRICE ?? p.UNIT_PRICE ?? p.price ?? 0;
+  const price = typeof priceVal === "number" ? `£${Number(priceVal).toFixed(2)}` : String(priceVal || "£0.00");
+  const unitMeasure = p.UOM ?? p.UNIT_OF_MEASURE ?? p.UOM_DESC ?? p.PER_VAL ?? p.UNIT ?? p.unitOfMeasure ?? "Unit";
+  const stockVal = p.STOCK ?? p.QTY ?? p.stock ?? 0;
+  const stock = Number(stockVal) || 0;
+  const img = p.IMAGE ?? p.PIC ?? p.IMG ?? p.image ?? "";
+  return {
+    id,
+    name,
+    description: p.DESCRIPTION ? `${p.DESCRIPTION} • SKU: ${sku}` : (sku ? `SKU: ${sku}` : ""),
+    price,
+    unitPrice: price,
+    unitOfMeasure: unitMeasure,
+    image: img && img.trim() ? img.trim() : DEFAULT_PRODUCT_IMAGE,
+    sku,
+    inStock: stock > 0,
+    category,
+    stock,
+    _raw: p,
+  };
+}
 
 export default function Products() {
   const router = useRouter();
-  const categories = ["All Items", "Beverages", "Snacks", "Household", "Personal Care"];
+  const [categories, setCategories] = useState(["All Items"]);
   const [activeCategory, setActiveCategory] = useState("All Items");
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isTwoColumnView, setIsTwoColumnView] = useState(false);
   const [cartItems, setCartItems] = useState([]);
-
-  const products = [
-    {
-      id: 1,
-      name: "Premium Arabica Coffee",
-      description: "500g Bag • SKU: SKU-CA001",
-      price: "$12.50",
-      unitPrice: "$12.50",
-      unitOfMeasure: "Bag (500g)",
-      image: "/products/coffee.jpg",
-      sku: "SKU-CA001",
-      inStock: true,
-      category: "Beverages",
-      stock: 45,
-    },
-    {
-      id: 2,
-      name: "Organic Green Tea",
-      description: "20 Teabags • SKU: GT-045",
-      price: "$4.80",
-      unitPrice: "$4.80",
-      unitOfMeasure: "Box (20 bags)",
-      image: "/products/green-tea.jpg",
-      sku: "GT-045",
-      inStock: true,
-      category: "Beverages",
-      stock: 32,
-    },
-    {
-      id: 3,
-      name: "Classic Salted Chips",
-      description: "150g Pack • SKU: SN-027",
-      price: "$2.20",
-      unitPrice: "$2.20",
-      unitOfMeasure: "Pack (150g)",
-      image: "/products/chips.jpg",
-      sku: "SN-027",
-      inStock: true,
-      category: "Snacks",
-      stock: 67,
-    },
-    {
-      id: 4,
-      name: "Dark Chocolate Bar",
-      description: "100g • SKU: CH-001",
-      price: "$3.50",
-      unitPrice: "$3.50",
-      unitOfMeasure: "Bar (100g)",
-      image: "/products/chocolate.jpg",
-      sku: "CH-001",
-      inStock: true,
-      category: "Snacks",
-      stock: 28,
-    },
-    {
-      id: 5,
-      name: "Sparkling Water",
-      description: "500ml Bottle • SKU: DR-009",
-      price: "$1.10",
-      unitPrice: "$1.10",
-      unitOfMeasure: "Bottle (500ml)",
-      image: "/products/water.jpg",
-      sku: "DR-009",
-      inStock: true,
-      category: "Beverages",
-      stock: 150,
-    },
-    {
-      id: 6,
-      name: "Lemon Dish Soap",
-      description: "750ml • SKU: HS-221",
-      price: "$2.95",
-      unitPrice: "$2.95",
-      unitOfMeasure: "Bottle (750ml)",
-      image: "/products/soap.jpg",
-      sku: "HS-221",
-      inStock: true,
-      category: "Household",
-      stock: 55,
-    },
-    {
-      id: 7,
-      name: "Hand Sanitizer",
-      description: "250ml • SKU: PC-105",
-      price: "$4.50",
-      unitPrice: "$4.50",
-      unitOfMeasure: "Bottle (250ml)",
-      image: "/products/sanitizer.jpg",
-      sku: "PC-105",
-      inStock: true,
-      category: "Personal Care",
-      stock: 42,
-    },
-    {
-      id: 8,
-      name: "Orange Juice",
-      description: "1L Carton • SKU: BV-032",
-      price: "$3.80",
-      unitPrice: "$3.80",
-      unitOfMeasure: "Carton (1L)",
-      image: "/products/juice.jpg",
-      sku: "BV-032",
-      inStock: true,
-      category: "Beverages",
-      stock: 38,
-    },
-    {
-      id: 9,
-      name: "Potato Crackers",
-      description: "200g Pack • SKU: SN-041",
-      price: "$2.80",
-      unitPrice: "$2.80",
-      unitOfMeasure: "Pack (200g)",
-      image: "/products/crackers.jpg",
-      sku: "SN-041",
-      inStock: true,
-      category: "Snacks",
-      stock: 51,
-    },
-    {
-      id: 10,
-      name: "All-Purpose Cleaner",
-      description: "500ml • SKU: HS-315",
-      price: "$3.20",
-      unitPrice: "$3.20",
-      unitOfMeasure: "Bottle (500ml)",
-      image: "/products/cleaner.jpg",
-      sku: "HS-315",
-      inStock: true,
-      category: "Household",
-      stock: 63,
-    },
-    {
-      id: 11,
-      name: "Shampoo",
-      description: "400ml • SKU: PC-201",
-      price: "$5.50",
-      unitPrice: "$5.50",
-      unitOfMeasure: "Bottle (400ml)",
-      image: "/products/shampoo.jpg",
-      sku: "PC-201",
-      inStock: true,
-      category: "Personal Care",
-      stock: 29,
-    },
-  ];
-
-  // Filter products based on active category
-  const filteredProducts = activeCategory === "All Items"
-    ? products
-    : products.filter(product => product.category === activeCategory);
-
-  const [productQuantities, setProductQuantities] = useState(
-    products.reduce((acc, product) => ({ ...acc, [product.id]: 0 }), {})
-  );
-
-  const [editablePrices, setEditablePrices] = useState(
-    products.reduce((acc, product) => ({ ...acc, [product.id]: product.price }), {})
-  );
-
-  const [selectedUnits, setSelectedUnits] = useState(
-    products.reduce((acc, product) => ({ ...acc, [product.id]: product.unitOfMeasure }), {})
-  );
-
+  const [productQuantities, setProductQuantities] = useState({});
+  const [editablePrices, setEditablePrices] = useState({});
+  const [selectedUnits, setSelectedUnits] = useState({});
   const [editingPrice, setEditingPrice] = useState(null);
+
+  const fetchProducts = useCallback(async (opts = {}) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = {
+        limit: 100,
+        ...(opts.category && opts.category !== "All Items" && { category: opts.category }),
+        ...(opts.search && { search: opts.search }),
+      };
+      const res = await getProducts(params);
+      if (!res?.success || !Array.isArray(res.data)) {
+        setProducts([]);
+        return [];
+      }
+      const mapped = res.data.map(mapApiProduct);
+      setProducts(mapped);
+      return mapped;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load products.");
+      setProducts([]);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const list = await fetchProducts({
+        category: activeCategory === "All Items" ? undefined : activeCategory,
+        search: searchQuery || undefined,
+      });
+      if (cancelled) return;
+      if (list.length && activeCategory === "All Items" && categories.length <= 1) {
+        const cats = ["All Items", ...new Set(list.map((p) => p.category).filter(Boolean))];
+        setCategories(cats);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeCategory, searchQuery]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(searchInput.trim()), 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  useEffect(() => {
+    const q = products.reduce((acc, p) => ({ ...acc, [p.id]: productQuantities[p.id] ?? 0 }), {});
+    const p = products.reduce((acc, p) => ({ ...acc, [p.id]: editablePrices[p.id] ?? p.price }), {});
+    const u = products.reduce((acc, p) => ({ ...acc, [p.id]: selectedUnits[p.id] ?? p.unitOfMeasure }), {});
+    setProductQuantities((prev) => ({ ...q, ...prev }));
+    setEditablePrices((prev) => ({ ...p, ...prev }));
+    setSelectedUnits((prev) => ({ ...u, ...prev }));
+  }, [products]);
+
+  const filteredProducts = products;
 
   const handleQuantityChange = (productId, delta) => {
     setProductQuantities((prev) => ({
@@ -289,12 +221,14 @@ export default function Products() {
           </div>
         </div>
 
-        {/* Search Bar */}
+        {/* Search Bar – search by name or code (API search param) */}
         <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6">
           <div className="relative">
             <input
               type="text"
               placeholder="Search products by name or SKU..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="w-full h-11 pl-10 pr-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
             <svg
@@ -313,6 +247,16 @@ export default function Products() {
           </div>
         </div>
 
+        {error && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm mb-6">
+            {error}
+          </div>
+        )}
+
+        {loading && (
+          <div className="text-center py-12 text-gray-500">Loading products...</div>
+        )}
+
         {/* Change Grid Layout */}
         <div className="hidden sm:flex gap-2 items-end mb-3 justify-end">
           <button
@@ -329,6 +273,7 @@ export default function Products() {
         </div>
 
         {/* Products Grid */}
+        {!loading && (
         <div className={`grid grid-cols-1 gap-6 ${isTwoColumnView
           ? 'sm:grid-cols-1 lg:grid-cols-2'
           : 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
@@ -344,31 +289,15 @@ export default function Products() {
                 key={product.id}
                 className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow"
               >
-                {/* Product Image */}
+                {/* Product Image – API image or default if missing/fails */}
                 <div className="relative h-48 bg-gray-200 overflow-hidden flex items-center justify-center">
                   <img
-                    src={
-                      product.id === 1 ? 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=400&h=400&fit=crop' : // Coffee
-                        product.id === 2 ? 'https://images.unsplash.com/photo-1564890369478-c89ca6d9cde9?w=400&h=400&fit=crop' : // Green tea
-                          product.id === 3 ? 'https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=400&h=400&fit=crop' : // Chips
-                            product.id === 4 ? 'https://images.unsplash.com/photo-1511381939415-e44015466834?w=400&h=400&fit=crop' : // Chocolate
-                              product.id === 5 ? 'https://images.unsplash.com/photo-1625772452859-1c03d5369f5f?w=400&h=400&fit=crop' : // Sparkling water
-                                product.id === 6 ? 'https://images.unsplash.com/photo-1563453392212-326f5e854473?w=400&h=400&fit=crop' : // Dish soap/cleaning
-                                  product.id === 7 ? 'https://images.unsplash.com/photo-1584362917165-526a968579e8?w=400&h=400&fit=crop' : // Hand sanitizer
-                                    product.id === 8 ? 'https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=400&h=400&fit=crop' : // Orange juice
-                                      product.id === 9 ? 'https://images.unsplash.com/photo-1599490659213-e2b9527bd087?w=400&h=400&fit=crop' : // Crackers
-                                        product.id === 10 ? 'https://images.unsplash.com/photo-1585421514738-01798e348b17?w=400&h=400&fit=crop' : // Cleaner spray
-                                          'https://images.unsplash.com/photo-1535585209827-a15fcdbc4c2d?w=400&h=400&fit=crop' // Shampoo
-                    }
+                    src={product.image || DEFAULT_PRODUCT_IMAGE}
                     alt={product.name}
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      e.target.style.display = 'none';
-                      e.target.parentElement.innerHTML = `
-                        <svg class="w-20 h-20 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                        </svg>
-                      `;
+                      e.target.onerror = null;
+                      e.target.src = DEFAULT_PRODUCT_IMAGE;
                     }}
                   />
                 </div>
@@ -419,18 +348,15 @@ export default function Products() {
                     </div>
                   </div>
 
-                  {/* Unit of Measure */}
+                  {/* Unit of Measure – sirf us product ka API UOM */}
                   <div className="mb-3">
                     <Dropdown
                       label="Unit of Measure"
                       name={`unit-${product.id}`}
-                      value={selectedUnits[product.id]}
+                      value={selectedUnits[product.id] ?? product.unitOfMeasure}
                       onChange={(e) => setSelectedUnits(prev => ({ ...prev, [product.id]: e.target.value }))}
                       options={[
                         { value: product.unitOfMeasure, label: product.unitOfMeasure },
-                        { value: "Box (20 bags)", label: "Box (20 bags)" },
-                        { value: "Carton (12 units)", label: "Carton (12 units)" },
-                        { value: "Pack (6 units)", label: "Pack (6 units)" },
                       ]}
                     />
                   </div>
@@ -495,6 +421,7 @@ export default function Products() {
             );
           })}
         </div>
+        )}
       </main>
 
       {/* Fixed Checkout Button */}

@@ -1,9 +1,18 @@
 "use client";
 import React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Header from "../../components/common/Header";
+import { clearAuthToken } from "@/lib/api";
 
 export default function Dashboard() {
+  const router = useRouter();
+
+  const handleLogout = () => {
+    clearAuthToken();
+    router.push("/");
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <Header />
@@ -69,7 +78,7 @@ export default function Dashboard() {
           </Link>
 
           {/* Logout Card */}
-          <Link href="/">
+          <button type="button" onClick={handleLogout} className="w-full text-left">
             <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 hover:border-teal-500 p-8 hover:shadow-lg transition-shadow cursor-pointer h-full">
               <div className="flex flex-col items-center text-center">
                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
@@ -95,7 +104,7 @@ export default function Dashboard() {
                 </p>
               </div>
             </div>
-          </Link>
+          </button>
         </div>
       </main>
     </div>

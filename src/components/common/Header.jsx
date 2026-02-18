@@ -2,23 +2,23 @@
 import { useState, useEffect, useRef } from 'react';
 import React from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { getAuthUser, clearAuthToken } from '@/lib/api';
 
 export default function Header({ toggleSidebar }) {
   const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [profileImage, setProfileImage] = useState(null);
+  const [user, setUser] = useState(null);
   const dropdownRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Load profile image from localStorage on mount
+  // Load logged-in user and profile image from localStorage
   useEffect(() => {
+    setUser(getAuthUser());
     const savedImage = localStorage.getItem('profileImage');
-    if (savedImage) {
-      setProfileImage(savedImage);
-    }
+    if (savedImage) setProfileImage(savedImage);
   }, []);
 
   // Close dropdown when clicking outside
@@ -46,12 +46,16 @@ export default function Header({ toggleSidebar }) {
     }
   };
 
-  // Handle logout
+  // Handle logout – clear token then redirect to login
   const handleLogout = () => {
+    clearAuthToken();
     setIsDropdownOpen(false);
     setIsMobileMenuOpen(false);
     router.push('/');
   };
+
+  const displayName = user?.LOGIN || user?.name || 'User';
+  const displayRole = 'Sales Representative';
 
   return (
     <>
@@ -112,8 +116,8 @@ export default function Header({ toggleSidebar }) {
           {/* Desktop: User Info */}
           <div className="hidden sm:flex items-center gap-3 relative" ref={dropdownRef}>
             <div className="text-right">
-              <div className="text-sm font-semibold text-gray-900">John Doe</div>
-              <div className="text-xs text-gray-500">Sales Representative</div>
+              <div className="text-sm font-semibold text-gray-900">{displayName}</div>
+              <div className="text-xs text-gray-500">{displayRole}</div>
             </div>
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -263,8 +267,8 @@ export default function Header({ toggleSidebar }) {
               )}
             </div>
             <div>
-              <div className="text-sm font-semibold text-gray-900">John Doe</div>
-              <div className="text-xs text-gray-500">Sales Representative</div>
+              <div className="text-sm font-semibold text-gray-900">{displayName}</div>
+              <div className="text-xs text-gray-500">{displayRole}</div>
             </div>
           </div>
         </div>

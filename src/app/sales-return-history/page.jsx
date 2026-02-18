@@ -1,49 +1,137 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
+import { getSaleReturns } from "@/services/shetApi";
+import { getPartySaleInvDashboard } from "@/services/shetApi";
+import { clearAuthToken } from "@/lib/api";
+
+function formatAmount(val) {
+  if (val == null || val === "") return "—";
+  const n = Number(val);
+  if (Number.isNaN(n)) return String(val);
+  return `£${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 export default function SalesReturnHistory() {
-  const customerInfo = {
-    name: "Alpha Supermarket",
-    initials: "AS",
-    customerId: "CUST-001",
-    location: "Downtown, Metro City",
-    phone: "+1 234 567 890",
-    totalReturnedAmount: "$1,290.00",
+  const searchParams = useSearchParams();
+  const partyCode = searchParams.get("party_code");
+
+  const [returns, setReturns] = useState([]);
+  const [totalReturnedAmount, setTotalReturnedAmount] = useState(0);
+  const [customerInfo, setCustomerInfo] = useState({
+    name: "—",
+    initials: "—",
+    customerId: partyCode || "—",
+    location: "—",
+  });
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [loading, setLoading] = useState(!!partyCode);
+  const [error, setError] = useState(null);
+
+  const fetchReturns = useCallback(async () => {
+    if (!partyCode) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getSaleReturns(partyCode, {
+        ...(fromDate && { from_date: fromDate }),
+        ...(toDate && { to_date: toDate }),
+      });
+      if (!res?.success) {
+        setReturns([]);
+        setTotalReturnedAmount(0);
+        const msg = res?.message || "";
+        if (msg.toLowerCase().includes("token expired") || msg.toLowerCase().includes("unauthorized")) {
+          clearAuthToken();
+          setError("Session expired. Please log in again.");
+        } else if (msg) {
+          setError(msg);
+        }
+        return;
+      }
+      const raw = res.data;
+      const data = raw?.items ?? raw?.returns ?? (Array.isArray(raw) ? raw : raw?.records ?? raw?.list ?? raw?.data ?? []);
+      const list = Array.isArray(data) ? data : [];
+      const rows = list.map((r) => {
+        const returnNo = r.SR_INV_NUM ?? r.RETURN_NO ?? r.RET_NO ?? r.returnNo ?? r.DOC_NO ?? "—";
+        const date = r.DATED ?? r.DATE ?? r.date ?? "—";
+        const refInvoice = r.INV_NUMBER ?? r.REF_INVOICE ?? r.INVOICE_REF ?? r.refInvoice ?? r.BRV_NUM ?? "—";
+        const reason = r.REASON ?? r.reason ?? r.REMARKS ?? "—";
+        const amt = r.CR ?? r.LC_AMT ?? r.AMOUNT ?? r.RETURN_AMT ?? r.amount ?? r.INVOICE_AMT ?? 0;
+        const amount = formatAmount(amt);
+        return { returnNo, date, refInvoice, reason, amount, _raw: r };
+      });
+      setReturns(rows);
+      const total = raw?.total_amount != null ? Number(raw.total_amount) : list.reduce((sum, r) => sum + (Number(r.CR ?? r.LC_AMT ?? r.AMOUNT ?? r.amount) || 0), 0);
+      setTotalReturnedAmount(total);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load sale returns.";
+      if (msg.toLowerCase().includes("token expired") || msg.toLowerCase().includes("unauthorized")) {
+        clearAuthToken();
+        setError("Session expired. Please log in again.");
+      } else {
+        setError(msg);
+      }
+      setReturns([]);
+      setTotalReturnedAmount(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [partyCode, fromDate, toDate]);
+
+  useEffect(() => {
+    if (!partyCode) {
+      setLoading(false);
+      return;
+    }
+    fetchReturns();
+  }, [partyCode]);
+
+  useEffect(() => {
+    if (!partyCode) return;
+    let cancelled = false;
+    getPartySaleInvDashboard(partyCode)
+      .then((res) => {
+        if (cancelled || !res?.success || !res?.data?.customer) return;
+        const c = res.data.customer;
+        const name = c.CUSTOMER_NAME || "—";
+        const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "—";
+        const location = [c.ST, c.ADRES, c.DIVISION].filter(Boolean).join(", ") || "—";
+        setCustomerInfo((prev) => ({ ...prev, name, initials, customerId: partyCode, location }));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [partyCode]);
+
+  const handleApply = () => {
+    fetchReturns();
+  };
+  const handleReset = () => {
+    setFromDate("");
+    setToDate("");
   };
 
-  const returns = [
-    {
-      returnNo: "RET-2023-089",
-      date: "Oct 25, 2023",
-      refInvoice: "INV-2023-145",
-      reason: "Damaged Goods",
-      amount: "$450.00",
-    },
-    {
-      returnNo: "RET-2023-072",
-      date: "Oct 12, 2023",
-      refInvoice: "INV-2023-132",
-      reason: "Expired",
-      amount: "$300.00",
-    },
-    {
-      returnNo: "RET-2023-065",
-      date: "Oct 05, 2023",
-      refInvoice: "INV-2023-118",
-      reason: "Wrong Item",
-      amount: "$150.00",
-    },
-    {
-      returnNo: "RET-2023-050",
-      date: "Sep 28, 2023",
-      refInvoice: "INV-2023-101",
-      reason: "Short Expiry",
-      amount: "$390.00",
-    },
-  ];
+  const displayTotal = formatAmount(totalReturnedAmount);
+
+  if (!partyCode) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800 text-sm">
+            No customer selected. Please open this page from a customer dashboard.
+          </div>
+          <Link href="/new-order" className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 mt-4">
+            Back to Customers
+          </Link>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -53,7 +141,7 @@ export default function SalesReturnHistory() {
         {/* Back Button and Title */}
         <div className="mb-6">
           <Link
-            href="/customer-dashboard"
+            href={partyCode ? `/customer-dashboard?party_code=${encodeURIComponent(partyCode)}` : "/customer-dashboard"}
             className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
           >
             <svg
@@ -130,11 +218,22 @@ export default function SalesReturnHistory() {
             <div className="text-left sm:text-right">
               <p className="text-xs sm:text-sm text-gray-500 mb-1">Total Returned Amount</p>
               <p className="text-2xl sm:text-3xl font-bold text-gray-900">
-                {customerInfo.totalReturnedAmount}
+                {displayTotal}
               </p>
             </div>
           </div>
         </div>
+
+        {error && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm mb-4">
+            <p>{error}</p>
+            {error === "Session expired. Please log in again." && (
+              <Link href="/" className="inline-block mt-2 font-medium text-red-800 hover:underline">
+                Log in again →
+              </Link>
+            )}
+          </div>
+        )}
 
         {/* Filters Section */}
         <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-4 sm:mb-6">
@@ -145,7 +244,8 @@ export default function SalesReturnHistory() {
               </label>
               <input
                 type="date"
-                defaultValue="2023-10-01"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
                 className="px-4 h-11 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm w-full sm:w-44"
               />
             </div>
@@ -155,22 +255,37 @@ export default function SalesReturnHistory() {
               </label>
               <input
                 type="date"
-                defaultValue="2023-10-31"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
                 className="px-4 h-11 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm w-full sm:w-44"
               />
             </div>
             <div className="flex gap-3 w-full sm:w-auto">
-              <button className="cursor-pointer h-11 px-6 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors flex-1 sm:flex-none">
+              <button
+                type="button"
+                onClick={handleReset}
+                className="cursor-pointer h-11 px-6 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors flex-1 sm:flex-none"
+              >
                 Reset
               </button>
-              <button className="cursor-pointer h-11 px-6 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors flex-1 sm:flex-none">
-                Apply
+              <button
+                type="button"
+                onClick={handleApply}
+                disabled={loading}
+                className="cursor-pointer h-11 px-6 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors flex-1 sm:flex-none"
+              >
+                {loading ? "Loading..." : "Apply"}
               </button>
             </div>
           </div>
         </div>
 
+        {loading && returns.length === 0 && (
+          <div className="text-center py-12 text-gray-500">Loading sale returns...</div>
+        )}
+
         {/* Returns Table */}
+        {!loading && (
         <ReusableTable
           columns={[
             {
@@ -232,6 +347,7 @@ export default function SalesReturnHistory() {
           data={returns}
           rowsPerPage={10}
         />
+        )}
       </main>
     </div>
   );

@@ -1,74 +1,143 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
+import { getPartySaleInvDashboard } from "@/services/shetApi";
+
+function formatCustomerAddress(c) {
+  if (!c) return "—";
+  const parts = [c.ST, c.ADRES, c.DIVISION, c.PROVINCES].filter(Boolean);
+  return parts.length ? parts.join(", ") : "—";
+}
+
+function formatAmount(val) {
+  if (val == null || val === "") return "—";
+  const n = Number(val);
+  if (Number.isNaN(n)) return String(val);
+  return `£${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 export default function CustomerDashboard() {
-  // Sample data
-  const customerInfo = {
-    name: "Super Mart & Co.",
-    address: "123 Market Street, Downtown District",
-    contact: "Mr. Ahmed Khan",
-    phone: "+1 234 567 890",
-    status: "Active Account",
+  const searchParams = useSearchParams();
+  const partyCode = searchParams.get("party_code");
+
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(!!partyCode);
+  const [error, setError] = useState(null);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [appliedFrom, setAppliedFrom] = useState("");
+  const [appliedTo, setAppliedTo] = useState("");
+  const [searchItems, setSearchItems] = useState("");
+
+  const loadDashboard = React.useCallback(async () => {
+    if (!partyCode) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const params = {
+        recent_limit: 10,
+        ...(appliedFrom && { from_date: appliedFrom }),
+        ...(appliedTo && { to_date: appliedTo }),
+      };
+      const res = await getPartySaleInvDashboard(partyCode, params);
+      if (!res?.success || !res?.data) {
+        setError(res?.message || "Failed to load dashboard.");
+        setData(null);
+        return;
+      }
+      setData(res.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load dashboard.");
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [partyCode, appliedFrom, appliedTo]);
+
+  useEffect(() => {
+    if (!partyCode) {
+      setLoading(false);
+      return;
+    }
+    loadDashboard();
+  }, [partyCode, appliedFrom, appliedTo, loadDashboard]);
+
+  const handleApplyFilter = () => {
+    setAppliedFrom(fromDate);
+    setAppliedTo(toDate);
   };
 
-  const metrics = [
-    {
-      title: "Previous Orders Vol",
-      amount: "$124,500",
-      subtext: "+12% vs last year",
-      trend: "up",
-    },
-    {
-      title: "Payable Amount",
-      amount: "$0.00",
-      subtext: "Company owes Customer",
-      trend: "neutral",
-    },
-    {
-      title: "Receivable Amount",
-      amount: "$4,250.00",
-      subtext: "Overdue by 15 days",
-      trend: "overdue",
-      hasLink: true,
-    },
-    {
-      title: "Sales Return Amount",
-      amount: "$320.00",
-      subtext: "Last 30 days",
-      trend: "neutral",
-      hasLink: true,
-    },
-  ];
+  const customer = data?.customer;
+  const summary = data?.summary;
+  const recentOrdersRaw = data?.recent_orders || [];
 
-  const recentOrders = [
-    {
-      orderNum: "#ORD-7782",
-      date: "Oct 24, 2023",
-      amount: "$1,250.00",
-      status: "Completed",
-    },
-    {
-      orderNum: "#ORD-7750",
-      date: "Oct 10, 2023",
-      amount: "$890.50",
-      status: "Completed",
-    },
-    {
-      orderNum: "#ORD-7712",
-      date: "Sep 28, 2023",
-      amount: "$2,100.00",
-      status: "Completed",
-    },
-    {
-      orderNum: "#ORD-7689",
-      date: "Sep 15, 2023",
-      amount: "$450.00",
-      status: "Cancelled",
-    },
-  ];
+  const customerInfo = customer
+    ? {
+        name: customer.CUSTOMER_NAME || "—",
+        address: formatCustomerAddress(customer),
+        contact: customer.CONT_PERSON || "—",
+        phone: customer.CONT_NUM || "—",
+        status: customer.ACT_STATUS === "Y" ? "Active Account" : "Inactive",
+      }
+    : {
+        name: "—",
+        address: "—",
+        contact: "—",
+        phone: "—",
+        status: "—",
+      };
+
+  const metrics = summary
+    ? [
+        {
+          title: "Total Sales Amount",
+          amount: formatAmount(summary.total_sales_amount),
+          subtext: `${summary.total_orders ?? 0} orders`,
+          trend: "neutral",
+        },
+        {
+          title: "Payable Amount",
+          amount: formatAmount(summary.payable_amount),
+          subtext: "Company owes Customer",
+          trend: "neutral",
+        },
+        {
+          title: "Receivable Amount",
+          amount: formatAmount(summary.receivable_amount),
+          subtext: "Customer owes Company",
+          trend: "neutral",
+          hasLink: true,
+        },
+        {
+          title: "Sales Return Amount",
+          amount: formatAmount(summary.sales_return_amount),
+          subtext: "Returns",
+          trend: "neutral",
+          hasLink: true,
+        },
+      ]
+    : [];
+
+  const recentOrders = recentOrdersRaw.map((o) => ({
+    orderNum: o.BRV_NUM || "—",
+    date: o.DATED || "—",
+    amount: formatAmount(o.INVOICE_AMT ?? o.LC_AMT),
+    status: o.STATUS || "—",
+  }));
+
+  const searchLower = searchItems.trim().toLowerCase();
+  const filteredRecentOrders = searchLower
+    ? recentOrders.filter(
+        (o) =>
+          (o.orderNum && o.orderNum.toLowerCase().includes(searchLower)) ||
+          (o.date && o.date.toLowerCase().includes(searchLower)) ||
+          (o.amount && o.amount.toLowerCase().includes(searchLower)) ||
+          (o.status && o.status.toLowerCase().includes(searchLower))
+      )
+    : recentOrders;
 
   const chartData = [
     { month: "JAN", value: 5, label: "5%" },
@@ -84,6 +153,52 @@ export default function CustomerDashboard() {
     { month: "NOV", value: 30, label: "30%" },
     { month: "DEC", value: 32, label: "32%" },
   ];
+
+  if (!partyCode) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <main className="max-w-7xl mx-auto px-6 py-8">
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800 text-sm">
+            No customer selected. Please choose a customer from the list.
+          </div>
+          <Link
+            href="/new-order"
+            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 mt-4"
+          >
+            Back to Customers List
+          </Link>
+        </main>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <main className="max-w-7xl mx-auto px-6 py-8">
+          <div className="text-center py-12 text-gray-500">Loading dashboard...</div>
+        </main>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <main className="max-w-7xl mx-auto px-6 py-8">
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm mb-4">
+            {error}
+          </div>
+          <Link href="/new-order" className="text-blue-600 hover:text-blue-800">
+            Back to Customers List
+          </Link>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -119,11 +234,13 @@ export default function CustomerDashboard() {
         {/* Search and Action Bar */}
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-1">
-            {/* Item Search */}
+            {/* Item Search – filters recent orders list by order #, date or amount */}
             <div className="relative w-full sm:max-w-xs">
               <input
                 type="text"
                 placeholder="Search items..."
+                value={searchItems}
+                onChange={(e) => setSearchItems(e.target.value)}
                 className="w-full h-11 pl-10 pr-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
               />
               <svg
@@ -141,13 +258,14 @@ export default function CustomerDashboard() {
               </svg>
             </div>
 
-            {/* Date Range Filter */}
+            {/* Date Range Filter – sent to API as from_date, to_date (YYYY-MM-DD) */}
             <div className="flex flex-col sm:flex-row sm:items-end gap-3">
               <div className="flex flex-col">
                 <label className="text-sm text-gray-600 mb-1.5 font-medium">From</label>
                 <input
                   type="date"
-                  defaultValue="2026-01-20"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
                   className="px-4 h-11 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm w-full sm:w-44"
                 />
               </div>
@@ -155,12 +273,18 @@ export default function CustomerDashboard() {
                 <label className="text-sm text-gray-600 mb-1.5 font-medium">To</label>
                 <input
                   type="date"
-                  defaultValue="2026-01-27"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
                   className="px-4 h-11 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm w-full sm:w-44"
                 />
               </div>
-              <button className="w-full cursor-pointer sm:w-auto h-11 px-6 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
-                Apply Filter
+              <button
+                type="button"
+                onClick={handleApplyFilter}
+                disabled={loading}
+                className="w-full cursor-pointer sm:w-auto h-11 px-6 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
+              >
+                {loading ? "Loading..." : "Apply Filter"}
               </button>
             </div>
           </div>
@@ -296,7 +420,7 @@ export default function CustomerDashboard() {
                       metric.title === "Receivable Amount"
                         ? "/receivable-amount"
                         : metric.title === "Sales Return Amount"
-                          ? "/sales-return-history"
+                          ? `/sales-return-history?party_code=${encodeURIComponent(partyCode || "")}`
                           : "#"
                     }
                     className="cursor-pointer"
@@ -478,7 +602,7 @@ export default function CustomerDashboard() {
                   ),
                 },
               ]}
-              data={recentOrders}
+              data={filteredRecentOrders}
               rowsPerPage={5}
             />
           </div>
