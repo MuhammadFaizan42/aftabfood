@@ -3,13 +3,15 @@ import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Header from "../../components/common/Header";
-import { clearAuthToken } from "@/lib/api";
+import { clearAuthToken, clearCartTrnsId, setSaleOrderPartyCode } from "@/lib/api";
 
 export default function Dashboard() {
   const router = useRouter();
 
   const handleLogout = () => {
     clearAuthToken();
+    clearCartTrnsId();
+    setSaleOrderPartyCode(null);
     router.push("/");
   };
 

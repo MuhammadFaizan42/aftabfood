@@ -1,70 +1,72 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
+import { getExistingOrders } from "@/services/shetApi";
+
+function formatOrderDate(val) {
+  if (val == null || val === "") return "—";
+  const d = new Date(val);
+  return Number.isNaN(d.getTime()) ? String(val) : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function mapApiOrders(res) {
+  if (!res?.success || !res?.data) return [];
+  const raw = res.data.orders ?? res.data.list ?? res.data.items ?? (Array.isArray(res.data) ? res.data : []);
+  return (Array.isArray(raw) ? raw : []).map((r, i) => {
+    const orderDate = r.order_date ?? r.ORDER_DATE ?? r.created_at ?? r.date ?? r.trns_date ?? "";
+    const orderId = r.order_id ?? r.ORDER_ID ?? r.order_number ?? r.trns_id ?? r.id ?? `#${i + 1}`;
+    const customerName = r.customer_name ?? r.CUSTOMER_NAME ?? r.party_name ?? r.PARTY_NAME ?? r.customer ?? "—";
+    const status = (r.status ?? r.STATUS ?? r.order_status ?? "Draft").toString();
+    const amount = Number(r.amount ?? r.AMOUNT ?? r.total ?? r.grand_total ?? r.TOTAL ?? 0) || 0;
+    const canEdit = status?.toLowerCase() === "draft" || r.can_edit === true || r.can_edit === "Y";
+    return {
+      id: r.id ?? r.trns_id ?? r.pk_id ?? orderId ?? i,
+      orderDate: formatOrderDate(orderDate),
+      orderId: String(orderId).startsWith("#") ? orderId : `#${orderId}`,
+      customerName: String(customerName),
+      status: status,
+      amount,
+      canEdit: !!canEdit,
+      _raw: r,
+    };
+  });
+}
 
 export default function ExistingOrders() {
   const router = useRouter();
-  const [fromDate, setFromDate] = useState("2023-10-27");
-  const [toDate, setToDate] = useState("2023-10-27");
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const orders = [
-    {
-      id: 1,
-      orderDate: "Oct 27, 2023",
-      orderId: "#ORD-2023-001",
-      customerName: "Super Mart Ltd.",
-      status: "Draft",
-      amount: 1245.0,
-      canEdit: true,
-    },
-    {
-      id: 2,
-      orderDate: "Oct 27, 2023",
-      orderId: "#ORD-2023-002",
-      customerName: "City Grocery Point",
-      status: "Synced",
-      amount: 850.5,
-      canEdit: false,
-    },
-    {
-      id: 3,
-      orderDate: "Oct 27, 2023",
-      orderId: "#ORD-2023-003",
-      customerName: "Fresh Foods Corner",
-      status: "Draft",
-      amount: 2100.0,
-      canEdit: true,
-    },
-    {
-      id: 4,
-      orderDate: "Oct 26, 2023",
-      orderId: "#ORD-2023-004",
-      customerName: "Market Square",
-      status: "Synced",
-      amount: 540.0,
-      canEdit: false,
-    },
-    {
-      id: 5,
-      orderDate: "Oct 26, 2023",
-      orderId: "#ORD-2023-005",
-      customerName: "Downtown Deli",
-      status: "Draft",
-      amount: 780.25,
-      canEdit: true,
-    },
-    {
-      id: 6,
-      orderDate: "Oct 25, 2023",
-      orderId: "#ORD-2023-006",
-      customerName: "Fresh Valley Store",
-      status: "Synced",
-      amount: 1350.75,
-      canEdit: false,
-    },
-  ];
+  const loadOrders = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getExistingOrders({
+        from_date: fromDate || undefined,
+        to_date: toDate || undefined,
+      });
+      setOrders(mapApiOrders(res));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load existing orders.");
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [fromDate, toDate]);
+
+  useEffect(() => {
+    loadOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const totalAmount = orders.reduce((sum, order) => sum + order.amount, 0);
 
@@ -108,7 +110,7 @@ export default function ExistingOrders() {
       width: "1fr",
       render: (row) => (
         <span className="font-semibold text-gray-900">
-          ${row.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+          £{Number(row.amount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </span>
       ),
     },
@@ -231,23 +233,39 @@ export default function ExistingOrders() {
 
             {/* Apply Filters Button */}
             <div className="flex-1 sm:flex-none">
-              <button className="cursor-pointer w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-medium px-8 py-2.5 rounded-lg transition-colors flex items-center justify-center space-x-2">
-                <span>Apply Filters</span>
+              <button
+                type="button"
+                onClick={loadOrders}
+                disabled={loading}
+                className="cursor-pointer w-full sm:w-auto bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium px-8 py-2.5 rounded-lg transition-colors flex items-center justify-center space-x-2"
+              >
+                <span>{loading ? "Loading..." : "Apply Filters"}</span>
               </button>
             </div>
           </div>
         </div>
 
+        {error && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm mb-6">
+            {error}
+          </div>
+        )}
+
         {/* Orders Table */}
-        <ReusableTable
-          columns={columns}
-          data={orders}
-          rowsPerPage={5}
-          totalAmount={`$${totalAmount.toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-          })}`}
-          totalLabel="Total Collected Amount"
-        />
+        {loading && orders.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">Loading existing orders...</div>
+        ) : (
+          <ReusableTable
+            columns={columns}
+            data={orders}
+            rowsPerPage={5}
+            totalAmount={`£${totalAmount.toLocaleString("en-GB", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}`}
+            totalLabel="Total Collected Amount"
+          />
+        )}
       </main>
     </div>
   );

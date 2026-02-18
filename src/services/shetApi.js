@@ -140,3 +140,14 @@ export async function submitOrder(trnsId, options = {}) {
   const body = { trns_id: trnsId, ...options };
   return api.post(`${SALE_ORDER_BASE}?action=submit_order`, body);
 }
+
+/** Existing orders list – GET action=existing_orders; optional from_date, to_date (YYYY-MM-DD) */
+export async function getExistingOrders(params = {}) {
+  const q = new URLSearchParams({ action: "existing_orders" });
+  ["from_date", "to_date", "party_code", "limit", "offset"].forEach((key) => {
+    const v = params[key];
+    if (v != null && v !== "") q.set(key, String(v));
+  });
+  const url = `${SALE_ORDER_BASE}?${q.toString()}`;
+  return api.get(url);
+}
