@@ -74,5 +74,69 @@ export async function createOrder(payload) {
   return api.post("/api/orders", payload);
 }
 
-// Swagger me jo bhi endpoints hon, unke liye yahan functions add karte jayein.
-// Paths exactly wahi hon jo Swagger UI me dikhate hain.
+// --- Sale Order (Cart) APIs - JWT protected, same base ---
+const SALE_ORDER_BASE = `${API_BASE}/models/sale_order.php`;
+
+/** Coerce to number if numeric, else keep as-is (Oracle ORA-01722 avoid) */
+function toNum(val) {
+  if (val == null || val === "") return val;
+  const n = Number(val);
+  return Number.isNaN(n) ? val : n;
+}
+
+/** Add to cart – payload: customer_id, item_id, qty, unit_price, uom, comments; trns_id optional. */
+export async function addToCart(customerId, itemId, qty, trnsId = null, options = {}) {
+  const body = {
+    customer_id: String(customerId ?? ""),
+    item_id: String(itemId ?? ""),
+    qty: (Number(qty) || 0),
+    unit_price: Number(options.unit_price) || 0,
+  };
+  const uom = String(options.uom ?? "").trim();
+  const comments = String(options.comments ?? "").trim();
+  if (uom) body.uom = uom;
+  if (comments) body.comments = comments;
+  if (trnsId != null && trnsId !== "") body.trns_id = (toNum(trnsId) ?? trnsId);
+  return api.post(`${SALE_ORDER_BASE}?action=add_to_cart`, body);
+}
+
+/** Update cart item qty/rate – PUT, Swagger: trns_id, tl_id?, item_id (string), qty, rate? */
+export async function updateCartItem(trnsId, itemId, qty, options = {}) {
+  const body = {
+    trns_id: (toNum(trnsId) ?? trnsId),
+    item_id: String(itemId ?? ""),
+    qty: (Number(qty) || 0),
+  };
+  if (options.tl_id != null) body.tl_id = (toNum(options.tl_id) ?? options.tl_id);
+  if (options.rate != null) body.rate = Number(options.rate);
+  return api.put(`${SALE_ORDER_BASE}?action=update_cart_item`, body);
+}
+
+/** Remove item from cart – DELETE with body (Swagger: trns_id, tl_id, item_id) */
+export async function removeCartItem(trnsId, itemId, options = {}) {
+  const url = `${SALE_ORDER_BASE}?action=remove_cart_item`;
+  const body = {
+    trns_id: toNum(trnsId) ?? trnsId,
+    item_id: String(itemId ?? ""),
+  };
+  if (options.tl_id != null) body.tl_id = (toNum(options.tl_id) ?? options.tl_id);
+  return api.delete(url, body);
+}
+
+/** Order summary for cart screen – GET with trns_id */
+export async function getOrderSummary(trnsId) {
+  const url = `${SALE_ORDER_BASE}?action=order_summary&trns_id=${encodeURIComponent(trnsId)}`;
+  return api.get(url);
+}
+
+/** Order review before submit – GET with trns_id */
+export async function getOrderReview(trnsId) {
+  const url = `${SALE_ORDER_BASE}?action=order_review&trns_id=${encodeURIComponent(trnsId)}`;
+  return api.get(url);
+}
+
+/** Submit order – trns_id + optional delivery_date, pay_terms, discount, remarks */
+export async function submitOrder(trnsId, options = {}) {
+  const body = { trns_id: trnsId, ...options };
+  return api.post(`${SALE_ORDER_BASE}?action=submit_order`, body);
+}

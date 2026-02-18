@@ -1,172 +1,249 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
+import { getOrderReview, submitOrder, getPartySaleInvDashboard } from "@/services/shetApi";
+import { getCartTrnsId, clearCartTrnsId, getSaleOrderPartyCode } from "@/lib/api";
+
+function formatPrice(val) {
+  if (val == null || val === "") return "—";
+  const n = Number(val);
+  if (Number.isNaN(n)) return String(val);
+  return `£${n.toFixed(2)}`;
+}
+
+function mapReviewData(res) {
+  if (!res?.success || !res?.data) return { customer: null, items: [], subtotal: 0, tax: 0, discount: 0, grandTotal: 0 };
+  const d = res.data;
+  const rawCustomer = d.customer ?? d.customer_info ?? d.party ?? {};
+  const customer = {
+    ...rawCustomer,
+    CUSTOMER_NAME: rawCustomer.CUSTOMER_NAME ?? rawCustomer.customer_name ?? rawCustomer.name ?? d.party_name ?? d.customer_name ?? d.PARTY_NAME ?? d.CUSTOMER_NAME,
+    SHORT_CODE: rawCustomer.SHORT_CODE ?? rawCustomer.party_code ?? rawCustomer.PARTY_CODE ?? rawCustomer.customer_id ?? rawCustomer.account_id ?? d.party_code ?? d.PARTY_CODE ?? d.customer_id ?? d.account_id,
+    ADRES: rawCustomer.ADRES ?? rawCustomer.address ?? rawCustomer.ADDRESS ?? rawCustomer.delivery_address ?? d.address ?? d.ADRES ?? d.delivery_address ?? [rawCustomer.ST, rawCustomer.ADRES, rawCustomer.DIVISION, rawCustomer.PROVINCES].filter(Boolean).join(", "),
+    pay_terms: rawCustomer.pay_terms ?? rawCustomer.PAY_TERMS ?? rawCustomer.payment_terms ?? d.pay_terms ?? d.PAY_TERMS ?? d.payment_terms,
+  };
+  const rawItems = d.items ?? d.lines ?? d.order_items ?? (Array.isArray(d) ? d : []);
+  const items = (Array.isArray(rawItems) ? rawItems : []).map((r) => ({
+    id: r.item_id ?? r.product_id ?? r.id,
+    name: r.product_name ?? r.PRODUCT_NAME ?? r.name ?? "—",
+    sku: r.sku ?? r.PRODUCT_ID ?? "",
+    unitPrice: Number(r.unit_price ?? r.UNIT_PRICE ?? r.ITEM_RATE ?? 0) || 0,
+    quantity: Number(r.qty ?? r.quantity ?? 0) || 0,
+    total: Number(r.line_total ?? r.total ?? 0) || 0,
+    image: r.image ?? r.IMAGE_URL ?? "",
+  }));
+  const subtotal = Number(d.subtotal ?? d.sub_total ?? 0) || items.reduce((s, r) => s + r.total, 0);
+  const tax = Number(d.tax ?? 0) || 0;
+  const discount = Number(d.discount ?? 0) || 0;
+  const grandTotal = Number(d.grand_total ?? d.total ?? 0) || subtotal + tax - discount;
+  return { customer, items, subtotal, tax, discount, grandTotal };
+}
 
 export default function OrderReview() {
   const router = useRouter();
-  const [isDraftMode, setIsDraftMode] = useState(true);
+  const [trnsId, setTrnsId] = useState(null);
+  const [customer, setCustomer] = useState(null);
+  const [orderItems, setOrderItems] = useState([]);
+  const [subtotal, setSubtotal] = useState(0);
+  const [tax, setTax] = useState(0);
+  const [discount, setDiscount] = useState(0);
+  const [grandTotal, setGrandTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  // Sample order data
-  const customerInfo = {
-    name: "Supermart & Co.",
-    accountId: "CUST-88329",
-    deliveryArea: "Downtown West",
-    paymentTerms: "Net 30 Days",
+  const [deliveryDate, setDeliveryDate] = useState("");
+  const [payTerms, setPayTerms] = useState("");
+  const [discountVal, setDiscountVal] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [customerEnrich, setCustomerEnrich] = useState(null);
+
+  const loadReview = useCallback(async () => {
+    const id = getCartTrnsId();
+    setTrnsId(id);
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setCustomerEnrich(null);
+    try {
+      const res = await getOrderReview(id);
+      const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData(res);
+      setCustomer(c);
+      setOrderItems(items);
+      setSubtotal(st);
+      setTax(t);
+      setDiscount(d);
+      setGrandTotal(gt);
+
+      const partyCode = getSaleOrderPartyCode();
+      if (partyCode) {
+        try {
+          const dash = await getPartySaleInvDashboard(partyCode);
+          const cust = dash?.data?.customer;
+          if (cust) {
+            const deliveryArea = [cust.ST, cust.ADRES, cust.DIVISION, cust.PROVINCES].filter(Boolean).join(", ") || "—";
+            const paymentTerms = cust.PAY_TERMS ?? cust.pay_terms ?? cust.PAYMENT_TERMS ?? "—";
+            setCustomerEnrich({ deliveryArea, paymentTerms });
+          }
+        } catch {
+          // ignore – order review already loaded
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load order review.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadReview();
+  }, [loadReview]);
+
+  const handleSubmitOrder = async () => {
+    if (!trnsId) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const options = {};
+      if (deliveryDate) options.delivery_date = deliveryDate;
+      if (payTerms) options.pay_terms = payTerms;
+      if (discountVal !== "" && !Number.isNaN(Number(discountVal))) options.discount = Number(discountVal);
+      if (remarks) options.remarks = remarks;
+
+      const res = await submitOrder(trnsId, options);
+      clearCartTrnsId();
+      const orderId = res?.data?.order_number ?? res?.data?.order_id ?? res?.data?.trns_id ?? trnsId;
+      router.push(`/order-success?order_id=${encodeURIComponent(orderId)}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit order.");
+      setSubmitting(false);
+    }
   };
 
-  const orderItems = [
-    {
-      id: 1,
-      name: "Premium Arabica Coffee",
-      sku: "CF-001",
-      weight: "500g",
-      unitPrice: 12.50,
-      quantity: 2,
-      total: 25.00,
-      image: "https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=400&h=400&fit=crop",
-    },
-    {
-      id: 2,
-      name: "Classic Salted Chips",
-      sku: "SN-102",
-      weight: "150g",
-      unitPrice: 2.20,
-      quantity: 10,
-      total: 22.00,
-      image: "https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=400&h=400&fit=crop",
-    },
-    {
-      id: 3,
-      name: "Dark Chocolate Bar",
-      sku: "CH-550",
-      weight: "100g",
-      unitPrice: 3.50,
-      quantity: 1,
-      total: 3.50,
-      image: "https://images.unsplash.com/photo-1511381939415-e44015466834?w=400&h=400&fit=crop",
-    },
-  ];
+  const storedPartyCode = typeof window !== "undefined" ? getSaleOrderPartyCode() : null;
+  const baseInfo = customer
+    ? {
+        name: customer.CUSTOMER_NAME ?? customer.name ?? customer.customer_name ?? "—",
+        accountId: customer.SHORT_CODE ?? customer.PARTY_CODE ?? customer.party_code ?? customer.customer_id ?? customer.account_id ?? storedPartyCode ?? "—",
+        deliveryArea: customer.ADRES ?? customer.ADDRESS ?? customer.address ?? customer.delivery_address ?? ((typeof customer.ADRES === "string" ? customer.ADRES : [customer.ST, customer.ADRES, customer.DIVISION, customer.PROVINCES].filter(Boolean).join(", ")) || "—"),
+        paymentTerms: customer.pay_terms ?? customer.PAY_TERMS ?? customer.payment_terms ?? "—",
+      }
+    : {
+        name: "—",
+        accountId: storedPartyCode ?? "—",
+        deliveryArea: "—",
+        paymentTerms: "—",
+      };
+  const customerInfo = customerEnrich
+    ? {
+        ...baseInfo,
+        deliveryArea: baseInfo.deliveryArea && baseInfo.deliveryArea !== "—" ? baseInfo.deliveryArea : customerEnrich.deliveryArea,
+        paymentTerms: baseInfo.paymentTerms && baseInfo.paymentTerms !== "—" ? baseInfo.paymentTerms : customerEnrich.paymentTerms,
+      }
+    : baseInfo;
 
-  const subtotal = orderItems.reduce((sum, item) => sum + item.total, 0);
-  const taxRate = 0.08;
-  const tax = subtotal * taxRate;
-  const discount = 0.00;
-  const grandTotal = subtotal + tax - discount;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+          <div className="text-center py-12 text-gray-500">Loading order review...</div>
+        </main>
+      </div>
+    );
+  }
 
-  const handleSubmitOrder = () => {
-    router.push("/order-success");
-  };
+  if (!trnsId) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800 text-sm mb-4">
+            No order in progress. Add items from the product listing and go to Cart → Review.
+          </div>
+          <Link href="/products" className="text-blue-600 hover:text-blue-800">
+            Go to Products
+          </Link>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
-
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
-        {/* Header Section */}
         <div className="flex flex-col sm:flex-row gap-3 items-start justify-between mb-6">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Order Review
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Please verify all details before submitting
-            </p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Order Review</h1>
+            <p className="text-sm text-gray-500 mt-1">Verify details and submit</p>
           </div>
-          <Link href='/cart'>
-            <button
-              className="cursor-pointer px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-cyan-500 text-white hover:bg-cyan-600"
-            >
-              Draft Mode
+          <Link href="/cart">
+            <button className="cursor-pointer px-4 py-2 rounded-lg text-sm font-medium bg-cyan-500 text-white hover:bg-cyan-600">
+              Edit Cart
             </button>
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Customer Info & Order Summary */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Customer Information */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Customer Information
-              </h2>
+        {error && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm mb-6">
+            {error}
+          </div>
+        )}
 
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Customer Information</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-                    Customer Name
-                  </p>
-                  <p className="text-base font-semibold text-gray-900">
-                    {customerInfo.name}
-                  </p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Customer Name</p>
+                  <p className="text-base font-semibold text-gray-900">{customerInfo.name}</p>
                 </div>
-
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-                    Account ID
-                  </p>
-                  <p className="text-base font-semibold text-gray-900">
-                    {customerInfo.accountId}
-                  </p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Account ID</p>
+                  <p className="text-base font-semibold text-gray-900">{customerInfo.accountId}</p>
                 </div>
-
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-                    Delivery Area
-                  </p>
-                  <p className="text-base font-semibold text-gray-900">
-                    {customerInfo.deliveryArea}
-                  </p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Delivery / Address</p>
+                  <p className="text-base font-semibold text-gray-900">{customerInfo.deliveryArea}</p>
                 </div>
-
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-                    Payment Terms
-                  </p>
-                  <p className="text-base font-semibold text-gray-900">
-                    {customerInfo.paymentTerms}
-                  </p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Payment Terms</p>
+                  <p className="text-base font-semibold text-gray-900">{customerInfo.paymentTerms}</p>
                 </div>
               </div>
             </div>
 
-            {/* Order Summary */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Order Summary
-                </h2>
-                <Link
-                  href="/cart"
-                  className="cursor-pointer text-sm text-blue-600 hover:text-blue-700 font-medium"
-                >
+                <h2 className="text-lg font-semibold text-gray-900">Order Summary</h2>
+                <Link href="/cart" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
                   Edit Items
                 </Link>
               </div>
-
               <ReusableTable
                 columns={[
                   {
                     header: "Product",
                     accessor: "name",
-                    width: "2fr",
                     render: (row) => (
                       <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                          <img
-                            src={row.image}
-                            alt={row.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                            }}
-                          />
-                        </div>
+                        {row.image && (
+                          <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                            <img src={row.image} alt="" className="w-full h-full object-contain" />
+                          </div>
+                        )}
                         <div>
                           <p className="font-semibold text-gray-900">{row.name}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">SKU: {row.sku} • {row.weight}</p>
+                          <p className="text-xs text-gray-500">SKU: {row.sku}</p>
                         </div>
                       </div>
                     ),
@@ -174,26 +251,17 @@ export default function OrderReview() {
                   {
                     header: "Unit Price",
                     accessor: "unitPrice",
-                    width: "1fr",
-                    render: (row) => (
-                      <span className="text-gray-700">${row.unitPrice.toFixed(2)}</span>
-                    ),
+                    render: (row) => <span className="text-gray-700">{formatPrice(row.unitPrice)}</span>,
                   },
                   {
                     header: "Qty",
                     accessor: "quantity",
-                    width: "0.5fr",
-                    render: (row) => (
-                      <span className="text-gray-700">{row.quantity}</span>
-                    ),
+                    render: (row) => <span className="text-gray-700">{row.quantity}</span>,
                   },
                   {
                     header: "Total",
                     accessor: "total",
-                    width: "1fr",
-                    render: (row) => (
-                      <span className="font-semibold text-gray-900">${row.total.toFixed(2)}</span>
-                    ),
+                    render: (row) => <span className="font-semibold text-gray-900">{formatPrice(row.total)}</span>,
                   },
                 ]}
                 data={orderItems}
@@ -203,60 +271,85 @@ export default function OrderReview() {
             </div>
           </div>
 
-          {/* Right Column - Final Totals */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-sm p-6 sticky top-4">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Final Totals
-              </h2>
+            <div className="bg-white rounded-lg shadow-sm p-6 sticky top-4 space-y-6">
+              <h2 className="text-lg font-semibold text-gray-900">Finalise Order</h2>
 
-              {/* Totals Breakdown */}
-              <div className="space-y-3 mb-6">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Subtotal</span>
-                  <span className="text-gray-900 font-medium">
-                    ${subtotal.toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Tax (8%)</span>
-                  <span className="text-gray-900 font-medium">
-                    ${tax.toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Discount</span>
-                  <span className="text-green-600 font-medium">
-                    -${discount.toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="pt-3 border-t border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <span className="text-lg font-semibold text-gray-900">
-                      Grand Total
-                    </span>
-                    <span className="text-xl font-bold text-gray-900">
-                      ${grandTotal.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
+              <div>
+                <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Delivery Date (optional)</label>
+                <input
+                  type="date"
+                  value={deliveryDate}
+                  onChange={(e) => setDeliveryDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Payment Terms (optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Net 30"
+                  value={payTerms}
+                  onChange={(e) => setPayTerms(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Discount (optional)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0"
+                  value={discountVal}
+                  onChange={(e) => setDiscountVal(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Remarks (optional)</label>
+                <textarea
+                  rows={2}
+                  placeholder="Notes..."
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none"
+                />
               </div>
 
-              {/* Submit Button */}
+              {(() => {
+                const discountAmount = discountVal !== "" && !Number.isNaN(Number(discountVal)) ? Math.max(0, Number(discountVal)) : discount;
+                const displayGrandTotal = subtotal + tax - discountAmount;
+                return (
+                  <div className="space-y-3 pt-3 border-t border-gray-200">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Subtotal</span>
+                      <span className="font-medium text-gray-900">{formatPrice(subtotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Tax</span>
+                      <span className="font-medium text-gray-900">{formatPrice(tax)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Discount</span>
+                      <span className="font-medium text-green-600">-{formatPrice(discountAmount)}</span>
+                    </div>
+                    <div className="flex justify-between pt-3 border-t border-gray-200">
+                      <span className="text-lg font-semibold text-gray-900">Grand Total</span>
+                      <span className="text-xl font-bold text-gray-900">{formatPrice(displayGrandTotal)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <button
                 onClick={handleSubmitOrder}
-                className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 mb-3"
+                disabled={submitting}
+                className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium py-3 px-4 rounded-lg transition-colors"
               >
-                Submit Order
+                {submitting ? "Submitting..." : "Submit Order"}
               </button>
-
-              {/* Terms Agreement */}
-              <p className="text-xs text-center text-gray-500">
-                By submitting, you agree to the sales terms.
-              </p>
+              <p className="text-xs text-center text-gray-500">By submitting, you agree to the sales terms.</p>
             </div>
           </div>
         </div>

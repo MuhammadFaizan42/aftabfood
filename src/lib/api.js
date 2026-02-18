@@ -15,6 +15,8 @@ const getBaseUrl = () => {
 
 const AUTH_TOKEN_KEY = "auth_token";
 const AUTH_USER_KEY = "auth_user";
+const CART_TRNS_ID_KEY = "sale_order_trns_id";
+const SALE_ORDER_PARTY_CODE_KEY = "sale_order_party_code";
 
 export const getAuthToken = () => {
   if (typeof window === "undefined") return null;
@@ -31,6 +33,32 @@ export function clearAuthToken() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(AUTH_TOKEN_KEY);
   localStorage.removeItem(AUTH_USER_KEY);
+}
+
+/** Sale order draft – trns_id (persist across tabs) */
+export function getCartTrnsId() {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(CART_TRNS_ID_KEY) || null;
+}
+export function setCartTrnsId(trnsId) {
+  if (typeof window === "undefined") return;
+  if (trnsId) localStorage.setItem(CART_TRNS_ID_KEY, String(trnsId));
+  else localStorage.removeItem(CART_TRNS_ID_KEY);
+}
+export function clearCartTrnsId() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(CART_TRNS_ID_KEY);
+}
+
+/** Party/customer for current sale order (session – lost on tab close) */
+export function getSaleOrderPartyCode() {
+  if (typeof window === "undefined") return null;
+  return sessionStorage.getItem(SALE_ORDER_PARTY_CODE_KEY) || null;
+}
+export function setSaleOrderPartyCode(partyCode) {
+  if (typeof window === "undefined") return;
+  if (partyCode) sessionStorage.setItem(SALE_ORDER_PARTY_CODE_KEY, String(partyCode));
+  else sessionStorage.removeItem(SALE_ORDER_PARTY_CODE_KEY);
 }
 
 /** Logged-in user (from login response). Has LOGIN, U_ID, etc. */
@@ -95,7 +123,8 @@ export const api = {
     apiRequest(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
   patch: (path, body) =>
     apiRequest(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
-  delete: (path) => apiRequest(path, { method: "DELETE" }),
+  delete: (path, body) =>
+    apiRequest(path, { method: "DELETE", body: body ? JSON.stringify(body) : undefined }),
 };
 
 export default api;

@@ -7,27 +7,65 @@ import Dropdown from "../../components/common/Dropdown";
 import Image from "next/image";
 import TwoGrid from "../../components/assets/images/two-grid.svg";
 import FourGrid from "../../components/assets/images/four-grid.svg";
-import { getProducts } from "@/services/shetApi";
+import { getProducts, addToCart, updateCartItem, removeCartItem } from "@/services/shetApi";
+import { getSaleOrderPartyCode, getCartTrnsId, setCartTrnsId } from "@/lib/api";
 
 const DEFAULT_PRODUCT_IMAGE = "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop";
 
 function mapApiProduct(p) {
-  const id = p.PK_ID ?? p.PRODUCT_ID ?? p.id ?? p.SKU ?? String(Math.random());
+  // IDs / basic fields as per your API shape
+  const id =
+    p.PK_INV_ID ??
+    p.PK_ID ??
+    p.PRODUCT_ID ??
+    p.id ??
+    p.SKU ??
+    String(Math.random());
+
   const name = p.PRODUCT_NAME ?? p.ITEM_NAME ?? p.name ?? "—";
-  const sku = p.SKU ?? p.PRODUCT_CODE ?? p.CODE ?? p.PRODUCT_ID ?? "";
+  const sku = p.PRODUCT_ID ?? p.SKU ?? p.PRODUCT_CODE ?? p.CODE ?? "";
   const category = p.CATEGORY ?? p.category ?? "";
-  const priceVal = p.PRICE ?? p.UNIT_PRICE ?? p.price ?? 0;
-  const price = typeof priceVal === "number" ? `£${Number(priceVal).toFixed(2)}` : String(priceVal || "£0.00");
-  const unitMeasure = p.UOM ?? p.UNIT_OF_MEASURE ?? p.UOM_DESC ?? p.PER_VAL ?? p.UNIT ?? p.unitOfMeasure ?? "Unit";
+
+  // ITEM_RATE aa raha hai string me (e.g. "1") – usko number banayen
+  const itemRateNumber = Number(p.ITEM_RATE ?? 0) || 0;
+  // UI ke liye 2-decimal string with £, jaise screenshot me
+  const priceDisplay = `£${itemRateNumber.toFixed(2)}`;
+
+  const unitMeasure =
+    p.UOM ??
+    p.UNIT_OF_MEASURE ??
+    p.UOM_DESC ??
+    p.PER_VAL ??
+    p.UNIT ??
+    p.unitOfMeasure ??
+    "Unit";
+
   const stockVal = p.STOCK ?? p.QTY ?? p.stock ?? 0;
   const stock = Number(stockVal) || 0;
-  const img = p.IMAGE ?? p.PIC ?? p.IMG ?? p.image ?? "";
+
+  // Prefer IMAGE_URL from API, then other possible image fields
+  const img =
+    p.IMAGE_URL ??
+    p.IMAGE ??
+    p.PIC ??
+    p.IMG ??
+    p.image ??
+    "";
+
   return {
     id,
     name,
-    description: p.DESCRIPTION ? `${p.DESCRIPTION} • SKU: ${sku}` : (sku ? `SKU: ${sku}` : ""),
-    price,
-    unitPrice: price,
+    description: p.DESCRIPTION
+      ? `${p.DESCRIPTION} • SKU: ${sku}`
+      : sku
+        ? `SKU: ${sku}`
+        : "",
+    // UI me dikhne wala price
+    price: priceDisplay,
+    // Unit price controls bhi isi ko use karen
+    unitPrice: priceDisplay,
+    // Saath me clean numeric ITEM_RATE bhi expose kar dein
+    itemRate: itemRateNumber,
     unitOfMeasure: unitMeasure,
     image: img && img.trim() ? img.trim() : DEFAULT_PRODUCT_IMAGE,
     sku,
@@ -53,6 +91,14 @@ export default function Products() {
   const [editablePrices, setEditablePrices] = useState({});
   const [selectedUnits, setSelectedUnits] = useState({});
   const [editingPrice, setEditingPrice] = useState(null);
+  const [productComments, setProductComments] = useState({});
+  const [cartApiLoadingId, setCartApiLoadingId] = useState(null);
+  const [cartApiError, setCartApiError] = useState(null);
+  const [partyCode, setPartyCode] = useState(null);
+
+  useEffect(() => {
+    setPartyCode(getSaleOrderPartyCode());
+  }, []);
 
   const fetchProducts = useCallback(async (opts = {}) => {
     setLoading(true);
@@ -105,9 +151,11 @@ export default function Products() {
     const q = products.reduce((acc, p) => ({ ...acc, [p.id]: productQuantities[p.id] ?? 0 }), {});
     const p = products.reduce((acc, p) => ({ ...acc, [p.id]: editablePrices[p.id] ?? p.price }), {});
     const u = products.reduce((acc, p) => ({ ...acc, [p.id]: selectedUnits[p.id] ?? p.unitOfMeasure }), {});
+    const c = products.reduce((acc, p) => ({ ...acc, [p.id]: productComments[p.id] ?? "" }), {});
     setProductQuantities((prev) => ({ ...q, ...prev }));
     setEditablePrices((prev) => ({ ...p, ...prev }));
     setSelectedUnits((prev) => ({ ...u, ...prev }));
+    setProductComments((prev) => ({ ...c, ...prev }));
   }, [products]);
 
   const filteredProducts = products;
@@ -130,37 +178,88 @@ export default function Products() {
     setEditingPrice(editingPrice === productId ? null : productId);
   };
 
-  const handleAddToCart = (productId) => {
+  /** Backend ko item_id me PRODUCT_ID (sku) bhejte hain */
+  const getItemIdForApi = (p) => (p && (p.sku || p._raw?.PRODUCT_ID)) || String(p?.id ?? "");
+
+  /** "£2.00" / "2.00" se number nikaalna */
+  const parseUnitPrice = (priceStr, fallbackNum = 0) => {
+    if (priceStr == null) return fallbackNum;
+    const s = String(priceStr).replace(/[^\d.-]/g, "").trim();
+    const n = Number(s);
+    return Number.isNaN(n) ? fallbackNum : n;
+  };
+
+  const getAddToCartPayload = (product) => {
+    const productId = product.id;
+    const currentPriceStr = editablePrices[productId] ?? product.price;
+    return {
+      unit_price: parseUnitPrice(currentPriceStr, product.itemRate ?? 0),
+      uom: selectedUnits[productId] ?? product.unitOfMeasure ?? "",
+      comments: productComments[productId] ?? "",
+    };
+  };
+
+  const handleAddToCart = async (product) => {
+    const productId = product.id;
+    const itemIdForApi = getItemIdForApi(product);
     const quantity = productQuantities[productId];
-    if (quantity > 0) {
+    if (quantity <= 0 || !partyCode) return;
+    setCartApiError(null);
+    setCartApiLoadingId(productId);
+    try {
+      const trnsId = getCartTrnsId();
+      const opts = getAddToCartPayload(product);
+      const res = await addToCart(partyCode, itemIdForApi, quantity, trnsId || undefined, opts);
+      const newTrnsId = res?.data?.trns_id ?? res?.trns_id;
+      if (newTrnsId) setCartTrnsId(newTrnsId);
       setCartItems((prev) => {
-        const existingItem = prev.find((item) => item.id === productId);
-        if (existingItem) {
+        const existing = prev.find((item) => item.id === productId);
+        if (existing) {
           return prev.map((item) =>
-            item.id === productId ? { ...item, quantity: item.quantity + quantity } : item
+            item.id === productId ? { ...item, quantity: existing.quantity + quantity } : item
           );
         }
         return [...prev, { id: productId, quantity }];
       });
+    } catch (err) {
+      setCartApiError(err instanceof Error ? err.message : "Failed to add to cart.");
+    } finally {
+      setCartApiLoadingId(null);
     }
-    console.log(`Added product ${productId} to cart with quantity:`, quantity);
   };
 
-  const handleUpdateCart = (productId) => {
+  const handleUpdateCart = async (product) => {
+    const productId = product.id;
+    const itemIdForApi = getItemIdForApi(product);
     const quantity = productQuantities[productId];
-    setCartItems((prev) => {
-      if (quantity === 0) {
-        return prev.filter((item) => item.id !== productId);
+    const trnsId = getCartTrnsId();
+    if (quantity <= 0 && !trnsId) return;
+    setCartApiError(null);
+    setCartApiLoadingId(productId);
+    try {
+      if (quantity === 0 && trnsId) {
+        await removeCartItem(trnsId, itemIdForApi);
+        setCartItems((prev) => prev.filter((item) => item.id !== productId));
+      } else if (quantity > 0) {
+        const opts = getAddToCartPayload(product);
+        const res = await addToCart(partyCode, itemIdForApi, quantity, trnsId || undefined, opts);
+        const newTrnsId = res?.data?.trns_id ?? res?.trns_id;
+        if (newTrnsId) setCartTrnsId(newTrnsId);
+        setCartItems((prev) => {
+          const existing = prev.find((item) => item.id === productId);
+          if (existing) {
+            return prev.map((item) =>
+              item.id === productId ? { ...item, quantity } : item
+            );
+          }
+          return [...prev, { id: productId, quantity }];
+        });
       }
-      const existingItem = prev.find((item) => item.id === productId);
-      if (existingItem) {
-        return prev.map((item) =>
-          item.id === productId ? { ...item, quantity } : item
-        );
-      }
-      return [...prev, { id: productId, quantity }];
-    });
-    console.log(`Updated cart for product ${productId} with quantity:`, quantity);
+    } catch (err) {
+      setCartApiError(err instanceof Error ? err.message : "Failed to update cart.");
+    } finally {
+      setCartApiLoadingId(null);
+    }
   };
 
   const getTotalCartItems = () => {
@@ -168,6 +267,35 @@ export default function Products() {
   };
 
   const isCartEmpty = cartItems.length === 0;
+
+  if (partyCode === null) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800 text-sm">
+            Loading...
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (!partyCode) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800 text-sm mb-4">
+            No customer selected. Please start from Customer Dashboard and click &quot;New Order&quot;.
+          </div>
+          <Link href="/new-order" className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800">
+            Select Customer
+          </Link>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -177,7 +305,7 @@ export default function Products() {
         {/* Header Section */}
         <div className="mb-6">
           <Link
-            href="/customer-dashboard"
+            href={partyCode ? `/customer-dashboard?party_code=${encodeURIComponent(partyCode)}` : "/customer-dashboard"}
             className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
           >
             <svg
@@ -252,6 +380,11 @@ export default function Products() {
             {error}
           </div>
         )}
+        {cartApiError && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm mb-6">
+            {cartApiError}
+          </div>
+        )}
 
         {loading && (
           <div className="text-center py-12 text-gray-500">Loading products...</div>
@@ -289,12 +422,12 @@ export default function Products() {
                 key={product.id}
                 className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow"
               >
-                {/* Product Image – API image or default if missing/fails */}
-                <div className="relative h-48 bg-gray-200 overflow-hidden flex items-center justify-center">
+                {/* Product Image – show full image, no cropping */}
+                <div className="relative h-48 bg-white border-b border-gray-200 overflow-hidden flex items-center justify-center">
                   <img
                     src={product.image || DEFAULT_PRODUCT_IMAGE}
                     alt={product.name}
-                    className="w-full h-full object-cover"
+                    className="max-h-full max-w-full object-contain"
                     onError={(e) => {
                       e.target.onerror = null;
                       e.target.src = DEFAULT_PRODUCT_IMAGE;
@@ -361,12 +494,14 @@ export default function Products() {
                     />
                   </div>
 
-                  {/* Comments/Remarks */}
+                  {/* Comments/Remarks – API me comments bhejte hain */}
                   <div className="mb-3">
                     <p className="text-xs text-gray-400 mb-1">Comments / Remarks</p>
                     <textarea
                       placeholder="Add remark if any..."
                       rows={2}
+                      value={productComments[product.id] ?? ""}
+                      onChange={(e) => setProductComments((prev) => ({ ...prev, [product.id]: e.target.value }))}
                       className="w-full px-3 py-2 text-sm text-gray-600 placeholder-gray-400 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                     />
                   </div>
@@ -403,17 +538,19 @@ export default function Products() {
                   {/* Action Button */}
                   {hasQuantity ? (
                     <button
-                      onClick={() => handleUpdateCart(product.id)}
-                      className="cursor-pointer w-full h-11 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                      onClick={() => handleUpdateCart(product)}
+                      disabled={cartApiLoadingId === product.id}
+                      className="cursor-pointer w-full h-11 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors"
                     >
-                      Update Cart
+                      {cartApiLoadingId === product.id ? "Updating..." : "Update Cart"}
                     </button>
                   ) : (
                     <button
-                      onClick={() => handleAddToCart(product.id)}
-                      className="cursor-not-allowed w-full h-11 bg-blue-200 text-gray-700 text-sm font-medium rounded-lg border border-gray-300 transition-colors"
+                      onClick={() => handleAddToCart(product)}
+                      disabled={quantity <= 0 || cartApiLoadingId === product.id}
+                      className="cursor-pointer w-full h-11 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
                     >
-                      Add to Cart
+                      {cartApiLoadingId === product.id ? "Adding..." : "Add to Cart"}
                     </button>
                   )}
                 </div>
