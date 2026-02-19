@@ -9,6 +9,7 @@ export default function OrderSuccessClient() {
   const [copied, setCopied] = useState(false);
 
   const orderId = searchParams.get("order_id") || `ORD-${Date.now()}`;
+  const isOffline = searchParams.get("offline") === "1";
 
   const handleCopy = () => {
     navigator.clipboard.writeText(orderId);
@@ -50,7 +51,9 @@ export default function OrderSuccessClient() {
             </button>
           </div>
           <p className="text-gray-500 text-sm leading-relaxed mb-8">
-            The transaction has been verified and synced with the ERP system. A confirmation email has been sent.
+            {isOffline
+              ? "Order saved locally. It will sync to the server automatically when you are back online."
+              : "The transaction has been verified and synced with the ERP system. A confirmation email has been sent."}
           </p>
           <button
             onClick={() => router.push("/dashboard")}

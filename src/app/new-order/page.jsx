@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Header from "../../components/common/Header";
 import CreateCustomer from "../../components/layouts/Modals/CreateCustomer";
 import { getCustomers } from "@/services/shetApi";
+import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
+import { getCachedCustomers, cacheCustomers } from "@/lib/offline/bootstrapLoader";
 
 const AVATAR_COLORS = [
   { bg: "bg-blue-100", text: "text-blue-600" },
@@ -32,6 +34,7 @@ function formatLocation(c) {
 
 export default function NewOrder() {
   const router = useRouter();
+  const isOnline = useOnlineStatus();
   const [searchQuery, setSearchQuery] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [customers, setCustomers] = useState([]);
@@ -43,19 +46,27 @@ export default function NewOrder() {
     setLoading(true);
     setError(null);
     try {
-      const res = await getCustomers();
-      if (!res?.success || !Array.isArray(res.data)) {
-        setCustomers([]);
-        return;
+      if (isOnline) {
+        const res = await getCustomers();
+        if (!res?.success || !Array.isArray(res.data)) {
+          setCustomers([]);
+          return;
+        }
+        setCustomers(res.data);
+        try {
+          await cacheCustomers(res.data);
+        } catch { /* ignore */ }
+      } else {
+        const cached = await getCachedCustomers();
+        setCustomers(cached || []);
       }
-      setCustomers(res.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load customers.");
       setCustomers([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isOnline]);
 
   useEffect(() => {
     loadCustomers();
@@ -121,7 +132,9 @@ export default function NewOrder() {
             </h1>
             <button
               onClick={() => setShowModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 cursor-pointer text-white font-medium px-5 py-2.5 rounded-lg transition-colors flex items-center justify-center space-x-2 w-full sm:w-auto"
+              disabled={!isOnline}
+              title={!isOnline ? "Create customer requires internet" : ""}
+              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-white font-medium px-5 py-2.5 rounded-lg transition-colors flex items-center justify-center space-x-2 w-full sm:w-auto"
             >
               <svg
                 className="w-5 h-5"

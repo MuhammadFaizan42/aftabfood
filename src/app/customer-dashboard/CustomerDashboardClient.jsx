@@ -6,6 +6,8 @@ import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getPartySaleInvDashboard } from "@/services/shetApi";
 import { setSaleOrderPartyCode, clearCartTrnsId } from "@/lib/api";
+import { cacheCustomerDashboard, getCachedCustomerDashboard } from "@/lib/offline/bootstrapLoader";
+import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 
 function formatCustomerAddress(c) {
   if (!c) return "—";
@@ -26,6 +28,7 @@ function formatAmount(val) {
 function CustomerDashboardClient() {
   const searchParams = useSearchParams();
   const partyCode = searchParams.get("party_code");
+  const isOnline = useOnlineStatus();
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(!!partyCode);
@@ -41,18 +44,33 @@ function CustomerDashboardClient() {
     setLoading(true);
     setError(null);
     try {
-      const params = {
-        recent_limit: 10,
-        ...(appliedFrom && { from_date: appliedFrom }),
-        ...(appliedTo && { to_date: appliedTo }),
-      };
-      const res = await getPartySaleInvDashboard(partyCode, params);
-      if (!res?.success || !res?.data) {
-        setError(res?.message || "Failed to load dashboard.");
-        setData(null);
-        return;
+      if (isOnline) {
+        const params = {
+          recent_limit: 10,
+          ...(appliedFrom && { from_date: appliedFrom }),
+          ...(appliedTo && { to_date: appliedTo }),
+        };
+        const res = await getPartySaleInvDashboard(partyCode, params);
+        if (!res?.success || !res?.data) {
+          setError(res?.message || "Failed to load dashboard.");
+          setData(null);
+          return;
+        }
+        setData(res.data);
+        try {
+          await cacheCustomerDashboard(partyCode, res.data);
+        } catch {
+          // ignore cache errors
+        }
+      } else {
+        const cached = await getCachedCustomerDashboard(partyCode);
+        if (cached) {
+          setData(cached);
+        } else {
+          setError("Dashboard not in cache. Visit when online to cache.");
+          setData(null);
+        }
       }
-      setData(res.data);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load dashboard.",
@@ -61,7 +79,7 @@ function CustomerDashboardClient() {
     } finally {
       setLoading(false);
     }
-  }, [partyCode, appliedFrom, appliedTo]);
+  }, [partyCode, appliedFrom, appliedTo, isOnline]);
 
   useEffect(() => {
     if (!partyCode) {
@@ -306,7 +324,7 @@ function CustomerDashboardClient() {
 
           {/* New Order Button – clear old cart, set party_code so products/cart APIs create fresh draft */}
           <Link
-            href="/products"
+            href={partyCode ? `/products?party_code=${encodeURIComponent(partyCode)}` : "/products"}
             className="w-full lg:w-auto"
             onClick={() => {
               if (partyCode) {

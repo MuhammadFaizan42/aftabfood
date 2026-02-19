@@ -4,8 +4,11 @@ import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getAuthUser, clearAuthToken } from '@/lib/api';
+import { useSyncStatus } from '@/lib/offline/SyncStatusContext';
 
 export default function Header({ toggleSidebar }) {
+  const { isOnline, isSyncing, syncMessage, triggerRefresh } = useSyncStatus();
+  const [hasMounted, setHasMounted] = useState(false);
   const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -57,8 +60,39 @@ export default function Header({ toggleSidebar }) {
   const displayName = user?.LOGIN || user?.name || 'User';
   const displayRole = 'Sales Representative';
 
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
   return (
     <>
+      {hasMounted && !isOnline && (
+        <div className="bg-amber-500 text-white text-center text-xs py-1.5 px-4 flex items-center justify-center gap-2">
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
+          </svg>
+          Offline – using cached data. Orders will sync when back online.
+        </div>
+      )}
+      {hasMounted && isOnline && (syncMessage || isSyncing) && (
+        <div className={`text-center text-xs py-1.5 px-4 flex items-center justify-center gap-2 ${isSyncing ? "bg-blue-500 text-white" : "bg-green-50 text-green-800 border-b border-green-200"}`}>
+          {isSyncing ? (
+            <>
+              <svg className="w-4 h-4 flex-shrink-0 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {syncMessage}
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4 flex-shrink-0 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              {syncMessage}
+            </>
+          )}
+        </div>
+      )}
       <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 sticky top-0 z-10">
         {/* Hidden file input */}
         <input
@@ -91,6 +125,41 @@ export default function Header({ toggleSidebar }) {
               <span className="text-sm sm:text-xl font-semibold text-gray-900">SalesApp</span>
             </div>
           </Link>
+
+          {/* Online/Offline + Refresh icons */}
+          <div className="hidden sm:flex items-center gap-2">
+            <div
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg ${isOnline ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}
+              title={isOnline ? "Online" : "Offline – using cached data"}
+            >
+              {isOnline ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3" />
+                </svg>
+              )}
+              <span className="text-xs font-medium">{isOnline ? "Online" : "Offline"}</span>
+            </div>
+            <button
+              onClick={triggerRefresh}
+              disabled={!isOnline || isSyncing}
+              title={!isOnline ? "Connect to fetch latest data" : "Fetch latest data from backend"}
+              className="cursor-pointer p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSyncing ? (
+                <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              )}
+            </button>
+          </div>
 
           {/* Desktop: Dashboard Link */}
           <Link
@@ -188,11 +257,35 @@ export default function Header({ toggleSidebar }) {
             )}
           </div>
 
-          {/* Mobile: Hamburger Menu Button */}
-          <button
-            onClick={() => setIsMobileMenuOpen(true)}
-            className="sm:hidden p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-          >
+          {/* Mobile: Online status + Refresh + Menu */}
+          <div className="sm:hidden flex items-center gap-2">
+            <div
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs ${isOnline ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}
+              title={isOnline ? "Online" : "Offline"}
+            >
+              <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-green-500" : "bg-amber-500"}`} />
+              {isOnline ? "Online" : "Offline"}
+            </div>
+            <button
+              onClick={triggerRefresh}
+              disabled={!isOnline || isSyncing}
+              title="Fetch latest data"
+              className="cursor-pointer p-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSyncing ? (
+                <svg className="w-5 h-5 animate-spin text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              )}
+            </button>
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+            >
             <svg
               className="w-6 h-6"
               fill="none"
@@ -207,6 +300,7 @@ export default function Header({ toggleSidebar }) {
               />
             </svg>
           </button>
+          </div>
         </div>
       </header>
 

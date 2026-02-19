@@ -4,7 +4,11 @@ import Link from "next/link";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getOrderSummary, updateCartItem, removeCartItem } from "@/services/shetApi";
-import { getCartTrnsId } from "@/lib/api";
+import { getCartTrnsId, getSaleOrderPartyCode } from "@/lib/api";
+import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
+import { getOfflineCart, getOfflineCartSync, updateOfflineCartItem, removeFromOfflineCart } from "@/lib/offline/offlineCart";
+import { getCachedOrderDetail, updateOfflineOrderInStores } from "@/lib/offline/bootstrapLoader";
+import { getAll } from "@/lib/idb";
 
 const DEFAULT_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect fill='%23e5e7eb' width='64' height='64'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-size='24'%3E📦%3C/text%3E%3C/svg%3E";
 
@@ -55,8 +59,36 @@ function mapOrderSummary(res) {
   return { rows, subtotal, tax, discount, grandTotal };
 }
 
+/** Map offline cart to table rows */
+function mapOfflineCartToRows(cart, products = []) {
+  if (!cart?.items?.length) return { rows: [], subtotal: 0, tax: 0, discount: 0, grandTotal: 0 };
+  const prodMap = new Map(products.map((p) => [String(p.PRODUCT_ID ?? p.SKU ?? p.id), p]));
+  let subtotal = 0;
+  const rows = cart.items.map((it) => {
+    const lt = (Number(it.unit_price) || 0) * (Number(it.qty) || 0);
+    subtotal += lt;
+    const p = prodMap.get(String(it.item_id ?? it.product_id));
+    return {
+      id: it.item_id ?? it.product_id,
+      itemIdForApi: it.item_id ?? it.product_id,
+      tlId: null,
+      name: it.product_name ?? p?.PRODUCT_NAME ?? p?.name ?? "—",
+      sku: it.sku ?? it.item_id ?? "—",
+      quantity: Number(it.qty) || 0,
+      price: Number(it.unit_price) || 0,
+      lineTotal: lt,
+      image: p?.IMAGE_URL ?? p?.IMAGE ?? p?.image ?? DEFAULT_IMG,
+    };
+  });
+  return { rows, subtotal, tax: 0, discount: 0, grandTotal: subtotal };
+}
+
 export default function Cart() {
+  const isOnline = useOnlineStatus();
+  const [hasMounted, setHasMounted] = useState(false);
   const [trnsId, setTrnsId] = useState(null);
+  const [isOfflineCart, setIsOfflineCart] = useState(false);
+  const [isCachedOrderReadOnly, setIsCachedOrderReadOnly] = useState(false);
   const [cartItems, setCartItems] = useState([]);
   const [subtotal, setSubtotal] = useState(0);
   const [tax, setTax] = useState(0);
@@ -66,41 +98,167 @@ export default function Cart() {
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
 
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
   const loadSummary = useCallback(async () => {
     const id = getCartTrnsId();
-    setTrnsId(id);
-    if (!id) {
+    setLoading(true);
+    setError(null);
+    try {
+      if (id && String(id).startsWith("offline_")) {
+        const cached = await getCachedOrderDetail(id);
+        if (cached) {
+          setTrnsId(id);
+          setIsOfflineCart(true);
+          setIsCachedOrderReadOnly(false);
+          const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary({ success: true, data: cached });
+          setCartItems(rows);
+          setSubtotal(st);
+          setTax(t);
+          setDiscount(d);
+          setGrandTotal(gt);
+          return;
+        }
+      }
+
+      if (id && isOnline) {
+        const res = await getOrderSummary(id);
+        if (res?.success && res?.data) {
+          setTrnsId(id);
+          setIsOfflineCart(false);
+          setIsCachedOrderReadOnly(false);
+          const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary(res);
+          setCartItems(rows);
+          setSubtotal(st);
+          setTax(t);
+          setDiscount(d);
+          setGrandTotal(gt);
+          return;
+        }
+      }
+
+      const syncCart = getOfflineCartSync();
+      if (syncCart?.items?.length) {
+        setTrnsId(null);
+        setIsOfflineCart(true);
+        setIsCachedOrderReadOnly(false);
+        const products = await getAll("products");
+        const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOfflineCartToRows(syncCart, products);
+        setCartItems(rows);
+        setSubtotal(st);
+        setTax(t);
+        setDiscount(d);
+        setGrandTotal(gt);
+        return;
+      }
+      let cart = await getOfflineCart();
+      if (!cart?.items?.length) {
+        await new Promise((r) => setTimeout(r, 300));
+        cart = await getOfflineCart();
+      }
+      if (cart?.items?.length) {
+        setTrnsId(null);
+        setIsOfflineCart(true);
+        setIsCachedOrderReadOnly(false);
+        const products = await getAll("products");
+        const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOfflineCartToRows(cart, products);
+        setCartItems(rows);
+        setSubtotal(st);
+        setTax(t);
+        setDiscount(d);
+        setGrandTotal(gt);
+        return;
+      }
+
+      if (id) {
+        const cached = await getCachedOrderDetail(id);
+        if (cached) {
+          setTrnsId(id);
+          setIsOfflineCart(false);
+          setIsCachedOrderReadOnly(true);
+          const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary({ success: true, data: cached });
+          setCartItems(rows);
+          setSubtotal(st);
+          setTax(t);
+          setDiscount(d);
+          setGrandTotal(gt);
+          return;
+        }
+      }
+
+      setTrnsId(id ?? null);
+      setIsOfflineCart(!id);
+      setIsCachedOrderReadOnly(false);
       setCartItems([]);
       setSubtotal(0);
       setTax(0);
       setDiscount(0);
       setGrandTotal(0);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await getOrderSummary(id);
-      const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary(res);
-      setCartItems(rows);
-      setSubtotal(st);
-      setTax(t);
-      setDiscount(d);
-      setGrandTotal(gt);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load order summary.");
       setCartItems([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isOnline]);
 
   useEffect(() => {
-    loadSummary();
+    if (hasMounted) loadSummary();
+  }, [hasMounted, loadSummary]);
+
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === "visible") loadSummary();
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
   }, [loadSummary]);
 
+  const rowsToOrderItems = (rows) =>
+    (rows || []).map((r) => ({
+      id: r.itemIdForApi ?? r.id,
+      name: r.name,
+      sku: r.sku,
+      unitPrice: r.price,
+      quantity: r.quantity,
+      total: r.lineTotal,
+      image: r.image,
+    }));
+
   const updateQuantity = async (id, increment) => {
+    if (isCachedOrderReadOnly) return;
+    if (isOfflineCart) {
+      const item = cartItems.find((i) => i.id === id);
+      if (!item) return;
+      const newQty = Math.max(0, item.quantity + increment);
+      setActionLoading(id);
+      setError(null);
+      try {
+        if (trnsId && String(trnsId).startsWith("offline_")) {
+          const newRows =
+            newQty === 0
+              ? cartItems.filter((i) => i.id !== id)
+              : cartItems.map((r) => (r.id === id ? { ...r, quantity: newQty, lineTotal: r.price * newQty } : r));
+          const newSubtotal = newRows.reduce((s, r) => s + (r.lineTotal ?? 0), 0);
+          setCartItems(newRows);
+          setSubtotal(newSubtotal);
+          setTax(0);
+          setDiscount(0);
+          setGrandTotal(newSubtotal);
+          await updateOfflineOrderInStores(trnsId, { items: rowsToOrderItems(newRows), grandTotal: newSubtotal });
+        } else {
+          await updateOfflineCartItem(item.itemIdForApi ?? item.sku ?? id, newQty);
+          await loadSummary();
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to update cart.");
+      } finally {
+        setActionLoading(null);
+      }
+      return;
+    }
     if (!trnsId) return;
     const item = cartItems.find((i) => i.id === id);
     if (!item) return;
@@ -135,6 +293,33 @@ export default function Cart() {
   };
 
   const removeItem = async (id) => {
+    if (isCachedOrderReadOnly) return;
+    if (isOfflineCart) {
+      const item = cartItems.find((i) => i.id === id);
+      if (!item) return;
+      setActionLoading(id);
+      setError(null);
+      try {
+        if (trnsId && String(trnsId).startsWith("offline_")) {
+          const newRows = cartItems.filter((i) => i.id !== id);
+          const newSubtotal = newRows.reduce((s, r) => s + (r.lineTotal ?? 0), 0);
+          setCartItems(newRows);
+          setSubtotal(newSubtotal);
+          setTax(0);
+          setDiscount(0);
+          setGrandTotal(newSubtotal);
+          await updateOfflineOrderInStores(trnsId, { items: rowsToOrderItems(newRows), grandTotal: newSubtotal });
+        } else {
+          await removeFromOfflineCart(item.itemIdForApi ?? item.sku ?? id);
+          await loadSummary();
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to remove item.");
+      } finally {
+        setActionLoading(null);
+      }
+      return;
+    }
     if (!trnsId) return;
     const item = cartItems.find((i) => i.id === id);
     if (!item) return;
@@ -196,8 +381,8 @@ export default function Cart() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => updateQuantity(row.id, -1)}
-            disabled={actionLoading === row.id}
-            className="cursor-pointer w-8 h-8 rounded-lg border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 disabled:opacity-50"
+            disabled={actionLoading === row.id || isCachedOrderReadOnly}
+            className="cursor-pointer w-8 h-8 rounded-lg border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -208,12 +393,13 @@ export default function Cart() {
             min="0"
             value={row.quantity}
             onChange={(e) => handleQuantityChange(row.id, e.target.value)}
-            className="w-20 h-8 text-center border border-gray-300 rounded-lg bg-white text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={isCachedOrderReadOnly}
+            className="w-20 h-8 text-center border border-gray-300 rounded-lg bg-white text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
           />
           <button
             onClick={() => updateQuantity(row.id, 1)}
-            disabled={actionLoading === row.id}
-            className="cursor-pointer w-8 h-8 rounded-lg border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 disabled:opacity-50"
+            disabled={actionLoading === row.id || isCachedOrderReadOnly}
+            className="cursor-pointer w-8 h-8 rounded-lg border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -239,8 +425,8 @@ export default function Cart() {
       render: (row) => (
         <button
           onClick={() => removeItem(row.id)}
-          disabled={actionLoading === row.id}
-          className="cursor-pointer text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+          disabled={actionLoading === row.id || isCachedOrderReadOnly}
+          className="cursor-pointer text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -250,7 +436,7 @@ export default function Cart() {
     },
   ];
 
-  const emptyCart = !trnsId || cartItems.length === 0;
+  const emptyCart = (isOnline ? !trnsId : false) || cartItems.length === 0;
 
   return (
     <div className="min-h-screen bg-[#F8F9FC]">
@@ -268,6 +454,10 @@ export default function Cart() {
         <div className="flex flex-col sm:flex-row gap-2 sm:items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Order Summary</h1>
           {trnsId && <span className="text-sm text-gray-500">Order #{trnsId}</span>}
+          {!isOnline && <span className="text-sm text-amber-600 font-medium">Offline – will sync when online</span>}
+          {isCachedOrderReadOnly && (
+            <span className="text-sm text-amber-600">View only – connect online to edit</span>
+          )}
         </div>
 
         {error && (

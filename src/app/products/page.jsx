@@ -1,14 +1,18 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import Dropdown from "../../components/common/Dropdown";
 import Image from "next/image";
 import TwoGrid from "../../components/assets/images/two-grid.svg";
 import FourGrid from "../../components/assets/images/four-grid.svg";
-import { getProducts, addToCart, updateCartItem, removeCartItem } from "@/services/shetApi";
-import { getSaleOrderPartyCode, getCartTrnsId, setCartTrnsId, clearCartTrnsId } from "@/lib/api";
+import { getProducts, addToCart, removeCartItem } from "@/services/shetApi";
+import { getSaleOrderPartyCode, setSaleOrderPartyCode, getCartTrnsId, setCartTrnsId, clearCartTrnsId } from "@/lib/api";
+import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
+import { getCachedProducts } from "@/lib/offline/bootstrapLoader";
+import { getDB } from "@/lib/idb";
+import { addToOfflineCart, removeFromOfflineCart, getOfflineCart } from "@/lib/offline/offlineCart";
 
 const DEFAULT_PRODUCT_IMAGE = "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop";
 
@@ -78,6 +82,8 @@ function mapApiProduct(p) {
 
 export default function Products() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isOnline = useOnlineStatus();
   const [categories, setCategories] = useState(["All Items"]);
   const [activeCategory, setActiveCategory] = useState("All Items");
   const [products, setProducts] = useState([]);
@@ -97,24 +103,45 @@ export default function Products() {
   const [partyCode, setPartyCode] = useState(null);
 
   useEffect(() => {
-    setPartyCode(getSaleOrderPartyCode());
+    const fromUrl = searchParams.get("party_code");
+    const fromStorage = getSaleOrderPartyCode();
+    const code = fromUrl || fromStorage || null;
+    if (code) {
+      setPartyCode(code);
+      if (fromUrl) setSaleOrderPartyCode(code);
+    } else {
+      setPartyCode(null);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    getDB().catch(() => {});
   }, []);
 
   const fetchProducts = useCallback(async (opts = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const params = {
-        limit: 100,
-        ...(opts.category && opts.category !== "All Items" && { category: opts.category }),
-        ...(opts.search && { search: opts.search }),
-      };
-      const res = await getProducts(params);
-      if (!res?.success || !Array.isArray(res.data)) {
-        setProducts([]);
-        return [];
+      if (isOnline) {
+        const params = {
+          limit: 100,
+          ...(opts.category && opts.category !== "All Items" && { category: opts.category }),
+          ...(opts.search && { search: opts.search }),
+        };
+        const res = await getProducts(params);
+        if (!res?.success || !Array.isArray(res.data)) {
+          setProducts([]);
+          return [];
+        }
+        const mapped = res.data.map(mapApiProduct);
+        setProducts(mapped);
+        return mapped;
       }
-      const mapped = res.data.map(mapApiProduct);
+      const raw = await getCachedProducts({
+        category: opts.category,
+        search: opts.search,
+      });
+      const mapped = raw.map(mapApiProduct);
       setProducts(mapped);
       return mapped;
     } catch (err) {
@@ -124,7 +151,7 @@ export default function Products() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isOnline]);
 
   useEffect(() => {
     let cancelled = false;
@@ -140,7 +167,23 @@ export default function Products() {
       }
     })();
     return () => { cancelled = true; };
-  }, [activeCategory, searchQuery]);
+  }, [activeCategory, searchQuery, isOnline]);
+
+  useEffect(() => {
+    (async () => {
+      const cart = await getOfflineCart();
+      if (!cart?.items?.length) return;
+      const customerMatch = !cart.customer_id || cart.customer_id === partyCode;
+      if (customerMatch) {
+        setCartItems(
+          cart.items.map((i) => ({
+            id: i.product_key ?? i.item_id ?? i.product_id,
+            quantity: Number(i.qty) || 0,
+          }))
+        );
+      }
+    })();
+  }, [partyCode]);
 
   useEffect(() => {
     const t = setTimeout(() => setSearchQuery(searchInput.trim()), 400);
@@ -203,15 +246,23 @@ export default function Products() {
     const productId = product.id;
     const itemIdForApi = getItemIdForApi(product);
     const quantity = productQuantities[productId];
-    if (quantity <= 0 || !partyCode) return;
+    if (quantity <= 0) return;
+    if (isOnline && !partyCode) return;
     setCartApiError(null);
     setCartApiLoadingId(productId);
-    try {
-      const trnsId = getCartTrnsId();
-      const opts = getAddToCartPayload(product);
-      const res = await addToCart(partyCode, itemIdForApi, quantity, trnsId || undefined, opts);
-      const newTrnsId = res?.data?.trns_id ?? res?.trns_id;
-      if (newTrnsId) setCartTrnsId(newTrnsId);
+    const opts = getAddToCartPayload(product);
+    const offlinePayload = {
+      item_id: itemIdForApi,
+      product_id: itemIdForApi,
+      product_key: productId,
+      qty: quantity,
+      unit_price: opts.unit_price,
+      uom: opts.uom,
+      comments: opts.comments,
+      product_name: product.name,
+      sku: product.sku,
+    };
+    const updateCartState = () => {
       setCartItems((prev) => {
         const existing = prev.find((item) => item.id === productId);
         if (existing) {
@@ -221,6 +272,18 @@ export default function Products() {
         }
         return [...prev, { id: productId, quantity }];
       });
+    };
+    try {
+      if (!isOnline) {
+        await addToOfflineCart(partyCode || null, offlinePayload);
+        updateCartState();
+        return;
+      }
+      const trnsId = getCartTrnsId();
+      const res = await addToCart(partyCode, itemIdForApi, quantity, trnsId || undefined, opts);
+      const newTrnsId = res?.data?.trns_id ?? res?.trns_id;
+      if (newTrnsId) setCartTrnsId(newTrnsId);
+      updateCartState();
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : "Failed to add to cart.";
       if (rawMessage.toLowerCase().includes("only draft orders can be edited")) {
@@ -230,6 +293,14 @@ export default function Products() {
         );
       } else {
         setCartApiError(rawMessage);
+        // Network/API failure: save to offline cart so items are not lost when user goes to checkout
+        try {
+          await addToOfflineCart(partyCode || null, offlinePayload);
+          updateCartState();
+          setCartApiError("Saved offline – will sync when online.");
+        } catch {
+          setCartApiError(rawMessage);
+        }
       }
     } finally {
       setCartApiLoadingId(null);
@@ -241,10 +312,39 @@ export default function Products() {
     const itemIdForApi = getItemIdForApi(product);
     const quantity = productQuantities[productId];
     const trnsId = getCartTrnsId();
-    if (quantity <= 0 && !trnsId) return;
+    if (quantity <= 0 && !trnsId && isOnline) return;
     setCartApiError(null);
     setCartApiLoadingId(productId);
     try {
+      if (!isOnline) {
+        if (quantity === 0) {
+          await removeFromOfflineCart(itemIdForApi);
+          setCartItems((prev) => prev.filter((item) => item.id !== productId));
+        } else {
+          const opts = getAddToCartPayload(product);
+          await addToOfflineCart(partyCode || null, {
+            item_id: itemIdForApi,
+            product_id: itemIdForApi,
+            product_key: productId,
+            qty: quantity,
+            unit_price: opts.unit_price,
+            uom: opts.uom,
+            comments: opts.comments,
+            product_name: product.name,
+            sku: product.sku,
+          });
+          setCartItems((prev) => {
+            const existing = prev.find((item) => item.id === productId);
+            if (existing) {
+              return prev.map((item) =>
+                item.id === productId ? { ...item, quantity } : item
+              );
+            }
+            return [...prev, { id: productId, quantity }];
+          });
+        }
+        return;
+      }
       if (quantity === 0 && trnsId) {
         await removeCartItem(trnsId, itemIdForApi);
         setCartItems((prev) => prev.filter((item) => item.id !== productId));
@@ -272,6 +372,37 @@ export default function Products() {
         );
       } else {
         setCartApiError(rawMessage);
+        try {
+          if (quantity === 0) {
+            await removeFromOfflineCart(itemIdForApi);
+            setCartItems((prev) => prev.filter((item) => item.id !== productId));
+          } else {
+            const opts = getAddToCartPayload(product);
+            await addToOfflineCart(partyCode || null, {
+              item_id: itemIdForApi,
+              product_id: itemIdForApi,
+              product_key: productId,
+              qty: quantity,
+              unit_price: opts.unit_price,
+              uom: opts.uom,
+              comments: opts.comments,
+              product_name: product.name,
+              sku: product.sku,
+            });
+            setCartItems((prev) => {
+              const existing = prev.find((item) => item.id === productId);
+              if (existing) {
+                return prev.map((item) =>
+                  item.id === productId ? { ...item, quantity } : item
+                );
+              }
+              return [...prev, { id: productId, quantity }];
+            });
+          }
+          setCartApiError("Saved offline – will sync when online.");
+        } catch {
+          setCartApiError(rawMessage);
+        }
       }
     } finally {
       setCartApiLoadingId(null);
@@ -345,6 +476,11 @@ export default function Products() {
           <p className="text-xs sm:text-sm text-gray-500 mt-1">
             Browse and add products to your cart
           </p>
+          {!isOnline && (
+            <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800 text-xs">
+              Offline mode – using cached data. Orders will sync when back online.
+            </div>
+          )}
         </div>
 
         {/* Category Tabs */}

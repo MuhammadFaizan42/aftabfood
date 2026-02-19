@@ -5,7 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getOrderReview, submitOrder, getPartySaleInvDashboard } from "@/services/shetApi";
-import { getCartTrnsId, clearCartTrnsId, getSaleOrderPartyCode } from "@/lib/api";
+import { getCartTrnsId, setCartTrnsId, clearCartTrnsId, getSaleOrderPartyCode } from "@/lib/api";
+import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
+import { getOfflineCart, clearOfflineCart } from "@/lib/offline/offlineCart";
+import { getCachedCustomerDashboard, getCachedOrderDetail, cacheOrderDetail, saveOfflineOrderToExistingOrders, deleteOfflineOrder } from "@/lib/offline/bootstrapLoader";
+import { enqueueOrder } from "@/lib/offline/orderQueue";
 
 const DEFAULT_IMG =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect fill='%23e5e7eb' width='64' height='64'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-size='24'%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E";
@@ -51,8 +55,10 @@ function mapReviewData(res) {
 export default function OrderReview() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isOnline = useOnlineStatus();
   const isViewOnly = (searchParams?.get("mode") || "").toLowerCase() === "view";
   const [trnsId, setTrnsId] = useState(null);
+  const [isOfflineOrder, setIsOfflineOrder] = useState(false);
   const [customer, setCustomer] = useState(null);
   const [orderItems, setOrderItems] = useState([]);
   const [subtotal, setSubtotal] = useState(0);
@@ -68,47 +74,187 @@ export default function OrderReview() {
   const [discountVal, setDiscountVal] = useState("");
   const [remarks, setRemarks] = useState("");
   const [customerEnrich, setCustomerEnrich] = useState(null);
+  const [isCachedServerOrder, setIsCachedServerOrder] = useState(false);
 
   const loadReview = useCallback(async () => {
-    const id = getCartTrnsId();
-    setTrnsId(id);
-    if (!id) {
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     setError(null);
     setCustomerEnrich(null);
-    try {
-      const res = await getOrderReview(id);
-      const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData(res);
-      setCustomer(c);
-      setOrderItems(items);
-      setSubtotal(st);
-      setTax(t);
-      setDiscount(d);
-      setGrandTotal(gt);
+    const id = getCartTrnsId();
 
-      const partyCode = getSaleOrderPartyCode();
-      if (partyCode) {
+    if (isViewOnly && id) {
+      if (isOnline) {
+        setTrnsId(id);
+        setIsOfflineOrder(false);
         try {
-          const dash = await getPartySaleInvDashboard(partyCode);
-          const cust = dash?.data?.customer;
-          if (cust) {
-            const deliveryArea = [cust.ST, cust.ADRES, cust.DIVISION, cust.PROVINCES].filter(Boolean).join(", ") || "—";
-            const paymentTerms = cust.PAY_TERMS ?? cust.pay_terms ?? cust.PAYMENT_TERMS ?? "—";
-            setCustomerEnrich({ deliveryArea, paymentTerms });
+          const res = await getOrderReview(id);
+          try {
+            await cacheOrderDetail(id, res?.data ?? res);
+          } catch { /* ignore */ }
+          const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData(res);
+          setCustomer(c);
+          setOrderItems(items);
+          setSubtotal(st);
+          setTax(t);
+          setDiscount(d);
+          setGrandTotal(gt);
+          const partyCode = getSaleOrderPartyCode();
+          if (partyCode) {
+            try {
+              const dash = await getPartySaleInvDashboard(partyCode);
+              const cust = dash?.data?.customer;
+              if (cust) {
+                const deliveryArea = [cust.ST, cust.ADRES, cust.DIVISION, cust.PROVINCES].filter(Boolean).join(", ") || "—";
+                const paymentTerms = cust.PAY_TERMS ?? cust.pay_terms ?? cust.PAYMENT_TERMS ?? "—";
+                setCustomerEnrich({ deliveryArea, paymentTerms });
+              }
+            } catch { /* ignore */ }
           }
-        } catch {
-          // ignore – order review already loaded
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to load order review.");
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setTrnsId(id);
+        const isOfflineId = id && String(id).startsWith("offline_");
+        setIsOfflineOrder(!!isOfflineId);
+        setIsCachedServerOrder(!isOfflineId);
+        try {
+          const cached = await getCachedOrderDetail(id);
+          if (cached) {
+            const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: cached });
+            setCustomer(c);
+            setOrderItems(items);
+            setSubtotal(st);
+            setTax(t);
+            setDiscount(d);
+            setGrandTotal(gt);
+          } else {
+            setError("Order details not in cache. View this order when online first.");
+          }
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to load order.");
+        } finally {
+          setLoading(false);
         }
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load order review.");
-    } finally {
-      setLoading(false);
+      return;
     }
-  }, []);
+
+    if (isOnline) {
+      setIsCachedServerOrder(false);
+      setTrnsId(id);
+      setIsOfflineOrder(false);
+      if (!id) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await getOrderReview(id);
+        try {
+          await cacheOrderDetail(id, res?.data ?? res);
+        } catch { /* ignore */ }
+        const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData(res);
+        setCustomer(c);
+        setOrderItems(items);
+        setSubtotal(st);
+        setTax(t);
+        setDiscount(d);
+        setGrandTotal(gt);
+        const partyCode = getSaleOrderPartyCode();
+        if (partyCode) {
+          try {
+            const dash = await getPartySaleInvDashboard(partyCode);
+            const cust = dash?.data?.customer;
+            if (cust) {
+              const deliveryArea = [cust.ST, cust.ADRES, cust.DIVISION, cust.PROVINCES].filter(Boolean).join(", ") || "—";
+              const paymentTerms = cust.PAY_TERMS ?? cust.pay_terms ?? cust.PAYMENT_TERMS ?? "—";
+              setCustomerEnrich({ deliveryArea, paymentTerms });
+            }
+          } catch { /* ignore */ }
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load order review.");
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      if (!isOnline && id) {
+        const cached = await getCachedOrderDetail(id);
+        if (cached) {
+          setTrnsId(id);
+          const isOfflineId = String(id).startsWith("offline_");
+          setIsOfflineOrder(isOfflineId);
+          setIsCachedServerOrder(!isOfflineId);
+          const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: cached });
+          setCustomer(c);
+          setOrderItems(items);
+          setSubtotal(st);
+          setTax(t);
+          setDiscount(d);
+          setGrandTotal(gt);
+          setLoading(false);
+          return;
+        }
+      }
+      setIsCachedServerOrder(false);
+      setTrnsId(null);
+      setIsOfflineOrder(true);
+      try {
+        const cart = await getOfflineCart();
+        if (!cart?.items?.length) {
+          setLoading(false);
+          return;
+        }
+        const dash = cart.customer_id ? await getCachedCustomerDashboard(cart.customer_id) : null;
+        const cust = dash?.customer ?? {};
+        const customer = {
+          CUSTOMER_NAME: cust.CUSTOMER_NAME ?? cust.customer_name ?? "Offline order",
+          SHORT_CODE: cart.customer_id ?? "",
+          ADRES: [cust.ST, cust.ADRES, cust.DIVISION, cust.PROVINCES].filter(Boolean).join(", ") || "—",
+          pay_terms: cust.PAY_TERMS ?? cust.pay_terms ?? "—",
+        };
+        setCustomer(customer);
+        const items = cart.items.map((it) => {
+          const total = (Number(it.unit_price) || 0) * (Number(it.qty) || 0);
+          return {
+            id: it.item_id ?? it.product_id,
+            name: it.product_name ?? "—",
+            sku: it.sku ?? it.item_id ?? "",
+            unitPrice: Number(it.unit_price) || 0,
+            quantity: Number(it.qty) || 0,
+            total,
+            image: DEFAULT_IMG,
+          };
+        });
+        const st = items.reduce((s, r) => s + r.total, 0);
+        setOrderItems(items);
+        setSubtotal(st);
+        setTax(0);
+        setDiscount(0);
+        setGrandTotal(st);
+        try {
+          const savedOrderId = await saveOfflineOrderToExistingOrders({
+            customer,
+            items,
+            subtotal: st,
+            tax: 0,
+            discount: 0,
+            grandTotal: st,
+            customer_id: cart.customer_id,
+          });
+          if (savedOrderId) setCartTrnsId(savedOrderId);
+        } catch {
+          // ignore cache errors
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load review.");
+      } finally {
+        setLoading(false);
+      }
+    }
+  }, [isOnline, isViewOnly]);
 
   useEffect(() => {
     loadReview();
@@ -116,10 +262,49 @@ export default function OrderReview() {
 
   const handleSubmitOrder = async () => {
     if (isViewOnly) return;
-    if (!trnsId) return;
+    if (isCachedServerOrder && !isOnline) {
+      setError("Connect online to submit this order.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
+      if (isOfflineOrder) {
+        const orderId = trnsId && String(trnsId).startsWith("offline_") ? trnsId : null;
+        const cart = orderId
+          ? await getCachedOrderDetail(orderId)
+          : await getOfflineCart();
+        const customer_id = cart?.customer?.SHORT_CODE ?? cart?.customer_id ?? null;
+        const items = cart?.items ?? [];
+        const lineItems = Array.isArray(items)
+          ? items.map((it) => ({
+              item_id: it.item_id ?? it.id ?? it.product_id,
+              qty: Number(it.qty ?? it.quantity) || 0,
+              unit_price: Number(it.unit_price ?? it.unitPrice) || 0,
+              uom: it.uom || "",
+              comments: it.comments || "",
+            }))
+          : [];
+        if (!lineItems.length || !customer_id) {
+          setError("No order data.");
+          setSubmitting(false);
+          return;
+        }
+        const uuid = await enqueueOrder({
+          customer_id,
+          items: lineItems,
+          delivery_date: deliveryDate || undefined,
+          pay_terms: payTerms || undefined,
+          discount: discountVal !== "" && !Number.isNaN(Number(discountVal)) ? Number(discountVal) : undefined,
+          remarks: remarks || undefined,
+        });
+        if (orderId) await deleteOfflineOrder(orderId);
+        else await clearOfflineCart();
+        clearCartTrnsId();
+        router.push(`/order-success?order_id=${encodeURIComponent(uuid)}&offline=1`);
+        return;
+      }
+      if (!trnsId) return;
       const options = {};
       if (deliveryDate) options.delivery_date = deliveryDate;
       if (payTerms) options.pay_terms = payTerms;
@@ -169,7 +354,7 @@ export default function OrderReview() {
     );
   }
 
-  if (!trnsId) {
+  if (!trnsId && !isOfflineOrder) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
@@ -365,10 +550,15 @@ export default function OrderReview() {
 
               {!isViewOnly && (
                 <>
+                  {isCachedServerOrder && !isOnline && (
+                    <p className="text-sm text-amber-600 mb-2">
+                      Connect online to submit this order.
+                    </p>
+                  )}
                   <button
                     onClick={handleSubmitOrder}
-                    disabled={submitting}
-                    className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+                    disabled={submitting || (isCachedServerOrder && !isOnline)}
+                    className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors"
                   >
                     {submitting ? "Submitting..." : "Submit Order"}
                   </button>

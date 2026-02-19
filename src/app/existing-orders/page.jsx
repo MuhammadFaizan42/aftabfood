@@ -5,6 +5,8 @@ import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getExistingOrders } from "@/services/shetApi";
 import { setCartTrnsId, setSaleOrderPartyCode } from "@/lib/api";
+import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
+import { cacheExistingOrders, getCachedExistingOrders, getOfflineOrdersFromStore } from "@/lib/offline/bootstrapLoader";
 
 function formatOrderDate(val) {
   if (val == null || val === "") return "—";
@@ -51,8 +53,34 @@ function mapApiOrders(res) {
   });
 }
 
+function mapRawToOrders(rawList) {
+  if (!Array.isArray(rawList)) return [];
+  return rawList.map((r, i) => {
+    const orderDate = r.order_date ?? r.ORDER_DATE ?? r.created_at ?? r.date ?? r.trns_date ?? "";
+    const orderId = r.order_id ?? r.ORDER_ID ?? r.order_number ?? r.trns_id ?? r.id ?? `#${i + 1}`;
+    const customerName = r.customer_name ?? r.CUSTOMER_NAME ?? r.party_name ?? r.PARTY_NAME ?? r.customer ?? "—";
+    const status = (r.status ?? r.STATUS ?? r.order_status ?? "Draft").toString();
+    const amount = Number(r.amount ?? r.AMOUNT ?? r.total ?? r.grand_total ?? r.TOTAL ?? 0) || 0;
+    const canEdit = status?.toLowerCase() === "draft" || r.can_edit === true || r.can_edit === "Y";
+    const id = r.trns_id ?? r.TRNS_ID ?? r.id ?? r.pk_id ?? orderId ?? i;
+    const partyCode = r.party_code ?? r.PARTY_CODE ?? r.customer_id ?? r.CUSTOMER_ID ?? r.account_id ?? r.ACCOUNT_ID ?? null;
+    return {
+      id,
+      orderDate: formatOrderDate(orderDate),
+      orderId: String(orderId).startsWith("#") ? orderId : `#${orderId}`,
+      customerName: String(customerName),
+      status,
+      amount,
+      canEdit: !!canEdit,
+      partyCode,
+      _raw: r,
+    };
+  });
+}
+
 export default function ExistingOrders() {
   const router = useRouter();
+  const isOnline = useOnlineStatus();
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
@@ -67,23 +95,40 @@ export default function ExistingOrders() {
     setLoading(true);
     setError(null);
     try {
-      const res = await getExistingOrders({
-        from_date: fromDate || undefined,
-        to_date: toDate || undefined,
-      });
-      setOrders(mapApiOrders(res));
+      if (isOnline) {
+        const res = await getExistingOrders({
+          from_date: fromDate || undefined,
+          to_date: toDate || undefined,
+        });
+        const apiOrders = mapApiOrders(res);
+        try {
+          await cacheExistingOrders(res);
+        } catch {
+          // ignore cache errors
+        }
+        const offlineOnly = await getOfflineOrdersFromStore();
+        const offlineOrders = mapRawToOrders(offlineOnly);
+        const merged = [...apiOrders, ...offlineOrders].sort((a, b) => {
+          const dA = a._raw?.order_date ?? a._raw?._orderDateStr ?? "";
+          const dB = b._raw?.order_date ?? b._raw?._orderDateStr ?? "";
+          return String(dB).localeCompare(String(dA));
+        });
+        setOrders(merged);
+      } else {
+        const cached = await getCachedExistingOrders(fromDate, toDate);
+        setOrders(mapRawToOrders(cached));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load existing orders.");
       setOrders([]);
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate]);
+  }, [fromDate, toDate, isOnline]);
 
   useEffect(() => {
     loadOrders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadOrders]);
 
   const totalAmount = orders.reduce((sum, order) => sum + order.amount, 0);
 
@@ -249,9 +294,16 @@ export default function ExistingOrders() {
         </button>
 
         {/* Page Title */}
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">
-          Existing Orders
-        </h1>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">
+            Existing Orders
+          </h1>
+          {!isOnline && (
+            <span className="text-sm text-amber-600 font-medium">
+              Offline – using cached data
+            </span>
+          )}
+        </div>
 
         {/* Date Filter Section */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
