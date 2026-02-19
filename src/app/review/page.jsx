@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { Suspense, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
@@ -52,7 +52,7 @@ function mapReviewData(res) {
   return { customer, items, subtotal, tax, discount, grandTotal };
 }
 
-export default function OrderReview() {
+function OrderReviewContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isOnline = useOnlineStatus();
@@ -572,5 +572,22 @@ export default function OrderReview() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function OrderReviewPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50">
+          <Header />
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+            <div className="text-center py-12 text-gray-500">Loading order review...</div>
+          </main>
+        </div>
+      }
+    >
+      <OrderReviewContent />
+    </Suspense>
   );
 }
