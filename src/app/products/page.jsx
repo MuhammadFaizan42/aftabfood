@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { Suspense, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
@@ -80,7 +80,7 @@ function mapApiProduct(p) {
   };
 }
 
-export default function Products() {
+function ProductsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isOnline = useOnlineStatus();
@@ -728,5 +728,22 @@ export default function Products() {
         Checkout {!isCartEmpty && `(${getTotalCartItems()})`}
       </button>
     </div>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50">
+          <Header />
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+            <div className="text-center py-12 text-gray-500">Loading...</div>
+          </main>
+        </div>
+      }
+    >
+      <ProductsContent />
+    </Suspense>
   );
 }
