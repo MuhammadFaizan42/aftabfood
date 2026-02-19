@@ -8,7 +8,7 @@ import Image from "next/image";
 import TwoGrid from "../../components/assets/images/two-grid.svg";
 import FourGrid from "../../components/assets/images/four-grid.svg";
 import { getProducts, addToCart, updateCartItem, removeCartItem } from "@/services/shetApi";
-import { getSaleOrderPartyCode, getCartTrnsId, setCartTrnsId } from "@/lib/api";
+import { getSaleOrderPartyCode, getCartTrnsId, setCartTrnsId, clearCartTrnsId } from "@/lib/api";
 
 const DEFAULT_PRODUCT_IMAGE = "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop";
 
@@ -222,7 +222,15 @@ export default function Products() {
         return [...prev, { id: productId, quantity }];
       });
     } catch (err) {
-      setCartApiError(err instanceof Error ? err.message : "Failed to add to cart.");
+      const rawMessage = err instanceof Error ? err.message : "Failed to add to cart.";
+      if (rawMessage.toLowerCase().includes("only draft orders can be edited")) {
+        clearCartTrnsId();
+        setCartApiError(
+          "This order has already been submitted and can no longer be edited. Please start a new order from the customer dashboard."
+        );
+      } else {
+        setCartApiError(rawMessage);
+      }
     } finally {
       setCartApiLoadingId(null);
     }
@@ -256,7 +264,15 @@ export default function Products() {
         });
       }
     } catch (err) {
-      setCartApiError(err instanceof Error ? err.message : "Failed to update cart.");
+      const rawMessage = err instanceof Error ? err.message : "Failed to update cart.";
+      if (rawMessage.toLowerCase().includes("only draft orders can be edited")) {
+        clearCartTrnsId();
+        setCartApiError(
+          "This order has already been submitted and can no longer be edited. Please start a new order from the customer dashboard."
+        );
+      } else {
+        setCartApiError(rawMessage);
+      }
     } finally {
       setCartApiLoadingId(null);
     }

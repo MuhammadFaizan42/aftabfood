@@ -37,6 +37,7 @@ export default function NewOrder() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState("");
 
   const loadCustomers = useCallback(async () => {
     setLoading(true);
@@ -80,6 +81,18 @@ export default function NewOrder() {
       <Header />
 
       <main className="max-w-4xl mx-auto px-6 py-12">
+        {successMessage && (
+          <div className="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-green-800 text-sm flex items-start justify-between gap-3">
+            <span>{successMessage}</span>
+            <button
+              type="button"
+              onClick={() => setSuccessMessage("")}
+              className="cursor-pointer text-green-700 hover:text-green-900"
+            >
+              ×
+            </button>
+          </div>
+        )}
         {/* Back to Dashboard Button */}
         <button
           onClick={() => router.push("/dashboard")}
@@ -256,7 +269,14 @@ export default function NewOrder() {
         )}
       </main>
 
-      <CreateCustomer isOpen={showModal} onClose={() => setShowModal(false)} onSuccess={loadCustomers} />
+      <CreateCustomer
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onSuccess={async () => {
+          await loadCustomers();
+          setSuccessMessage("Customer created successfully.");
+        }}
+      />
     </div>
   );
 }

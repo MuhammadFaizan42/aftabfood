@@ -137,7 +137,25 @@ export async function getOrderReview(trnsId) {
 
 /** Submit order – trns_id + optional delivery_date, pay_terms, discount, remarks */
 export async function submitOrder(trnsId, options = {}) {
-  const body = { trns_id: trnsId, ...options };
+  const body = { trns_id: toNum(trnsId) ?? trnsId };
+  if (options.delivery_date) body.delivery_date = options.delivery_date;
+  if (options.remarks) body.remarks = options.remarks;
+  if (options.discount != null && options.discount !== "") {
+    body.discount = toNum(options.discount) ?? options.discount;
+  }
+  if (options.tax_percent != null && options.tax_percent !== "") {
+    body.tax_percent = toNum(options.tax_percent) ?? options.tax_percent;
+  }
+  if (options.pay_terms != null && options.pay_terms !== "") {
+    const raw = String(options.pay_terms).trim();
+    const direct = toNum(raw);
+    if (direct != null && !Number.isNaN(Number(direct))) {
+      body.pay_terms = direct;
+    } else {
+      const match = raw.match(/\d+/);
+      body.pay_terms = match ? Number(match[0]) : raw;
+    }
+  }
   return api.post(`${SALE_ORDER_BASE}?action=submit_order`, body);
 }
 

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getExistingOrders } from "@/services/shetApi";
+import { setCartTrnsId, setSaleOrderPartyCode } from "@/lib/api";
 
 function formatOrderDate(val) {
   if (val == null || val === "") return "—";
@@ -21,14 +22,30 @@ function mapApiOrders(res) {
     const status = (r.status ?? r.STATUS ?? r.order_status ?? "Draft").toString();
     const amount = Number(r.amount ?? r.AMOUNT ?? r.total ?? r.grand_total ?? r.TOTAL ?? 0) || 0;
     const canEdit = status?.toLowerCase() === "draft" || r.can_edit === true || r.can_edit === "Y";
+    const id =
+      r.trns_id ??
+      r.TRNS_ID ??
+      r.id ??
+      r.pk_id ??
+      orderId ??
+      i;
+    const partyCode =
+      r.party_code ??
+      r.PARTY_CODE ??
+      r.customer_id ??
+      r.CUSTOMER_ID ??
+      r.account_id ??
+      r.ACCOUNT_ID ??
+      null;
     return {
-      id: r.id ?? r.trns_id ?? r.pk_id ?? orderId ?? i,
+      id: id,
       orderDate: formatOrderDate(orderDate),
       orderId: String(orderId).startsWith("#") ? orderId : `#${orderId}`,
       customerName: String(customerName),
       status: status,
       amount,
       canEdit: !!canEdit,
+      partyCode,
       _raw: r,
     };
   });
@@ -123,7 +140,24 @@ export default function ExistingOrders() {
           <button
             className="cursor-pointer p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
             title="View Detail"
-            onClick={() => router.push("/review")}
+            onClick={() => {
+              const partyCode =
+                row.partyCode ??
+                row._raw?.party_code ??
+                row._raw?.PARTY_CODE ??
+                row._raw?.customer_id ??
+                row._raw?.CUSTOMER_ID ??
+                row._raw?.account_id ??
+                row._raw?.ACCOUNT_ID ??
+                null;
+              if (partyCode) {
+                setSaleOrderPartyCode(partyCode);
+              }
+              if (row.id != null) {
+                setCartTrnsId(row.id);
+              }
+              router.push("/review?mode=view");
+            }}
           >
             <svg
               className="w-5 h-5"
@@ -149,7 +183,24 @@ export default function ExistingOrders() {
             <button
               className="cursor-pointer p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
               title="Edit"
-              onClick={() => router.push("/cart")}
+              onClick={() => {
+                const partyCode =
+                  row.partyCode ??
+                  row._raw?.party_code ??
+                  row._raw?.PARTY_CODE ??
+                  row._raw?.customer_id ??
+                  row._raw?.CUSTOMER_ID ??
+                  row._raw?.account_id ??
+                  row._raw?.ACCOUNT_ID ??
+                  null;
+                if (partyCode) {
+                  setSaleOrderPartyCode(partyCode);
+                }
+                if (row.id != null) {
+                  setCartTrnsId(row.id);
+                }
+                router.push("/cart");
+              }}
             >
               <svg
                 className="w-5 h-5"

@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getPartySaleInvDashboard } from "@/services/shetApi";
-import { setSaleOrderPartyCode } from "@/lib/api";
+import { setSaleOrderPartyCode, clearCartTrnsId } from "@/lib/api";
 
 function formatCustomerAddress(c) {
   if (!c) return "—";
@@ -304,11 +304,16 @@ function CustomerDashboardClient() {
             </div>
           </div>
 
-          {/* New Order Button – set party_code so products/cart APIs can use customer_id */}
+          {/* New Order Button – clear old cart, set party_code so products/cart APIs create fresh draft */}
           <Link
             href="/products"
             className="w-full lg:w-auto"
-            onClick={() => partyCode && setSaleOrderPartyCode(partyCode)}
+            onClick={() => {
+              if (partyCode) {
+                clearCartTrnsId();
+                setSaleOrderPartyCode(partyCode);
+              }
+            }}
           >
             <button className="w-full cursor-pointer h-11 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 rounded-lg transition-colors">
               <svg

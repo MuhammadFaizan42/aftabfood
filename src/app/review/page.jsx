@@ -1,11 +1,14 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getOrderReview, submitOrder, getPartySaleInvDashboard } from "@/services/shetApi";
 import { getCartTrnsId, clearCartTrnsId, getSaleOrderPartyCode } from "@/lib/api";
+
+const DEFAULT_IMG =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect fill='%23e5e7eb' width='64' height='64'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-size='24'%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E";
 
 function formatPrice(val) {
   if (val == null || val === "") return "—";
@@ -26,15 +29,18 @@ function mapReviewData(res) {
     pay_terms: rawCustomer.pay_terms ?? rawCustomer.PAY_TERMS ?? rawCustomer.payment_terms ?? d.pay_terms ?? d.PAY_TERMS ?? d.payment_terms,
   };
   const rawItems = d.items ?? d.lines ?? d.order_items ?? (Array.isArray(d) ? d : []);
-  const items = (Array.isArray(rawItems) ? rawItems : []).map((r) => ({
-    id: r.item_id ?? r.product_id ?? r.id,
-    name: r.product_name ?? r.PRODUCT_NAME ?? r.name ?? "—",
-    sku: r.sku ?? r.PRODUCT_ID ?? "",
-    unitPrice: Number(r.unit_price ?? r.UNIT_PRICE ?? r.ITEM_RATE ?? 0) || 0,
-    quantity: Number(r.qty ?? r.quantity ?? 0) || 0,
-    total: Number(r.line_total ?? r.total ?? 0) || 0,
-    image: r.image ?? r.IMAGE_URL ?? "",
-  }));
+  const items = (Array.isArray(rawItems) ? rawItems : []).map((r) => {
+    const img = r.image ?? r.IMAGE_URL ?? r.image_url ?? "";
+    return {
+      id: r.item_id ?? r.product_id ?? r.id,
+      name: r.product_name ?? r.PRODUCT_NAME ?? r.name ?? "—",
+      sku: r.sku ?? r.PRODUCT_ID ?? "",
+      unitPrice: Number(r.unit_price ?? r.UNIT_PRICE ?? r.ITEM_RATE ?? 0) || 0,
+      quantity: Number(r.qty ?? r.quantity ?? 0) || 0,
+      total: Number(r.line_total ?? r.total ?? 0) || 0,
+      image: img || DEFAULT_IMG,
+    };
+  });
   const subtotal = Number(d.subtotal ?? d.sub_total ?? 0) || items.reduce((s, r) => s + r.total, 0);
   const tax = Number(d.tax ?? 0) || 0;
   const discount = Number(d.discount ?? 0) || 0;
@@ -44,6 +50,8 @@ function mapReviewData(res) {
 
 export default function OrderReview() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isViewOnly = (searchParams?.get("mode") || "").toLowerCase() === "view";
   const [trnsId, setTrnsId] = useState(null);
   const [customer, setCustomer] = useState(null);
   const [orderItems, setOrderItems] = useState([]);
@@ -107,6 +115,7 @@ export default function OrderReview() {
   }, [loadReview]);
 
   const handleSubmitOrder = async () => {
+    if (isViewOnly) return;
     if (!trnsId) return;
     setSubmitting(true);
     setError(null);
@@ -182,14 +191,20 @@ export default function OrderReview() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
         <div className="flex flex-col sm:flex-row gap-3 items-start justify-between mb-6">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Order Review</h1>
-            <p className="text-sm text-gray-500 mt-1">Verify details and submit</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              {isViewOnly ? "Order Detail" : "Order Review"}
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">
+              {isViewOnly ? "Viewing an existing order" : "Verify details and submit"}
+            </p>
           </div>
-          <Link href="/cart">
-            <button className="cursor-pointer px-4 py-2 rounded-lg text-sm font-medium bg-cyan-500 text-white hover:bg-cyan-600">
-              Edit Cart
-            </button>
-          </Link>
+          {!isViewOnly && (
+            <Link href="/cart">
+              <button className="cursor-pointer px-4 py-2 rounded-lg text-sm font-medium bg-cyan-500 text-white hover:bg-cyan-600">
+                Edit Cart
+              </button>
+            </Link>
+          )}
         </div>
 
         {error && (
@@ -225,9 +240,11 @@ export default function OrderReview() {
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">Order Summary</h2>
-                <Link href="/cart" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-                  Edit Items
-                </Link>
+                {!isViewOnly && (
+                  <Link href="/cart" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                    Edit Items
+                  </Link>
+                )}
               </div>
               <ReusableTable
                 columns={[
@@ -281,7 +298,8 @@ export default function OrderReview() {
                   type="date"
                   value={deliveryDate}
                   onChange={(e) => setDeliveryDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  disabled={isViewOnly}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100"
                 />
               </div>
               <div>
@@ -291,7 +309,8 @@ export default function OrderReview() {
                   placeholder="e.g. Net 30"
                   value={payTerms}
                   onChange={(e) => setPayTerms(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  disabled={isViewOnly}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100"
                 />
               </div>
               <div>
@@ -303,7 +322,8 @@ export default function OrderReview() {
                   placeholder="0"
                   value={discountVal}
                   onChange={(e) => setDiscountVal(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  disabled={isViewOnly}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100"
                 />
               </div>
               <div>
@@ -313,7 +333,8 @@ export default function OrderReview() {
                   placeholder="Notes..."
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none"
+                  disabled={isViewOnly}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none disabled:bg-gray-100"
                 />
               </div>
 
@@ -342,14 +363,20 @@ export default function OrderReview() {
                 );
               })()}
 
-              <button
-                onClick={handleSubmitOrder}
-                disabled={submitting}
-                className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium py-3 px-4 rounded-lg transition-colors"
-              >
-                {submitting ? "Submitting..." : "Submit Order"}
-              </button>
-              <p className="text-xs text-center text-gray-500">By submitting, you agree to the sales terms.</p>
+              {!isViewOnly && (
+                <>
+                  <button
+                    onClick={handleSubmitOrder}
+                    disabled={submitting}
+                    className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+                  >
+                    {submitting ? "Submitting..." : "Submit Order"}
+                  </button>
+                  <p className="text-xs text-center text-gray-500">
+                    By submitting, you agree to the sales terms.
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </div>
