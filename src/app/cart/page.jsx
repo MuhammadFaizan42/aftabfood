@@ -123,19 +123,35 @@ export default function Cart() {
         }
       }
 
-      if (id && isOnline) {
-        const res = await getOrderSummary(id);
-        if (res?.success && res?.data) {
-          setTrnsId(id);
-          setIsOfflineCart(false);
-          setIsCachedOrderReadOnly(false);
-          const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary(res);
-          setCartItems(rows);
-          setSubtotal(st);
-          setTax(t);
-          setDiscount(d);
-          setGrandTotal(gt);
-          return;
+      if (id && !String(id).startsWith("offline_")) {
+        try {
+          const res = await getOrderSummary(id);
+          if (res?.success && res?.data) {
+            setTrnsId(id);
+            setIsOfflineCart(false);
+            setIsCachedOrderReadOnly(false);
+            const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary(res);
+            setCartItems(rows);
+            setSubtotal(st);
+            setTax(t);
+            setDiscount(d);
+            setGrandTotal(gt);
+            return;
+          }
+        } catch {
+          const cached = await getCachedOrderDetail(id);
+          if (cached) {
+            setTrnsId(id);
+            setIsOfflineCart(false);
+            setIsCachedOrderReadOnly(true);
+            const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary({ success: true, data: cached });
+            setCartItems(rows);
+            setSubtotal(st);
+            setTax(t);
+            setDiscount(d);
+            setGrandTotal(gt);
+            return;
+          }
         }
       }
 
