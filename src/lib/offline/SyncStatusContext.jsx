@@ -45,6 +45,17 @@ export function SyncStatusProvider({ children }) {
     return () => window.removeEventListener("online", handleOnline);
   }, [runSync]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !navigator.serviceWorker) return;
+    const handler = (event) => {
+      if (event?.data?.type === "ORDERS_SYNCED") {
+        triggerRefresh();
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", handler);
+    return () => navigator.serviceWorker.removeEventListener("message", handler);
+  }, [triggerRefresh]);
+
   const value = {
     isOnline,
     isSyncing,

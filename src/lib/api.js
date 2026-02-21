@@ -27,12 +27,16 @@ export function setAuthToken(token, user = null) {
   if (typeof window === "undefined") return;
   if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
   if (user != null) localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+  if (token && typeof window !== "undefined") {
+    import("@/lib/idb").then(({ setMeta }) => setMeta("auth_token", token).catch(() => {}));
+  }
 }
 
 export function clearAuthToken() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(AUTH_TOKEN_KEY);
   localStorage.removeItem(AUTH_USER_KEY);
+  import("@/lib/idb").then(({ deleteByKey }) => deleteByKey("meta", "auth_token").catch(() => {}));
 }
 
 /** Sale order draft – trns_id (persist across tabs) */

@@ -72,6 +72,7 @@ export default function NewOrder() {
     loadCustomers();
   }, [loadCustomers]);
 
+  const q = searchQuery.trim().toLowerCase();
   const filteredCustomers = customers
     .map((c, i) => ({
       ...c,
@@ -83,8 +84,11 @@ export default function NewOrder() {
     }))
     .filter(
       (c) =>
-        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        String(c.code).toLowerCase().includes(searchQuery.toLowerCase())
+        !q ||
+        c.name.toLowerCase().includes(q) ||
+        String(c.code).toLowerCase().includes(q) ||
+        (c.location && c.location.toLowerCase().includes(q)) ||
+        String(c.POST_CODE || c.post_code || "").toLowerCase().includes(q)
     );
 
   return (
@@ -130,6 +134,7 @@ export default function NewOrder() {
             <h1 className="text-3xl font-bold text-gray-900">
               Select Customer
             </h1>
+            {/* Create New Customer button – commented out
             <button
               onClick={() => setShowModal(true)}
               disabled={!isOnline}
@@ -151,6 +156,7 @@ export default function NewOrder() {
               </svg>
               <span>Create New Customer</span>
             </button>
+            */}
           </div>
           <p className="text-gray-500">
             Choose a customer to start a new order
@@ -177,7 +183,7 @@ export default function NewOrder() {
             </div>
             <input
               type="text"
-              placeholder="Search by Customer Name or Code..."
+              placeholder="Search by name, code, address or postal code..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -237,7 +243,19 @@ export default function NewOrder() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
-                            {customer.location}
+                            {customer.location !== "—" ? (
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customer.location)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-gray-600 hover:text-blue-600 hover:underline cursor-pointer"
+                                title="Open in Google Maps"
+                              >
+                                {customer.location}
+                              </a>
+                            ) : (
+                              <span>{customer.location}</span>
+                            )}
                           </span>
                         )}
                         {(customer.CONT_PERSON || customer.contactPerson) && (

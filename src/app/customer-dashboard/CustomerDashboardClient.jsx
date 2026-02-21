@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
-import { getPartySaleInvDashboard } from "@/services/shetApi";
+import { getPartySaleInvDashboard, createSalesVisit, getSalesVisitHistory } from "@/services/shetApi";
 import { setSaleOrderPartyCode, clearCartTrnsId } from "@/lib/api";
 import { cacheCustomerDashboard, getCachedCustomerDashboard } from "@/lib/offline/bootstrapLoader";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
+import { saveVisit, NO_ORDER_REASONS, getVisitsByPartyCode, getReasonLabel } from "@/lib/visits";
 
 function formatCustomerAddress(c) {
   if (!c) return "—";
@@ -38,6 +39,14 @@ function CustomerDashboardClient() {
   const [appliedFrom, setAppliedFrom] = useState("");
   const [appliedTo, setAppliedTo] = useState("");
   const [searchItems, setSearchItems] = useState("");
+  const [showNoOrderModal, setShowNoOrderModal] = useState(false);
+  const [visitDate, setVisitDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [noOrderReason, setNoOrderReason] = useState("");
+  const [visitRemarks, setVisitRemarks] = useState("");
+  const [visitSubmitLoading, setVisitSubmitLoading] = useState(false);
+  const [visitSubmitSuccess, setVisitSubmitSuccess] = useState(false);
+  const [visitSubmitError, setVisitSubmitError] = useState(null);
+  const [recentVisits, setRecentVisits] = useState([]);
 
   const loadDashboard = React.useCallback(async () => {
     if (!partyCode) return;
@@ -88,6 +97,52 @@ function CustomerDashboardClient() {
     }
     loadDashboard();
   }, [partyCode, appliedFrom, appliedTo, loadDashboard]);
+
+  const loadRecentVisits = React.useCallback(async () => {
+    if (!partyCode) return;
+    if (isOnline) {
+      try {
+        const res = await getSalesVisitHistory(partyCode, partyCode);
+        const items = res?.data?.items;
+        if (Array.isArray(items)) {
+          const sorted = [...items].sort((a, b) => (b.visit_date || "").localeCompare(a.visit_date || ""));
+          const mapped = sorted.slice(0, 10).map((item) => ({
+            id: item.visit_id || item.visit_date + "_" + (item.visit_id ?? ""),
+            visit_date: item.visit_date || "",
+            order_placed: item.order_placed === true || item.order_placed_raw === "1" || item.order_placed === "Y",
+            no_order_reason: item.no_order_reason || null,
+            remarks: item.remarks || "",
+          }));
+          setRecentVisits(mapped);
+        } else {
+          setRecentVisits([]);
+        }
+      } catch {
+        const list = await getVisitsByPartyCode(partyCode, 10);
+        setRecentVisits(list);
+      }
+    } else {
+      const list = await getVisitsByPartyCode(partyCode, 10);
+      setRecentVisits(list);
+    }
+  }, [partyCode, isOnline]);
+
+  useEffect(() => {
+    if (!partyCode) {
+      setRecentVisits([]);
+      return;
+    }
+    let cancelled = false;
+    loadRecentVisits().then(() => {}).catch(() => {}).finally(() => {});
+    return () => { cancelled = true; };
+  }, [partyCode, loadRecentVisits]);
+
+  useEffect(() => {
+    if (showNoOrderModal) {
+      setVisitSubmitError(null);
+      setVisitSubmitSuccess(false);
+    }
+  }, [showNoOrderModal]);
 
   const handleApplyFilter = () => {
     setAppliedFrom(fromDate);
@@ -350,7 +405,181 @@ function CustomerDashboardClient() {
               New Order
             </button>
           </Link>
+          {/* No order – Add remarks */}
+          <button
+            type="button"
+            onClick={() => {
+              setVisitDate(new Date().toISOString().slice(0, 10));
+              setNoOrderReason("");
+              setVisitRemarks("");
+              setVisitSubmitSuccess(false);
+              setShowNoOrderModal(true);
+            }}
+            className="w-full lg:w-auto cursor-pointer h-11 flex items-center justify-center gap-2 border border-amber-500 text-amber-700 hover:bg-amber-50 font-medium px-6 rounded-lg transition-colors"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+              />
+            </svg>
+            No order – Add remarks
+          </button>
         </div>
+
+        {/* No order visit modal */}
+        {showNoOrderModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Record visit (no order)</h2>
+              {visitSubmitSuccess ? (
+                <div className="text-center py-4">
+                  <p className="text-green-600 font-medium mb-4">Visit saved successfully.</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowNoOrderModal(false)}
+                    className="cursor-pointer px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 font-medium"
+                  >
+                    Close
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-500 mb-4">
+                    Customer: <span className="font-medium text-gray-900">{customerInfo.name}</span>
+                  </p>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Visit date</label>
+                      <input
+                        type="date"
+                        value={visitDate}
+                        onChange={(e) => setVisitDate(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Reason (no order)</label>
+                      <select
+                        value={noOrderReason}
+                        onChange={(e) => setNoOrderReason(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
+                      >
+                        <option value="">Select reason</option>
+                        {NO_ORDER_REASONS.map((r) => (
+                          <option key={r.value} value={r.value}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Remarks (optional)</label>
+                      <textarea
+                        value={visitRemarks}
+                        onChange={(e) => setVisitRemarks(e.target.value)}
+                        rows={3}
+                        placeholder="e.g. Customer will order next week"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400"
+                      />
+                    </div>
+                  </div>
+                  {visitSubmitError && (
+                    <p className="text-sm text-red-600 mt-4">{visitSubmitError}</p>
+                  )}
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => setShowNoOrderModal(false)}
+                      className="flex-1 cursor-pointer py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!noOrderReason || visitSubmitLoading}
+                      onClick={async () => {
+                        setVisitSubmitError(null);
+                        setVisitSubmitLoading(true);
+                        const visitPayload = {
+                          party_code: partyCode || "",
+                          customer_name: customerInfo.name,
+                          visit_date: visitDate,
+                          order_placed: false,
+                          no_order_reason: noOrderReason,
+                          remarks: visitRemarks.trim(),
+                        };
+                        try {
+                          if (isOnline) {
+                            await createSalesVisit({
+                              customer_id: partyCode || "",
+                              party_code: partyCode || "",
+                              visit_date: visitDate,
+                              order_placed: "N",
+                              order_trns_id: null,
+                              no_order_reason: noOrderReason,
+                              remarks: visitRemarks.trim() || undefined,
+                            });
+                          }
+                          await saveVisit(visitPayload);
+                          if (isOnline) {
+                            await loadRecentVisits();
+                          } else {
+                            setRecentVisits((prev) => [
+                              {
+                                id: "v_" + Date.now(),
+                                party_code: partyCode || "",
+                                customer_name: customerInfo.name,
+                                visit_date: visitDate,
+                                order_placed: false,
+                                no_order_reason: noOrderReason,
+                                remarks: visitRemarks.trim(),
+                              },
+                              ...prev.slice(0, 9),
+                            ]);
+                          }
+                          setVisitSubmitSuccess(true);
+                        } catch (err) {
+                          console.error(err);
+                          const msg = err instanceof Error ? err.message : "Failed to save visit.";
+                          setVisitSubmitError(msg);
+                          if (!isOnline) {
+                            await saveVisit(visitPayload).catch(() => {});
+                            setRecentVisits((prev) => [
+                              {
+                                id: "v_" + Date.now(),
+                                party_code: partyCode || "",
+                                customer_name: customerInfo.name,
+                                visit_date: visitDate,
+                                order_placed: false,
+                                no_order_reason: noOrderReason,
+                                remarks: visitRemarks.trim(),
+                              },
+                              ...prev.slice(0, 9),
+                            ]);
+                            setVisitSubmitSuccess(true);
+                          }
+                        } finally {
+                          setVisitSubmitLoading(false);
+                        }
+                      }}
+                      className="flex-1 cursor-pointer py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg"
+                    >
+                      {visitSubmitLoading ? "Saving..." : "Save visit"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Customer Header Section */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
@@ -408,7 +637,19 @@ function CustomerDashboardClient() {
                         d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                       />
                     </svg>
-                    <span>{customerInfo.address}</span>
+                    {customerInfo.address && customerInfo.address !== "—" ? (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customerInfo.address)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-gray-600 hover:text-blue-600 hover:underline cursor-pointer"
+                        title="Open in Google Maps"
+                      >
+                        {customerInfo.address}
+                      </a>
+                    ) : (
+                      <span>{customerInfo.address}</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <svg
@@ -583,9 +824,12 @@ function CustomerDashboardClient() {
               <h2 className="text-xl font-semibold text-gray-900">
                 Recent Orders
               </h2>
-              <button className="cursor-pointer text-sm text-blue-600 hover:text-blue-700 font-medium">
+              <Link
+                href={partyCode ? `/existing-orders?party_code=${encodeURIComponent(partyCode)}${customerInfo.name && customerInfo.name !== "—" ? `&customer_name=${encodeURIComponent(customerInfo.name)}` : ""}` : "/existing-orders"}
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
                 View All
-              </button>
+              </Link>
             </div>
             <ReusableTable
               columns={[
@@ -661,6 +905,76 @@ function CustomerDashboardClient() {
                 },
               ]}
               data={filteredRecentOrders}
+              rowsPerPage={5}
+            />
+          </div>
+
+          {/* Recent Visits */}
+          <div className="bg-white rounded-lg shadow-sm p-6 lg:col-span-2">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Recent Visits
+              </h2>
+              <Link
+                href={partyCode ? `/visit-history?party_code=${encodeURIComponent(partyCode)}&customer_name=${encodeURIComponent(customerInfo.name || "")}` : "/visit-history"}
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                View All
+              </Link>
+            </div>
+            <ReusableTable
+              columns={[
+                {
+                  header: "Date",
+                  accessor: "visit_date",
+                  width: "140px",
+                  render: (row) => (
+                    <span className="text-gray-600">
+                      {row.visit_date
+                        ? new Date(row.visit_date + "T12:00:00").toLocaleDateString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })
+                        : "—"}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Order placed?",
+                  accessor: "order_placed",
+                  width: "120px",
+                  render: (row) => (
+                    <span
+                      className={`inline-flex items-center text-xs font-medium px-2.5 py-1 rounded ${
+                        row.order_placed ? "text-green-700 bg-green-50" : "text-amber-700 bg-amber-50"
+                      }`}
+                    >
+                      {row.order_placed ? "Yes" : "No"}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Reason",
+                  accessor: "no_order_reason",
+                  width: "160px",
+                  render: (row) => (
+                    <span className="text-gray-600">
+                      {row.order_placed ? "—" : getReasonLabel(row.no_order_reason) || "—"}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Remarks",
+                  accessor: "remarks",
+                  render: (row) => (
+                    <span className="text-gray-600 max-w-xs truncate block" title={row.remarks || ""}>
+                      {row.order_placed ? "—" : (row.remarks || "—")}
+                    </span>
+                  ),
+                },
+              ]}
+              data={recentVisits}
               rowsPerPage={5}
             />
           </div>

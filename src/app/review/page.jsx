@@ -10,6 +10,7 @@ import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getOfflineCart, clearOfflineCart } from "@/lib/offline/offlineCart";
 import { getCachedCustomerDashboard, getCachedOrderDetail, cacheOrderDetail, saveOfflineOrderToExistingOrders, deleteOfflineOrder } from "@/lib/offline/bootstrapLoader";
 import { enqueueOrder } from "@/lib/offline/orderQueue";
+import { requestOrderSync } from "@/lib/registerSw";
 
 const DEFAULT_IMG =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect fill='%23e5e7eb' width='64' height='64'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-size='24'%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E";
@@ -301,6 +302,7 @@ function OrderReviewContent() {
         if (orderId) await deleteOfflineOrder(orderId);
         else await clearOfflineCart();
         clearCartTrnsId();
+        await requestOrderSync();
         router.push(`/order-success?order_id=${encodeURIComponent(uuid)}&offline=1`);
         return;
       }

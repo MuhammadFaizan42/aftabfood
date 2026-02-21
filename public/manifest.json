@@ -1,0 +1,19 @@
+{
+  "name": "SalesApp - Aftabfood",
+  "short_name": "SalesApp",
+  "description": "Offline-first sales app for orders and customers",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/vercel.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["business", "productivity"]
+}

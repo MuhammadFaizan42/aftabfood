@@ -126,13 +126,17 @@ export default function Header({ toggleSidebar }) {
             </div>
           </Link>
 
-          {/* Online/Offline + Refresh icons */}
+          {/* Online/Offline + Refresh icons (neutral until mounted to avoid hydration mismatch) */}
           <div className="hidden sm:flex items-center gap-2">
             <div
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg ${isOnline ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}
-              title={isOnline ? "Online" : "Offline – using cached data"}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg ${!hasMounted ? "bg-gray-100 text-gray-500" : isOnline ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}
+              title={!hasMounted ? "" : isOnline ? "Online" : "Offline – using cached data"}
             >
-              {isOnline ? (
+              {!hasMounted ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                </svg>
+              ) : isOnline ? (
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                 </svg>
@@ -141,11 +145,11 @@ export default function Header({ toggleSidebar }) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3" />
                 </svg>
               )}
-              <span className="text-xs font-medium">{isOnline ? "Online" : "Offline"}</span>
+              <span className="text-xs font-medium">{!hasMounted ? "—" : isOnline ? "Online" : "Offline"}</span>
             </div>
             <button
               onClick={triggerRefresh}
-              disabled={!isOnline || isSyncing}
+              disabled={!hasMounted || !isOnline || isSyncing}
               title={!isOnline ? "Connect to fetch latest data" : "Fetch latest data from backend"}
               className="cursor-pointer p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -161,26 +165,28 @@ export default function Header({ toggleSidebar }) {
             </button>
           </div>
 
-          {/* Desktop: Dashboard Link */}
-          <Link
-            href="/dashboard"
-            className="hidden sm:flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {/* Desktop: Dashboard */}
+          <div className="hidden sm:flex items-center gap-2">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-              />
-            </svg>
-            <span className="text-sm font-medium">Dashboard</span>
-          </Link>
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                />
+              </svg>
+              <span className="text-sm font-medium">Dashboard</span>
+            </Link>
+          </div>
 
           {/* Desktop: User Info */}
           <div className="hidden sm:flex items-center gap-3 relative" ref={dropdownRef}>
@@ -257,18 +263,18 @@ export default function Header({ toggleSidebar }) {
             )}
           </div>
 
-          {/* Mobile: Online status + Refresh + Menu */}
+          {/* Mobile: Online status + Refresh + Menu (neutral until mounted to avoid hydration mismatch) */}
           <div className="sm:hidden flex items-center gap-2">
             <div
-              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs ${isOnline ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}
-              title={isOnline ? "Online" : "Offline"}
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs ${!hasMounted ? "bg-gray-100 text-gray-500" : isOnline ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}
+              title={!hasMounted ? "" : isOnline ? "Online" : "Offline"}
             >
-              <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-green-500" : "bg-amber-500"}`} />
-              {isOnline ? "Online" : "Offline"}
+              <span className={`w-2 h-2 rounded-full ${!hasMounted ? "bg-gray-400" : isOnline ? "bg-green-500" : "bg-amber-500"}`} />
+              {!hasMounted ? "—" : isOnline ? "Online" : "Offline"}
             </div>
             <button
               onClick={triggerRefresh}
-              disabled={!isOnline || isSyncing}
+              disabled={!hasMounted || !isOnline || isSyncing}
               title="Fetch latest data"
               className="cursor-pointer p-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >

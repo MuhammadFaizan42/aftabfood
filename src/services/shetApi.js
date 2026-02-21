@@ -169,3 +169,46 @@ export async function getExistingOrders(params = {}) {
   const url = `${SALE_ORDER_BASE}?${q.toString()}`;
   return api.get(url);
 }
+
+// --- Sales Visit API (Swagger: sales_visit.php) ---
+const SALES_VISIT_URL = `${API_BASE}/models/sales_visit.php`;
+
+/**
+ * Record a sales visit – POST sales_visit.php
+ * @param {Object} payload
+ * @param {string} payload.customer_id - same as party_code
+ * @param {string} payload.party_code
+ * @param {string} payload.visit_date - YYYY-MM-DD
+ * @param {"Y"|"N"} payload.order_placed
+ * @param {number|null} [payload.order_trns_id] - when no order, use null or 0
+ * @param {string} [payload.no_order_reason] - e.g. will_order_later, not_available
+ * @param {string} [payload.remarks]
+ */
+export async function createSalesVisit(payload) {
+  const body = {
+    customer_id: String(payload.customer_id ?? payload.party_code ?? ""),
+    party_code: String(payload.party_code ?? ""),
+    visit_date: String(payload.visit_date ?? "").slice(0, 10),
+    order_placed: payload.order_placed === "Y" ? "Y" : "N",
+    order_trns_id: payload.order_trns_id ?? null,
+  };
+  if (payload.no_order_reason != null && payload.no_order_reason !== "") {
+    body.no_order_reason = String(payload.no_order_reason);
+  }
+  if (payload.remarks != null && payload.remarks !== "") {
+    body.remarks = String(payload.remarks);
+  }
+  return api.post(SALES_VISIT_URL, body);
+}
+
+/**
+ * Get sales visit history for a customer – GET sales_visit.php?customer_id=&party_code=
+ * Returns { success, message, data: { total, items: [{ visit_id, visit_date, order_placed, no_order_reason, remarks, ... }] } }
+ */
+export async function getSalesVisitHistory(customerId, partyCode) {
+  const params = new URLSearchParams();
+  if (customerId != null && customerId !== "") params.set("customer_id", String(customerId));
+  if (partyCode != null && partyCode !== "") params.set("party_code", String(partyCode));
+  const url = params.toString() ? `${SALES_VISIT_URL}?${params.toString()}` : SALES_VISIT_URL;
+  return api.get(url);
+}
