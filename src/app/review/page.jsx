@@ -8,9 +8,7 @@ import { getOrderReview, submitOrder, getPartySaleInvDashboard } from "@/service
 import { getCartTrnsId, setCartTrnsId, clearCartTrnsId, getSaleOrderPartyCode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getOfflineCart, clearOfflineCart } from "@/lib/offline/offlineCart";
-import { getCachedCustomerDashboard, getCachedOrderDetail, cacheOrderDetail, saveOfflineOrderToExistingOrders, deleteOfflineOrder } from "@/lib/offline/bootstrapLoader";
-import { enqueueOrder } from "@/lib/offline/orderQueue";
-import { requestOrderSync } from "@/lib/registerSw";
+import { getCachedCustomerDashboard, getCachedOrderDetail, cacheOrderDetail, saveOfflineOrderToExistingOrders, getExistingOrderRow, updateOfflineOrderInStores, generateOfflineOrderId } from "@/lib/offline/bootstrapLoader";
 
 const DEFAULT_IMG =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect fill='%23e5e7eb' width='64' height='64'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-size='24'%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E";
@@ -76,6 +74,8 @@ function OrderReviewContent() {
   const [remarks, setRemarks] = useState("");
   const [customerEnrich, setCustomerEnrich] = useState(null);
   const [isCachedServerOrder, setIsCachedServerOrder] = useState(false);
+  const [hasBackendTrnsId, setHasBackendTrnsId] = useState(false);
+  const [backendTrnsId, setBackendTrnsId] = useState(null);
 
   const loadReview = useCallback(async () => {
     setLoading(true);
@@ -131,6 +131,16 @@ function OrderReviewContent() {
             setTax(t);
             setDiscount(d);
             setGrandTotal(gt);
+            if (isOfflineId) {
+              const row = await getExistingOrderRow(id);
+              const bid = row?.backend_trns_id;
+              setHasBackendTrnsId(!!bid);
+              setBackendTrnsId(bid ?? null);
+              setDeliveryDate(cached.delivery_date ?? "");
+              setPayTerms(cached.pay_terms ?? "");
+              setDiscountVal(cached.discount_val ?? "");
+              setRemarks(cached.remarks ?? "");
+            }
           } else {
             setError("Order details not in cache. View this order when online first.");
           }
@@ -195,6 +205,16 @@ function OrderReviewContent() {
           setTax(t);
           setDiscount(d);
           setGrandTotal(gt);
+          if (isOfflineId) {
+            const row = await getExistingOrderRow(id);
+            const bid = row?.backend_trns_id;
+            setHasBackendTrnsId(!!bid);
+            setBackendTrnsId(bid ?? null);
+            setDeliveryDate(cached.delivery_date ?? "");
+            setPayTerms(cached.pay_terms ?? "");
+            setDiscountVal(cached.discount_val ?? "");
+            setRemarks(cached.remarks ?? "");
+          }
           setLoading(false);
           return;
         }
@@ -208,6 +228,68 @@ function OrderReviewContent() {
           setLoading(false);
           return;
         }
+        const existingId = getCartTrnsId();
+        if (existingId && String(existingId).startsWith("offline_")) {
+          let alreadyCached = await getCachedOrderDetail(existingId);
+          if (!alreadyCached) {
+            await new Promise((r) => setTimeout(r, 400));
+            alreadyCached = await getCachedOrderDetail(existingId);
+          }
+          if (alreadyCached) {
+            setTrnsId(existingId);
+            setIsOfflineOrder(true);
+            const { customer: c, items: cachedItems, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: alreadyCached });
+            setCustomer(c);
+            setOrderItems(cachedItems);
+            setSubtotal(st);
+            setTax(t);
+            setDiscount(d);
+            setGrandTotal(gt);
+            const row = await getExistingOrderRow(existingId);
+            setHasBackendTrnsId(!!row?.backend_trns_id);
+            setBackendTrnsId(row?.backend_trns_id ?? null);
+            setDeliveryDate(alreadyCached.delivery_date ?? "");
+            setPayTerms(alreadyCached.pay_terms ?? "");
+            setDiscountVal(alreadyCached.discount_val ?? "");
+            setRemarks(alreadyCached.remarks ?? "");
+            setLoading(false);
+            return;
+          }
+          const orderId = existingId;
+          setCartTrnsId(orderId);
+          const dash = cart.customer_id ? await getCachedCustomerDashboard(cart.customer_id) : null;
+          const cust = dash?.customer ?? {};
+          const customer = {
+            CUSTOMER_NAME: cust.CUSTOMER_NAME ?? cust.customer_name ?? "Offline order",
+            SHORT_CODE: cart.customer_id ?? "",
+            ADRES: [cust.ST, cust.ADRES, cust.DIVISION, cust.PROVINCES].filter(Boolean).join(", ") || "—",
+            pay_terms: cust.PAY_TERMS ?? cust.pay_terms ?? "—",
+          };
+          setCustomer(customer);
+          const items = cart.items.map((it) => {
+            const total = (Number(it.unit_price) || 0) * (Number(it.qty) || 0);
+            return {
+              id: it.item_id ?? it.product_id,
+              name: it.product_name ?? "—",
+              sku: it.sku ?? it.item_id ?? "",
+              unitPrice: Number(it.unit_price) || 0,
+              quantity: Number(it.qty) || 0,
+              total,
+              image: DEFAULT_IMG,
+            };
+          });
+          const st = items.reduce((s, r) => s + r.total, 0);
+          setOrderItems(items);
+          setSubtotal(st);
+          setTax(0);
+          setDiscount(0);
+          setGrandTotal(st);
+          setHasBackendTrnsId(false);
+          setLoading(false);
+          return;
+        }
+        const orderId = generateOfflineOrderId();
+        setCartTrnsId(orderId);
         const dash = cart.customer_id ? await getCachedCustomerDashboard(cart.customer_id) : null;
         const cust = dash?.customer ?? {};
         const customer = {
@@ -236,7 +318,7 @@ function OrderReviewContent() {
         setDiscount(0);
         setGrandTotal(st);
         try {
-          const savedOrderId = await saveOfflineOrderToExistingOrders({
+          await saveOfflineOrderToExistingOrders({
             customer,
             items,
             subtotal: st,
@@ -244,8 +326,13 @@ function OrderReviewContent() {
             discount: 0,
             grandTotal: st,
             customer_id: cart.customer_id,
+            delivery_date: "",
+            pay_terms: "",
+            discount_val: "",
+            remarks: "",
+            orderId,
           });
-          if (savedOrderId) setCartTrnsId(savedOrderId);
+          setHasBackendTrnsId(false);
         } catch {
           // ignore cache errors
         }
@@ -261,49 +348,32 @@ function OrderReviewContent() {
     loadReview();
   }, [loadReview]);
 
+  useEffect(() => {
+    if (!trnsId || !isOfflineOrder || !String(trnsId).startsWith("offline_")) return;
+    updateOfflineOrderInStores(trnsId, {
+      delivery_date: deliveryDate,
+      pay_terms: payTerms,
+      discount_val: discountVal,
+      remarks: remarks,
+    }).catch(() => {});
+  }, [trnsId, isOfflineOrder, deliveryDate, payTerms, discountVal, remarks]);
+
   const handleSubmitOrder = async () => {
     if (isViewOnly) return;
     if (isCachedServerOrder && !isOnline) {
       setError("Connect online to submit this order.");
       return;
     }
+    if (isOfflineOrder && !hasBackendTrnsId) {
+      setError("Sync when online to submit this order.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      if (isOfflineOrder) {
-        const orderId = trnsId && String(trnsId).startsWith("offline_") ? trnsId : null;
-        const cart = orderId
-          ? await getCachedOrderDetail(orderId)
-          : await getOfflineCart();
-        const customer_id = cart?.customer?.SHORT_CODE ?? cart?.customer_id ?? null;
-        const items = cart?.items ?? [];
-        const lineItems = Array.isArray(items)
-          ? items.map((it) => ({
-              item_id: it.item_id ?? it.id ?? it.product_id,
-              qty: Number(it.qty ?? it.quantity) || 0,
-              unit_price: Number(it.unit_price ?? it.unitPrice) || 0,
-              uom: it.uom || "",
-              comments: it.comments || "",
-            }))
-          : [];
-        if (!lineItems.length || !customer_id) {
-          setError("No order data.");
-          setSubmitting(false);
-          return;
-        }
-        const uuid = await enqueueOrder({
-          customer_id,
-          items: lineItems,
-          delivery_date: deliveryDate || undefined,
-          pay_terms: payTerms || undefined,
-          discount: discountVal !== "" && !Number.isNaN(Number(discountVal)) ? Number(discountVal) : undefined,
-          remarks: remarks || undefined,
-        });
-        if (orderId) await deleteOfflineOrder(orderId);
-        else await clearOfflineCart();
+      if (isOfflineOrder && hasBackendTrnsId && backendTrnsId) {
         clearCartTrnsId();
-        await requestOrderSync();
-        router.push(`/order-success?order_id=${encodeURIComponent(uuid)}&offline=1`);
+        router.push(`/order-success?order_id=${encodeURIComponent(backendTrnsId)}`);
         return;
       }
       if (!trnsId) return;
@@ -557,12 +627,30 @@ function OrderReviewContent() {
                       Connect online to submit this order.
                     </p>
                   )}
+                  {isOfflineOrder && !hasBackendTrnsId && (
+                    <p className="text-sm text-amber-600 mb-2">
+                      Sync when online to submit this order. Order is saved locally.
+                    </p>
+                  )}
+                  {isOfflineOrder && hasBackendTrnsId && (
+                    <p className="text-sm text-green-600 mb-2">
+                      Order synced. You can view it below.
+                    </p>
+                  )}
                   <button
                     onClick={handleSubmitOrder}
-                    disabled={submitting || (isCachedServerOrder && !isOnline)}
+                    disabled={
+                      submitting ||
+                      (isCachedServerOrder && !isOnline) ||
+                      (isOfflineOrder && !hasBackendTrnsId)
+                    }
                     className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors"
                   >
-                    {submitting ? "Submitting..." : "Submit Order"}
+                    {submitting
+                      ? "Submitting..."
+                      : isOfflineOrder && hasBackendTrnsId
+                        ? "View Order"
+                        : "Submit Order"}
                   </button>
                   <p className="text-xs text-center text-gray-500">
                     By submitting, you agree to the sales terms.

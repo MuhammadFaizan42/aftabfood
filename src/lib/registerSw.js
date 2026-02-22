@@ -10,9 +10,18 @@ export function registerServiceWorker() {
       .then((reg) => {
         syncAuthTokenToIDB();
         if ("sync" in reg) registerSyncIfPending(reg);
+        if (navigator.onLine) runSyncWhenOnline();
       })
       .catch(() => {});
   });
+  window.addEventListener("online", () => runSyncWhenOnline());
+}
+
+async function runSyncWhenOnline() {
+  try {
+    const { syncPendingOrders } = await import("@/lib/offline/syncManager");
+    await syncPendingOrders();
+  } catch (_) {}
 }
 
 /** Copy auth token to IndexedDB so the service worker can use it for background sync */
@@ -29,9 +38,11 @@ async function syncAuthTokenToIDB() {
 /** Register for background sync so when the device is back online, SW will sync orders */
 async function registerSyncIfPending(reg) {
   try {
-    const { getPendingOrders } = await import("@/lib/offline/orderQueue");
-    const pending = await getPendingOrders();
-    if (pending.length > 0) await reg.sync.register(SYNC_TAG);
+    const [queue, offline] = await Promise.all([
+      import("@/lib/offline/orderQueue").then((m) => m.getPendingOrders()),
+      import("@/lib/offline/bootstrapLoader").then((m) => m.getOfflineOrdersForSync()),
+    ]);
+    if (queue.length > 0 || offline.length > 0) await reg.sync.register(SYNC_TAG);
   } catch (_) {}
 }
 

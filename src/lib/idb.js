@@ -5,7 +5,7 @@
 import { openDB } from "idb";
 
 const DB_NAME = "aftabfood-offline";
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 export async function getDB() {
   return openDB(DB_NAME, DB_VERSION, {
@@ -42,6 +42,9 @@ export async function getDB() {
       if (newVer >= 4 && !db.objectStoreNames.contains("visits")) {
         const visitStore = db.createObjectStore("visits", { keyPath: "id" });
         visitStore.createIndex("visit_date", "visit_date", { unique: false });
+      }
+      if (newVer >= 6 && !db.objectStoreNames.contains("visitHistoryCache")) {
+        db.createObjectStore("visitHistoryCache", { keyPath: "party_code" });
       }
     },
   });

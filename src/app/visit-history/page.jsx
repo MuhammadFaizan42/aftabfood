@@ -8,6 +8,7 @@ import ReusableTable from "../../components/common/ReusableTable";
 import { getVisits, getVisitsByPartyCode, getReasonLabel } from "@/lib/visits";
 import { getSalesVisitHistory } from "@/services/shetApi";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
+import { cacheVisitHistory, getCachedVisitHistory } from "@/lib/offline/bootstrapLoader";
 
 function formatVisitDate(val) {
   if (val == null || val === "") return "—";
@@ -38,6 +39,9 @@ function VisitHistoryContent() {
       let list = [];
       if (partyCodeParam && isOnline) {
         const res = await getSalesVisitHistory(partyCodeParam, partyCodeParam);
+        try {
+          await cacheVisitHistory(partyCodeParam, res?.data ?? res);
+        } catch { /* ignore */ }
         const items = res?.data?.items;
         if (Array.isArray(items)) {
           const from = String(fromDate || "").slice(0, 10);
@@ -60,6 +64,29 @@ function VisitHistoryContent() {
             }));
         }
       } else if (partyCodeParam) {
+        const cached = await getCachedVisitHistory(partyCodeParam);
+        if (Array.isArray(cached) && cached.length > 0) {
+          const from = String(fromDate || "").slice(0, 10);
+          const to = String(toDate || "").slice(0, 10);
+          list = cached
+            .filter((v) => {
+              const d = String(v.visit_date || "").slice(0, 10);
+              if (from && d < from) return false;
+              if (to && d > to) return false;
+              return true;
+            })
+            .sort((a, b) => (b.visit_date || "").localeCompare(a.visit_date || ""))
+            .map((item) => ({
+              id: item.visit_id || item.visit_date + "_" + (item.visit_id ?? ""),
+              customer_name: customerNameParam || "—",
+              visit_date: item.visit_date || "",
+              order_placed: item.order_placed === true || item.order_placed_raw === "1" || item.order_placed === "Y",
+              no_order_reason: item.no_order_reason || null,
+              remarks: item.remarks || "",
+            }));
+        }
+      }
+      if (list.length === 0 && partyCodeParam) {
         list = await getVisitsByPartyCode(partyCodeParam, 0);
         const from = String(fromDate || "").slice(0, 10);
         const to = String(toDate || "").slice(0, 10);

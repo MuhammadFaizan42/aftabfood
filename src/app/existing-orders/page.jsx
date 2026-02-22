@@ -7,6 +7,7 @@ import { getExistingOrders, getOrderReview, getOrderSummary, addToCart } from "@
 import { setCartTrnsId, setSaleOrderPartyCode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { cacheExistingOrders, getCachedExistingOrders, getOfflineOrdersFromStore } from "@/lib/offline/bootstrapLoader";
+import { onSyncComplete, syncPendingOrders } from "@/lib/offline/syncManager";
 
 function formatOrderDate(val) {
   if (val == null || val === "") return "—";
@@ -71,7 +72,7 @@ function mapRawToOrders(rawList) {
   if (!Array.isArray(rawList)) return [];
   return rawList.map((r, i) => {
     const orderDate = r.order_date ?? r.ORDER_DATE ?? r.created_at ?? r.date ?? r.trns_date ?? "";
-    const orderId = r.order_id ?? r.ORDER_ID ?? r.order_number ?? r.trns_id ?? r.id ?? `#${i + 1}`;
+    const orderId = r.backend_trns_id ?? r.order_id ?? r.ORDER_ID ?? r.order_number ?? r.trns_id ?? r.id ?? `#${i + 1}`;
     const customerName = r.customer_name ?? r.CUSTOMER_NAME ?? r.party_name ?? r.PARTY_NAME ?? r.customer ?? "—";
     const status = (r.status ?? r.STATUS ?? r.order_status ?? "Draft").toString();
     const amount = Number(r.amount ?? r.AMOUNT ?? r.total ?? r.grand_total ?? r.TOTAL ?? 0) || 0;
@@ -109,6 +110,8 @@ function ExistingOrdersContent() {
   const [error, setError] = useState(null);
   const [duplicateLoading, setDuplicateLoading] = useState(null);
   const [duplicateError, setDuplicateError] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState(null);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -158,6 +161,31 @@ function ExistingOrdersContent() {
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
+
+  useEffect(() => {
+    const unsubscribe = onSyncComplete((result) => {
+      setSyncing(false);
+      if (result?.synced > 0) {
+        setSyncMessage(`Synced ${result.synced} order(s). Order IDs updated.`);
+        loadOrders();
+        if (typeof window !== "undefined") {
+          setTimeout(() => setSyncMessage(null), 4000);
+        }
+      }
+      if (result?.failed > 0 && result?.synced === 0) {
+        setSyncMessage(result?.error || "Some orders could not be synced.");
+        setTimeout(() => setSyncMessage(null), 5000);
+      }
+    });
+    return unsubscribe;
+  }, [loadOrders]);
+
+  useEffect(() => {
+    if (!isOnline) return;
+    setSyncing(true);
+    syncPendingOrders()
+      .finally(() => setSyncing(false));
+  }, [isOnline]);
 
   const handleDuplicateOrder = useCallback(async (row) => {
     const orderId = row.id;
@@ -235,15 +263,19 @@ function ExistingOrdersContent() {
       header: "Status",
       accessor: "status",
       width: "130px",
-      render: (row) => (
-        <span
-          className={`inline-flex items-center text-xs font-medium px-2.5 py-1 rounded ${
-            (row.status || "").toLowerCase() === "completed" ? "text-green-700 bg-green-50" : "text-gray-500 bg-gray-100"
-          }`}
-        >
-          {row.status}
-        </span>
-      ),
+      render: (row) => {
+        const s = (row.status || "").toString();
+        const statusClass =
+          s === "Synced" ? "text-green-700 bg-green-50"
+            : s === "Offline" ? "text-amber-700 bg-amber-50"
+              : s.toLowerCase() === "completed" ? "text-green-700 bg-green-50"
+                : "text-gray-500 bg-gray-100";
+        return (
+          <span className={`inline-flex items-center text-xs font-medium px-2.5 py-1 rounded ${statusClass}`}>
+            {row.status}
+          </span>
+        );
+      },
     },
     {
       header: "Action",
@@ -298,16 +330,19 @@ function ExistingOrdersContent() {
       header: "Status",
       accessor: "status",
       width: "1fr",
-      render: (row) => (
-        <span
-          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${row.status === "Draft"
-            ? "bg-blue-100 text-blue-700"
-            : "bg-green-100 text-green-700"
-            }`}
-        >
-          {row.status}
-        </span>
-      ),
+      render: (row) => {
+        const s = (row.status || "").toString();
+        const statusClass =
+          s === "Synced" ? "bg-green-100 text-green-700"
+            : s === "Offline" ? "bg-amber-100 text-amber-700"
+              : s === "Draft" ? "bg-blue-100 text-blue-700"
+                : "bg-green-100 text-green-700";
+        return (
+          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${statusClass}`}>
+            {row.status}
+          </span>
+        );
+      },
     },
     {
       header: "Amount",
@@ -339,7 +374,8 @@ function ExistingOrdersContent() {
                 row._raw?.ACCOUNT_ID ??
                 null;
               if (partyCode) setSaleOrderPartyCode(partyCode);
-              if (row.id != null) setCartTrnsId(row.id);
+              const trnsIdForNav = row._raw?.backend_trns_id ?? row.id;
+              if (trnsIdForNav != null) setCartTrnsId(trnsIdForNav);
               router.push("/review?mode=view");
             }}
           >
@@ -356,7 +392,8 @@ function ExistingOrdersContent() {
                 const partyCode =
                   row.partyCode ?? row._raw?.party_code ?? row._raw?.PARTY_CODE ?? row._raw?.customer_id ?? row._raw?.CUSTOMER_ID ?? row._raw?.account_id ?? row._raw?.ACCOUNT_ID ?? null;
                 if (partyCode) setSaleOrderPartyCode(partyCode);
-                if (row.id != null) setCartTrnsId(row.id);
+                const trnsIdForNav = row._raw?.backend_trns_id ?? row.id;
+                if (trnsIdForNav != null) setCartTrnsId(trnsIdForNav);
                 router.push("/cart");
               }}
             >
@@ -467,6 +504,17 @@ function ExistingOrdersContent() {
           <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800 text-sm mb-6 flex items-center justify-between gap-2">
             <span>{duplicateError}</span>
             <button type="button" onClick={() => setDuplicateError(null)} className="text-amber-600 hover:text-amber-900 font-medium">×</button>
+          </div>
+        )}
+        {syncing && (
+          <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-2 text-blue-700 text-sm mb-4 flex items-center gap-2">
+            <span className="inline-block w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            Syncing offline orders… Order IDs will update when done.
+          </div>
+        )}
+        {syncMessage && (
+          <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-2 text-green-800 text-sm mb-4">
+            {syncMessage}
           </div>
         )}
 

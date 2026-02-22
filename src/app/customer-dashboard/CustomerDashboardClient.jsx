@@ -6,7 +6,7 @@ import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getPartySaleInvDashboard, createSalesVisit, getSalesVisitHistory } from "@/services/shetApi";
 import { setSaleOrderPartyCode, clearCartTrnsId } from "@/lib/api";
-import { cacheCustomerDashboard, getCachedCustomerDashboard } from "@/lib/offline/bootstrapLoader";
+import { cacheCustomerDashboard, getCachedCustomerDashboard, cacheVisitHistory, getCachedVisitHistory } from "@/lib/offline/bootstrapLoader";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { saveVisit, NO_ORDER_REASONS, getVisitsByPartyCode, getReasonLabel } from "@/lib/visits";
 
@@ -103,6 +103,9 @@ function CustomerDashboardClient() {
     if (isOnline) {
       try {
         const res = await getSalesVisitHistory(partyCode, partyCode);
+        try {
+          await cacheVisitHistory(partyCode, res?.data ?? res);
+        } catch { /* ignore */ }
         const items = res?.data?.items;
         if (Array.isArray(items)) {
           const sorted = [...items].sort((a, b) => (b.visit_date || "").localeCompare(a.visit_date || ""));
@@ -122,8 +125,21 @@ function CustomerDashboardClient() {
         setRecentVisits(list);
       }
     } else {
-      const list = await getVisitsByPartyCode(partyCode, 10);
-      setRecentVisits(list);
+      const cached = await getCachedVisitHistory(partyCode);
+      if (Array.isArray(cached) && cached.length > 0) {
+        const sorted = [...cached].sort((a, b) => (b.visit_date || "").localeCompare(a.visit_date || ""));
+        const mapped = sorted.slice(0, 10).map((item) => ({
+          id: item.visit_id || item.visit_date + "_" + (item.visit_id ?? ""),
+          visit_date: item.visit_date || "",
+          order_placed: item.order_placed === true || item.order_placed_raw === "1" || item.order_placed === "Y",
+          no_order_reason: item.no_order_reason || null,
+          remarks: item.remarks || "",
+        }));
+        setRecentVisits(mapped);
+      } else {
+        const list = await getVisitsByPartyCode(partyCode, 10);
+        setRecentVisits(list);
+      }
     }
   }, [partyCode, isOnline]);
 

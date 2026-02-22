@@ -231,6 +231,7 @@ export async function getCachedOrderDetail(trnsId) {
 }
 
 const OFFLINE_ORDER_ID_PREFIX = "offline_";
+const OFFLINE_ORDERS_MAX = 50;
 
 /** Generate unique id for a new offline order */
 export function generateOfflineOrderId() {
@@ -239,12 +240,27 @@ export function generateOfflineOrderId() {
 
 /**
  * Save current offline cart as a new order into existingOrders + orderDetails.
- * Each call creates a new order (unique id). Returns the new order id.
- * Call when user lands on Review page with offline cart (Continue to Review).
+ * Full order + line items stored (same shape as online). Max 50 offline orders; oldest dropped.
+ * Optional: orderId (use this to avoid double entry when caller already set cart trns id), delivery_date, pay_terms, discount, remarks for sync.
  */
 export async function saveOfflineOrderToExistingOrders(payload) {
-  const { customer, items, subtotal, tax, discount, grandTotal, customer_id } = payload;
-  const orderId = generateOfflineOrderId();
+  const {
+    customer,
+    items,
+    subtotal,
+    tax,
+    discount,
+    grandTotal,
+    customer_id,
+    delivery_date,
+    pay_terms,
+    discount_val,
+    remarks,
+    orderId: providedOrderId,
+  } = payload;
+  const orderId = providedOrderId && String(providedOrderId).startsWith(OFFLINE_ORDER_ID_PREFIX)
+    ? String(providedOrderId)
+    : generateOfflineOrderId();
   const orderDate = new Date();
   const orderDateStr = orderDate.toISOString().slice(0, 10);
   const customerName =
@@ -283,12 +299,26 @@ export async function saveOfflineOrderToExistingOrders(payload) {
     discount: discount ?? 0,
     grand_total: grandTotal ?? 0,
     total: grandTotal ?? 0,
+    delivery_date: delivery_date ?? "",
+    pay_terms: pay_terms ?? "",
+    discount_val: discount_val ?? "",
+    remarks: remarks ?? "",
   };
   await putOne("orderDetails", {
     trns_id: orderId,
     data: reviewData,
     updatedAt: Date.now(),
   });
+
+  const offlineOnly = await getOfflineOrdersFromStore();
+  if (offlineOnly.length > OFFLINE_ORDERS_MAX) {
+    const sorted = [...offlineOnly].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const toRemove = sorted.slice(0, offlineOnly.length - OFFLINE_ORDERS_MAX);
+    for (const o of toRemove) {
+      await deleteByKey("orderDetails", String(o.id));
+      await deleteByKey("existingOrders", String(o.id));
+    }
+  }
   return orderId;
 }
 
@@ -299,15 +329,24 @@ export async function getOfflineOrdersFromStore() {
 }
 
 /**
- * Update an offline order's items and total in both existingOrders and orderDetails.
- * Use when user edits cart (qty/remove) for a saved offline order.
+ * Update an offline order's items, total, and optional meta in both existingOrders and orderDetails.
+ * Use when user edits cart (qty/remove) or delivery_date/pay_terms/discount/remarks for sync.
  */
 export async function updateOfflineOrderInStores(trnsId, payload) {
-  const { items, grandTotal } = payload;
+  const { items, grandTotal, delivery_date, pay_terms, discount_val, remarks } = payload;
   if (!trnsId || !String(trnsId).startsWith(OFFLINE_ORDER_ID_PREFIX)) return;
   const row = await getByKey("orderDetails", String(trnsId));
   if (!row?.data) return;
-  const updatedData = { ...row.data, items: items ?? row.data.items, grand_total: grandTotal ?? row.data.grand_total, total: grandTotal ?? row.data.grand_total };
+  const updatedData = {
+    ...row.data,
+    items: items ?? row.data.items,
+    grand_total: grandTotal ?? row.data.grand_total,
+    total: grandTotal ?? row.data.grand_total,
+  };
+  if (delivery_date !== undefined) updatedData.delivery_date = delivery_date;
+  if (pay_terms !== undefined) updatedData.pay_terms = pay_terms;
+  if (discount_val !== undefined) updatedData.discount_val = discount_val;
+  if (remarks !== undefined) updatedData.remarks = remarks;
   await putOne("orderDetails", { trns_id: String(trnsId), data: updatedData, updatedAt: Date.now() });
   const existingRow = await getByKey("existingOrders", String(trnsId));
   if (existingRow) {
@@ -326,4 +365,78 @@ export async function deleteOfflineOrder(trnsId) {
   if (!trnsId || !String(trnsId).startsWith(OFFLINE_ORDER_ID_PREFIX)) return;
   await deleteByKey("orderDetails", String(trnsId));
   await deleteByKey("existingOrders", String(trnsId));
+}
+
+/**
+ * After backend sync, store backend trns_id on the offline order so Submit is allowed and UI shows synced.
+ */
+export async function updateOfflineOrderWithBackendTrnsId(offlineId, backendTrnsId) {
+  if (!offlineId || !String(offlineId).startsWith(OFFLINE_ORDER_ID_PREFIX) || backendTrnsId == null) return;
+  const row = await getByKey("existingOrders", String(offlineId));
+  if (!row) return;
+  row.backend_trns_id = backendTrnsId;
+  row.status = "Synced";
+  row.STATUS = "Synced";
+  row.order_status = "Synced";
+  await putOne("existingOrders", row);
+}
+
+/**
+ * Get offline order row (to check backend_trns_id / sync status).
+ */
+export async function getExistingOrderRow(orderId) {
+  if (!orderId) return null;
+  return getByKey("existingOrders", String(orderId));
+}
+
+/**
+ * Build payload for sync API from offline existing orders (only those without backend_trns_id yet).
+ * Returns array of { uuid, customer_id, items: [{ item_id, qty, unit_price, uom?, comments? }], delivery_date?, pay_terms?, discount?, remarks? }.
+ */
+export async function getOfflineOrdersForSync() {
+  const offline = await getOfflineOrdersFromStore();
+  const pending = offline.filter((o) => o.backend_trns_id == null);
+  const out = [];
+  for (const order of pending) {
+    const detail = await getByKey("orderDetails", String(order.id));
+    const data = detail?.data;
+    const customer_id = order.party_code ?? order.customer_id ?? data?.customer?.SHORT_CODE ?? data?.customer_id ?? "";
+    const rawItems = data?.items ?? [];
+    const items = rawItems.map((it) => ({
+      item_id: String(it.item_id ?? it.id ?? it.product_id ?? it.sku ?? ""),
+      qty: Number(it.qty ?? it.quantity ?? 0) || 0,
+      unit_price: Number(it.unit_price ?? it.unitPrice ?? 0) || 0,
+      uom: it.uom ?? "",
+      comments: it.comments ?? "",
+    })).filter((it) => it.item_id && it.qty > 0);
+    if (!customer_id || items.length === 0) continue;
+    out.push({
+      uuid: order.id,
+      customer_id,
+      items,
+      delivery_date: data?.delivery_date || undefined,
+      pay_terms: data?.pay_terms || undefined,
+      discount: data?.discount_val !== "" && !Number.isNaN(Number(data?.discount_val)) ? Number(data.discount_val) : undefined,
+      remarks: data?.remarks || undefined,
+    });
+  }
+  return out;
+}
+
+/** Cache visit history for a party (call when fetching from API when online). */
+export async function cacheVisitHistory(partyCode, apiData) {
+  if (!partyCode) return;
+  const items = apiData?.items ?? apiData?.data?.items ?? (Array.isArray(apiData) ? apiData : []);
+  await putOne("visitHistoryCache", {
+    party_code: String(partyCode),
+    items: Array.isArray(items) ? items : [],
+    updatedAt: Date.now(),
+  });
+}
+
+/** Get cached visit history for a party (for offline). */
+export async function getCachedVisitHistory(partyCode) {
+  if (!partyCode) return null;
+  const row = await getByKey("visitHistoryCache", String(partyCode));
+  return row?.items ?? null;
 }
