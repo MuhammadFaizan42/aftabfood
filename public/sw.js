@@ -1,15 +1,12 @@
 /* PWA Service Worker – offline cache + background sync for orders */
-const CACHE_NAME = "aftabfood-v3";
+const CACHE_NAME = "aftabfood-v5";
 const DB_NAME = "aftabfood-offline";
 const DB_VERSION = 3;
 const SYNC_TAG = "sync-orders";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
-  /* Pre-cache app shell so when offline we can serve it for any uncached navigate (e.g. /customer-dashboard) and the app loads instead of plain "Offline". */
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.add("/").catch(() => {}))
-  );
+  /* Do NOT pre-cache "/" here: we would cache only the HTML, not the JS/CSS chunks it references, so offline would get 503 on chunks and ChunkLoadError. We only serve fallback when we have a document from a real visit (then its chunks are cached too). */
 });
 
 self.addEventListener("activate", (event) => {
@@ -115,9 +112,12 @@ self.addEventListener("fetch", (event) => {
     fetch(event.request)
       .then((res) => {
         const clone = res.clone();
+        let cloneForPath = null;
         if (
           res.ok &&
           (url.pathname === "/" ||
+            url.pathname === "/manifest.json" ||
+            url.pathname === "/favicon.ico" ||
             url.pathname.startsWith("/dashboard") ||
             url.pathname.startsWith("/new-order") ||
             url.pathname.startsWith("/products") ||
@@ -128,19 +128,29 @@ self.addEventListener("fetch", (event) => {
             url.pathname.startsWith("/customer-dashboard") ||
             url.pathname.includes("_next"))
         ) {
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          if (isNavigate && url.pathname !== "/") cloneForPath = res.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, clone);
+            if (cloneForPath)
+              cache.put(new Request(url.origin + url.pathname, { method: "GET" }), cloneForPath);
+          });
         }
         return res;
       })
       .catch(() =>
         caches.match(event.request).then((cached) => {
           if (cached) return cached;
-          /* For page navigations, serve a cached app shell so the app loads and can show its own offline UI (IndexedDB cache message or dashboard). Otherwise user would only see plain "Offline" on Hostinger/live. */
+          /* For navigations: only serve a cached document for the SAME path (never serve "/" for /new-order etc.), otherwise wrong chunks load and ChunkLoadError occurs on Hostinger offline. */
           if (isNavigate) {
             return caches
               .match(new Request(url.origin + url.pathname, { method: "GET" }))
-              .then((c1) => (c1 ? c1 : caches.match(new Request(url.origin + "/", { method: "GET" }))))
-              .then((fallback) => fallback || new Response("Offline", { status: 503, statusText: "Service Unavailable" }));
+              .then((fallback) => {
+                if (fallback) return fallback;
+                return new Response(
+                  "<!DOCTYPE html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Offline</title></head><body style=\"font-family:system-ui;max-width:28em;margin:2em auto;padding:1em;text-align:center\"><p style=\"color:#666\">You're offline. Open this page once while <strong>online</strong>, then try again.</p><p><a href=\"/\" style=\"color:#2563eb\">Go to home</a></p></body></html>",
+                  { status: 503, statusText: "Service Unavailable", headers: { "Content-Type": "text/html; charset=utf-8" } }
+                );
+              });
           }
           return new Response("Offline", { status: 503, statusText: "Service Unavailable" });
         })
