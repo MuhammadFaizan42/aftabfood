@@ -1,11 +1,15 @@
 /* PWA Service Worker – offline cache + background sync for orders */
-const CACHE_NAME = "aftabfood-v2";
+const CACHE_NAME = "aftabfood-v3";
 const DB_NAME = "aftabfood-offline";
 const DB_VERSION = 3;
 const SYNC_TAG = "sync-orders";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
+  /* Pre-cache app shell so when offline we can serve it for any uncached navigate (e.g. /customer-dashboard) and the app loads instead of plain "Offline". */
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.add("/").catch(() => {}))
+  );
 });
 
 self.addEventListener("activate", (event) => {
@@ -105,6 +109,8 @@ self.addEventListener("fetch", (event) => {
   }
   if (event.request.method !== "GET") return;
 
+  const isNavigate = event.request.mode === "navigate";
+
   event.respondWith(
     fetch(event.request)
       .then((res) => {
@@ -127,9 +133,17 @@ self.addEventListener("fetch", (event) => {
         return res;
       })
       .catch(() =>
-        caches.match(event.request).then(
-          (cached) => cached || new Response("Offline", { status: 503, statusText: "Service Unavailable" })
-        )
+        caches.match(event.request).then((cached) => {
+          if (cached) return cached;
+          /* For page navigations, serve a cached app shell so the app loads and can show its own offline UI (IndexedDB cache message or dashboard). Otherwise user would only see plain "Offline" on Hostinger/live. */
+          if (isNavigate) {
+            return caches
+              .match(new Request(url.origin + url.pathname, { method: "GET" }))
+              .then((c1) => (c1 ? c1 : caches.match(new Request(url.origin + "/", { method: "GET" }))))
+              .then((fallback) => fallback || new Response("Offline", { status: 503, statusText: "Service Unavailable" }));
+          }
+          return new Response("Offline", { status: 503, statusText: "Service Unavailable" });
+        })
       )
   );
 });

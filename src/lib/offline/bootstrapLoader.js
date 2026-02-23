@@ -167,15 +167,23 @@ export async function getCachedProducts(params = {}) {
   return list;
 }
 
-/** Get customers from cache */
+/** Get customers from cache (never throws – returns [] if IDB unavailable e.g. private mode) */
 export async function getCachedCustomers() {
-  return getAll("customers");
+  try {
+    return await getAll("customers");
+  } catch {
+    return [];
+  }
 }
 
-/** Get customer dashboard from cache */
+/** Get customer dashboard from cache (never throws – returns null if IDB unavailable) */
 export async function getCachedCustomerDashboard(partyCode) {
-  const row = await getByKey("customerDashboards", String(partyCode));
-  return row?.data ?? null;
+  try {
+    const row = await getByKey("customerDashboards", String(partyCode));
+    return row?.data ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Cache customer dashboard data (call after fetching when online) */
