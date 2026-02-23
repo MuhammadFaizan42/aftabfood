@@ -57,7 +57,7 @@ function mapApiOrders(res) {
     return {
       id: id,
       orderDate: formatOrderDate(orderDate),
-      orderId: String(orderId).startsWith("#") ? orderId : `#${orderId}`,
+      orderId: String(orderId),
       customerName: String(customerName),
       status: status,
       amount,
@@ -82,7 +82,7 @@ function mapRawToOrders(rawList) {
     return {
       id,
       orderDate: formatOrderDate(orderDate),
-      orderId: String(orderId).startsWith("#") ? orderId : `#${orderId}`,
+      orderId: String(orderId),
       customerName: String(customerName),
       status,
       amount,
@@ -131,7 +131,19 @@ function ExistingOrdersContent() {
         }
         const offlineOnly = await getOfflineOrdersFromStore();
         const offlineOrders = mapRawToOrders(offlineOnly);
-        let merged = [...apiOrders, ...offlineOrders].sort((a, b) => {
+        // Deduplicate: same order can appear from API (SO number) and from IDB (synced with backend_trns_id). Keep only API row (SO) and drop IDB row with same backend_trns_id.
+        const apiTrnsIds = new Set(
+          apiOrders
+            .map((o) => o._raw?.trns_id ?? o._raw?.TRNS_ID ?? o.id)
+            .filter((v) => v != null && v !== "")
+            .map((v) => String(v))
+        );
+        const offlineDeduped = offlineOrders.filter((o) => {
+          const bid = o._raw?.backend_trns_id;
+          if (bid == null) return true;
+          return !apiTrnsIds.has(String(bid));
+        });
+        let merged = [...apiOrders, ...offlineDeduped].sort((a, b) => {
           const dA = a._raw?.order_date ?? a._raw?._orderDateStr ?? "";
           const dB = b._raw?.order_date ?? b._raw?._orderDateStr ?? "";
           return String(dB).localeCompare(String(dA));

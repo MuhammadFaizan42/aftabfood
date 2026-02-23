@@ -128,10 +128,25 @@ function ProductsContent() {
           ...(opts.category && opts.category !== "All Items" && { category: opts.category }),
           ...(opts.search && { search: opts.search }),
         };
-        const res = await getProducts(params);
+        let res;
+        try {
+          res = await getProducts(params);
+        } catch (apiErr) {
+          const raw = await getCachedProducts({
+            category: opts.category,
+            search: opts.search,
+          });
+          const mapped = raw.map(mapApiProduct);
+          setProducts(mapped);
+          if (mapped.length > 0) setError("Showing cached products — server unreachable.");
+          else setError(apiErr instanceof Error ? apiErr.message : "Could not load products. Open when online to cache.");
+          return mapped;
+        }
         if (!res?.success || !Array.isArray(res.data)) {
-          setProducts([]);
-          return [];
+          const raw = await getCachedProducts({ category: opts.category, search: opts.search });
+          const mapped = raw.map(mapApiProduct);
+          setProducts(mapped);
+          return mapped;
         }
         const mapped = res.data.map(mapApiProduct);
         setProducts(mapped);

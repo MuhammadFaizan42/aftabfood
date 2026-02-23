@@ -6,7 +6,7 @@ import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getPartySaleInvDashboard, createSalesVisit, getSalesVisitHistory } from "@/services/shetApi";
 import { setSaleOrderPartyCode, clearCartTrnsId } from "@/lib/api";
-import { cacheCustomerDashboard, getCachedCustomerDashboard, cacheVisitHistory, getCachedVisitHistory } from "@/lib/offline/bootstrapLoader";
+import { cacheCustomerDashboard, getCachedCustomerDashboard, getCachedCustomers, cacheVisitHistory, getCachedVisitHistory } from "@/lib/offline/bootstrapLoader";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { saveVisit, NO_ORDER_REASONS, getVisitsByPartyCode, getReasonLabel } from "@/lib/visits";
 
@@ -47,11 +47,13 @@ function CustomerDashboardClient() {
   const [visitSubmitSuccess, setVisitSubmitSuccess] = useState(false);
   const [visitSubmitError, setVisitSubmitError] = useState(null);
   const [recentVisits, setRecentVisits] = useState([]);
+  const [showCachedBanner, setShowCachedBanner] = useState(false);
 
   const loadDashboard = React.useCallback(async () => {
     if (!partyCode) return;
     setLoading(true);
     setError(null);
+    setShowCachedBanner(false);
     try {
       if (isOnline) {
         const params = {
@@ -59,10 +61,29 @@ function CustomerDashboardClient() {
           ...(appliedFrom && { from_date: appliedFrom }),
           ...(appliedTo && { to_date: appliedTo }),
         };
-        const res = await getPartySaleInvDashboard(partyCode, params);
+        let res;
+        try {
+          res = await getPartySaleInvDashboard(partyCode, params);
+        } catch (apiErr) {
+          const cached = await getCachedCustomerDashboard(partyCode);
+          if (cached) {
+            setData(cached);
+            setShowCachedBanner(true);
+          } else {
+            setError(apiErr instanceof Error ? apiErr.message : "Could not reach server. Open this page once when online to cache for offline.");
+            setData(null);
+          }
+          return;
+        }
         if (!res?.success || !res?.data) {
-          setError(res?.message || "Failed to load dashboard.");
-          setData(null);
+          const cached = await getCachedCustomerDashboard(partyCode);
+          if (cached) {
+            setData(cached);
+            setShowCachedBanner(true);
+          } else {
+            setError(res?.message || "Failed to load dashboard.");
+            setData(null);
+          }
           return;
         }
         setData(res.data);
@@ -76,7 +97,17 @@ function CustomerDashboardClient() {
         if (cached) {
           setData(cached);
         } else {
-          setError("Dashboard not in cache. Visit when online to cache.");
+          let customerLabel = partyCode;
+          try {
+            const customers = await getCachedCustomers();
+            const c = customers.find(
+              (x) => String(x.SHORT_CODE ?? x.CUSTOMER_ID ?? x.PARTY_CODE ?? x.code ?? "").trim() === String(partyCode).trim()
+            );
+            if (c) customerLabel = c.CUSTOMER_NAME ?? c.PARTY_NAME ?? c.SHORT_CODE ?? partyCode;
+          } catch {
+            // keep customerLabel as partyCode
+          }
+          setError(`No cached data for ${customerLabel}. Open this page once when online on this device to use offline.`);
           setData(null);
         }
       }
@@ -305,6 +336,11 @@ function CustomerDashboardClient() {
       <Header />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
+        {showCachedBanner && (
+          <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800 text-sm">
+            Showing cached data — server unreachable. Connect to the internet to refresh.
+          </div>
+        )}
         {/* Back Link and Title */}
         <div className="mb-6">
           <Link

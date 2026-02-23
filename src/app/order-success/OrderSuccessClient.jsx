@@ -2,12 +2,12 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
-import { getOrderReview } from "@/services/shetApi";
+import { getOrderReview, getExistingOrders } from "@/services/shetApi";
 import { getCachedOrderDetail } from "@/lib/offline/bootstrapLoader";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 
-function buildShareText(orderId, orderDetails) {
-  let text = `Order #${orderId}\n`;
+function buildShareText(displayId, orderDetails) {
+  let text = `Order ${displayId}\n`;
   if (!orderDetails) {
     text += "Order placed successfully. Full details will be available after sync.";
     return text;
@@ -76,46 +76,105 @@ export default function OrderSuccessClient() {
 
   const orderId = searchParams.get("order_id") || `ORD-${Date.now()}`;
   const isOffline = searchParams.get("offline") === "1";
+  const [displayOrderNumber, setDisplayOrderNumber] = useState(null);
+  const [orderNumberResolved, setOrderNumberResolved] = useState(false);
+
+  const loadOrderNumberFromExisting = useCallback(
+    async (baseOrderId) => {
+      try {
+        const today = new Date();
+        const day = today.toISOString().slice(0, 10);
+        const res = await getExistingOrders({ from_date: day, to_date: day });
+        const raw =
+          res?.data?.orders ??
+          res?.data?.list ??
+          res?.data?.items ??
+          (Array.isArray(res?.data) ? res.data : []);
+        const match = (raw || []).find(
+          (r) =>
+            String(r.trns_id ?? r.TRNS_ID ?? "").trim() ===
+            String(baseOrderId).trim()
+        );
+        if (match) {
+          const soNum =
+            match.order_number ?? match.SO_NUM ?? match.order_id ?? match.ORDER_ID;
+          if (soNum && String(soNum).trim()) {
+            setDisplayOrderNumber(String(soNum).trim());
+          }
+        }
+      } catch {
+        // ignore – fall back to trns_id
+      }
+    },
+    []
+  );
 
   const loadOrderDetails = useCallback(async () => {
-    if (!orderId || orderId.startsWith("ORD-")) return;
+    if (!orderId || orderId.startsWith("ORD-")) {
+      setOrderNumberResolved(true);
+      return;
+    }
     const isOfflineId = orderId.startsWith("offline_");
+    setOrderNumberResolved(false);
     try {
       if (isOnline && !isOfflineId) {
         const res = await getOrderReview(orderId);
         setOrderDetails(mapOrderDetails(res));
+        const d = res?.data ?? res;
+        const soNum = d?.order_number ?? d?.SO_NUM ?? d?.order_id;
+        if (soNum && String(soNum).trim() && !String(soNum).match(/^\d+$/)) {
+          setDisplayOrderNumber(String(soNum).trim());
+        } else if (soNum) {
+          setDisplayOrderNumber(String(soNum));
+        } else {
+          setDisplayOrderNumber(null);
+          await loadOrderNumberFromExisting(orderId);
+        }
       } else {
         const cached = await getCachedOrderDetail(orderId);
         setOrderDetails(mapOrderDetails({ success: true, data: cached }));
+        const soNum = cached?.order_number ?? cached?.SO_NUM ?? cached?.order_id;
+        if (soNum && String(soNum).trim()) setDisplayOrderNumber(String(soNum).trim());
+        else setDisplayOrderNumber(null);
       }
     } catch {
       try {
         const cached = await getCachedOrderDetail(orderId);
         setOrderDetails(mapOrderDetails({ success: true, data: cached }));
+        const soNum = cached?.order_number ?? cached?.SO_NUM ?? cached?.order_id;
+        if (soNum && String(soNum).trim()) setDisplayOrderNumber(String(soNum).trim());
+        else setDisplayOrderNumber(null);
       } catch {
         setOrderDetails(null);
+        setDisplayOrderNumber(null);
       }
+    } finally {
+      setOrderNumberResolved(true);
     }
-  }, [orderId, isOnline]);
+  }, [orderId, isOnline, loadOrderNumberFromExisting]);
 
   useEffect(() => {
     loadOrderDetails();
   }, [loadOrderDetails]);
 
+  const isNumericTrnsId = /^\d+$/.test(String(orderId).trim());
+  const showOrderNumberPlaceholder = !orderNumberResolved && isNumericTrnsId;
+  const displayId = displayOrderNumber ?? orderId;
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(orderId);
+    navigator.clipboard.writeText(displayId);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const shareText = buildShareText(orderId, orderDetails);
+  const shareText = buildShareText(displayId, orderDetails);
 
   const handleShareWhatsApp = () => {
     window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank", "noopener,noreferrer");
   };
 
   const handleShareEmail = () => {
-    const subject = `Order #${orderId} - Order Details`;
+    const subject = `Order ${displayId} - Order Details`;
     window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(shareText)}`;
   };
 
@@ -133,13 +192,21 @@ export default function OrderSuccessClient() {
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">Order Placed Successfully!</h1>
           <div className="inline-flex items-center gap-2 mb-4">
-            <div className="bg-gray-100 rounded-lg px-4 py-2">
-              <span className="text-sm text-gray-600 font-mono">Order #{orderId}</span>
+            <div className="bg-gray-100 rounded-lg px-4 py-2 min-w-[140px] flex justify-center">
+              {showOrderNumberPlaceholder ? (
+                <span className="text-sm text-gray-500 font-mono flex items-center gap-2">
+                  <span className="inline-block w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                  Loading order number…
+                </span>
+              ) : (
+                <span className="text-sm text-gray-600 font-mono">Order {displayId}</span>
+              )}
             </div>
             <button
               onClick={handleCopy}
-              className="cursor-pointer bg-gray-100 hover:bg-gray-200 rounded-lg p-2 transition-colors"
-              title={copied ? "Copied!" : "Copy Order ID"}
+              disabled={showOrderNumberPlaceholder}
+              className="cursor-pointer bg-gray-100 hover:bg-gray-200 rounded-lg p-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={copied ? "Copied!" : "Copy order number"}
             >
               {copied ? (
                 <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

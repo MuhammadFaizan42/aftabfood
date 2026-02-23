@@ -126,20 +126,26 @@ async function loadExistingOrders() {
   }
 }
 
-/** Full bootstrap – products + customers + dashboards + existing orders */
+/** Full bootstrap – products + customers + dashboards + existing orders. Runs each step independently so partial cache works when some API calls fail (e.g. on production/Hostinger). */
 export async function bootstrapMasterData(force = false) {
   if (typeof window === "undefined") return;
   const stale = await isCacheStale();
   if (!stale && !force) return;
 
-  try {
-    await Promise.all([loadProducts(), loadCustomers()]);
-    await loadCustomerDashboards();
-    await loadExistingOrders();
-    await setMeta(META_LAST_SYNC, Date.now());
-  } catch (err) {
-    console.warn("[offline] Bootstrap failed:", err?.message);
-  }
+  const now = Date.now();
+  await loadProducts().catch((err) => {
+    console.warn("[offline] Bootstrap products failed:", err?.message);
+  });
+  await loadCustomers().catch((err) => {
+    console.warn("[offline] Bootstrap customers failed:", err?.message);
+  });
+  await loadCustomerDashboards().catch((err) => {
+    console.warn("[offline] Bootstrap dashboards failed:", err?.message);
+  });
+  await loadExistingOrders().catch((err) => {
+    console.warn("[offline] Bootstrap existing orders failed:", err?.message);
+  });
+  await setMeta(META_LAST_SYNC, now).catch(() => {});
 }
 
 /** Get products from cache (IndexedDB) */
