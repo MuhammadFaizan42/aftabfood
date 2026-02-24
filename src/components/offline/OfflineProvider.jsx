@@ -36,7 +36,10 @@ export default function OfflineProvider({ children }) {
     /* When online, warm up critical routes (/, /new-order, /dashboard) in background so
        SW caches HTML + JS chunks. Runs at most once per 24h. Ensures offline = localhost. */
     const t = setTimeout(() => {
-      if (navigator.onLine) warmUpCriticalRoutes().catch(() => {});
+      if (navigator.onLine) {
+        const current = window.location.pathname + window.location.search;
+        warmUpCriticalRoutes([current]).catch(() => {});
+      }
     }, 4000);
 
     const onVisible = () => {
@@ -53,3 +56,4 @@ export default function OfflineProvider({ children }) {
 
   return children;
 }
+

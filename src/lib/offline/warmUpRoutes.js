@@ -7,7 +7,7 @@
 const WARMUP_KEY = "aftab_offline_warmup_date";
 const WARMUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-const CRITICAL_ROUTES = ["/", "/new-order", "/dashboard", "/products"];
+const CRITICAL_ROUTES = ["/", "/new-order", "/dashboard", "/products", "/customer-dashboard"];
 
 const IFRAME_LOAD_WAIT_MS = 6000; // time per route so chunks are requested and cached
 
@@ -34,7 +34,7 @@ function markWarmupDone() {
  * Load each critical route in a hidden iframe so SW caches the document + chunks.
  * Call once when app loads online (e.g. from OfflineProvider).
  */
-export async function warmUpCriticalRoutes() {
+export async function warmUpCriticalRoutes(extraRoutes = []) {
   if (!shouldRunWarmup()) return;
   if (!("serviceWorker" in navigator)) return;
 
@@ -59,7 +59,11 @@ export async function warmUpCriticalRoutes() {
   document.body.appendChild(iframe);
 
   try {
-    for (const path of CRITICAL_ROUTES) {
+    const routes = [...CRITICAL_ROUTES, ...(Array.isArray(extraRoutes) ? extraRoutes : [])]
+      .filter(Boolean)
+      .map((r) => String(r));
+    const unique = [...new Set(routes)];
+    for (const path of unique) {
       await loadUrl(path);
     }
   } finally {
@@ -67,3 +71,5 @@ export async function warmUpCriticalRoutes() {
     markWarmupDone();
   }
 }
+
+

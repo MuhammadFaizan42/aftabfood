@@ -1,7 +1,7 @@
 /* PWA Service Worker – offline cache + background sync for orders */
-const CACHE_NAME = "aftabfood-v5";
+const CACHE_NAME = "aftabfood-v6";
 const DB_NAME = "aftabfood-offline";
-const DB_VERSION = 3;
+const DB_VERSION = 6;
 const SYNC_TAG = "sync-orders";
 
 self.addEventListener("install", (event) => {
@@ -157,3 +157,4 @@ self.addEventListener("fetch", (event) => {
       )
   );
 });
+
