@@ -7,7 +7,7 @@
 const WARMUP_KEY = "aftab_offline_warmup_date";
 const WARMUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-const CRITICAL_ROUTES = ["/", "/new-order", "/dashboard", "/products", "/customer-dashboard"];
+const CRITICAL_ROUTES = ["/", "/new-order", "/dashboard", "/products", "/customer-dashboard", "/cart", "/review", "/existing-orders", "/order-success"];
 
 const IFRAME_LOAD_WAIT_MS = 6000; // time per route so chunks are requested and cached
 
@@ -71,5 +71,6 @@ export async function warmUpCriticalRoutes(extraRoutes = []) {
     markWarmupDone();
   }
 }
+
 
 
