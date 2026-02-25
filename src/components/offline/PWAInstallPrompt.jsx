@@ -45,7 +45,7 @@ export default function PWAInstallPrompt() {
   return (
     <div className="fixed bottom-20 left-4 right-4 z-50 max-w-sm mx-auto bg-white border border-gray-200 rounded-lg shadow-lg p-4 flex items-center gap-3">
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900">Install SalesApp</p>
+        <p className="text-sm font-medium text-gray-900">Install Three Lines</p>
         <p className="text-xs text-gray-500">Use offline and get quick access from your home screen.</p>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
@@ -70,3 +70,4 @@ export default function PWAInstallPrompt() {
     </div>
   );
 }
+
