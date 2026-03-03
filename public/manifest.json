@@ -1,34 +1,25 @@
 {
-    "name":  "Three Lines",
-    "short_name":  "Three Lines",
-    "description":  "Offline-first sales app for orders and customers",
-    "start_url":  "/",
-    "display":  "standalone",
-    "background_color":  "#ffffff",
-    "theme_color":  "#2563eb",
-    "orientation":  "portrait-primary",
-    "icons":  [
-                  {
-                      "purpose":  "any",
-                      "type":  "image/png",
-                      "sizes":  "192x192",
-                      "src":  "/icons/icon-192.png"
-                  },
-                  {
-                      "purpose":  "any",
-                      "type":  "image/png",
-                      "sizes":  "512x512",
-                      "src":  "/icons/icon-512.png"
-                  },
-                  {
-                      "purpose":  "maskable",
-                      "type":  "image/png",
-                      "sizes":  "512x512",
-                      "src":  "/icons/icon-512.png"
-                  }
-              ],
-    "categories":  [
-                       "business",
-                       "productivity"
-                   ]
+  "name": "Majestic Three Line",
+  "short_name": "Majestic Three Line",
+  "description": "Offline-first sales app for orders and customers",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "purpose": "any",
+      "type": "image/png",
+      "sizes": "192x192",
+      "src": "/icons/mjlogo1.png"
+    },
+    {
+      "purpose": "maskable",
+      "type": "image/png",
+      "sizes": "512x512",
+      "src": "/icons/mjlogo1.png"
+    }
+  ],
+  "categories": ["business", "productivity"]
 }
