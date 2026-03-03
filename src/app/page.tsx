@@ -28,7 +28,9 @@ export default function Home() {
       setAuthToken(res.data.token, res.data.user);
       router.push("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed. Please try again.");
+      setError(
+        err instanceof Error ? err.message : "Login failed. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -38,9 +40,13 @@ export default function Home() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <div className="w-full max-w-md px-6">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-          {/* Logo and Title */}
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 rounded-2xl overflow-hidden border border-gray-200 bg-white flex items-center justify-center mb-3">\n              <img src="/logo.png" alt="Three Lines" className="w-full h-full object-cover" />\n            </div>\n            <h1 className="text-2xl font-semibold text-gray-900">Three Lines</h1>
+          {/* Logo only – no surrounding box */}
+          <div className="flex flex-col items-center mb-10">
+            <img
+              src="/icons/mjlogo1.png"
+              alt="App logo"
+              className="h-32 w-auto drop-shadow-lg"
+            />
           </div>
 
           {/* Login Form */}

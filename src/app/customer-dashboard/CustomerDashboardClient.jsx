@@ -758,7 +758,9 @@ function CustomerDashboardClient() {
                   <Link
                     href={
                       metric.title === "Receivable Amount"
-                        ? "/receivable-amount"
+                        ? `/receivable-amount?party_code=${encodeURIComponent(
+                            partyCode || "",
+                          )}`
                         : metric.title === "Sales Return Amount"
                           ? `/sales-return-history?party_code=${encodeURIComponent(
                               partyCode || "",

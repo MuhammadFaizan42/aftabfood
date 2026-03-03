@@ -1,10 +1,10 @@
 "use client";
-import { useState, useEffect, useRef } from 'react';
-import React from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { getAuthUser, clearAuthToken } from '@/lib/api';
-import { useSyncStatus } from '@/lib/offline/SyncStatusContext';
+import { useState, useEffect, useRef } from "react";
+import React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { getAuthUser, clearAuthToken } from "@/lib/api";
+import { useSyncStatus } from "@/lib/offline/SyncStatusContext";
 
 export default function Header({ toggleSidebar }) {
   const { isOnline, isSyncing, syncMessage, triggerRefresh } = useSyncStatus();
@@ -20,7 +20,7 @@ export default function Header({ toggleSidebar }) {
   // Load logged-in user and profile image from localStorage
   useEffect(() => {
     setUser(getAuthUser());
-    const savedImage = localStorage.getItem('profileImage');
+    const savedImage = localStorage.getItem("profileImage");
     if (savedImage) setProfileImage(savedImage);
   }, []);
 
@@ -31,8 +31,8 @@ export default function Header({ toggleSidebar }) {
         setIsDropdownOpen(false);
       }
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   // Handle file upload
@@ -43,7 +43,7 @@ export default function Header({ toggleSidebar }) {
       reader.onloadend = () => {
         const base64String = reader.result;
         setProfileImage(base64String);
-        localStorage.setItem('profileImage', base64String);
+        localStorage.setItem("profileImage", base64String);
       };
       reader.readAsDataURL(file);
     }
@@ -54,11 +54,11 @@ export default function Header({ toggleSidebar }) {
     clearAuthToken();
     setIsDropdownOpen(false);
     setIsMobileMenuOpen(false);
-    router.push('/');
+    router.push("/");
   };
 
-  const displayName = user?.LOGIN || user?.name || 'User';
-  const displayRole = 'Sales Representative';
+  const displayName = user?.LOGIN || user?.name || "User";
+  const displayRole = "Sales Representative";
 
   useEffect(() => {
     setHasMounted(true);
@@ -68,25 +68,61 @@ export default function Header({ toggleSidebar }) {
     <>
       {hasMounted && !isOnline && (
         <div className="bg-amber-500 text-white text-center text-xs py-1.5 px-4 flex items-center justify-center gap-2">
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
+          <svg
+            className="w-4 h-4 flex-shrink-0"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414"
+            />
           </svg>
           Offline – using cached data. Orders will sync when back online.
         </div>
       )}
       {hasMounted && isOnline && (syncMessage || isSyncing) && (
-        <div className={`text-center text-xs py-1.5 px-4 flex items-center justify-center gap-2 ${isSyncing ? "bg-blue-500 text-white" : "bg-green-50 text-green-800 border-b border-green-200"}`}>
+        <div
+          className={`text-center text-xs py-1.5 px-4 flex items-center justify-center gap-2 ${
+            isSyncing
+              ? "bg-blue-500 text-white"
+              : "bg-green-50 text-green-800 border-b border-green-200"
+          }`}
+        >
           {isSyncing ? (
             <>
-              <svg className="w-4 h-4 flex-shrink-0 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              <svg
+                className="w-4 h-4 flex-shrink-0 animate-spin"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
               </svg>
               {syncMessage}
             </>
           ) : (
             <>
-              <svg className="w-4 h-4 flex-shrink-0 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              <svg
+                className="w-4 h-4 flex-shrink-0 text-green-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
               </svg>
               {syncMessage}
             </>
@@ -104,47 +140,119 @@ export default function Header({ toggleSidebar }) {
         />
 
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          {/* Logo and App Name */}
-          <Link href='/'>
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 bg-white flex items-center justify-center">\n                <img src="/logo.png" alt="Three Lines" className="w-full h-full object-cover" />\n              </div>\n              <span className="text-sm sm:text-xl font-semibold text-gray-900">Three Lines</span>
+          {/* Logo only (no text, no visible box) */}
+          <Link href="/">
+            <div className="flex items-center">
+              <img
+                src="/icons/mjlogo1.png"
+                alt="App logo"
+                className="h-16 sm:h-20 w-auto drop-shadow-md"
+              />
             </div>
           </Link>
 
           {/* Online/Offline + Refresh icons (neutral until mounted to avoid hydration mismatch) */}
           <div className="hidden sm:flex items-center gap-2">
             <div
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg ${!hasMounted ? "bg-gray-100 text-gray-500" : isOnline ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}
-              title={!hasMounted ? "" : isOnline ? "Online" : "Offline – using cached data"}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg ${
+                !hasMounted
+                  ? "bg-gray-100 text-gray-500"
+                  : isOnline
+                  ? "bg-green-50 text-green-700"
+                  : "bg-amber-50 text-amber-700"
+              }`}
+              title={
+                !hasMounted
+                  ? ""
+                  : isOnline
+                  ? "Online"
+                  : "Offline – using cached data"
+              }
             >
               {!hasMounted ? (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+                  />
                 </svg>
               ) : isOnline ? (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+                  />
                 </svg>
               ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3"
+                  />
                 </svg>
               )}
-              <span className="text-xs font-medium">{!hasMounted ? "—" : isOnline ? "Online" : "Offline"}</span>
+              <span className="text-xs font-medium">
+                {!hasMounted ? "—" : isOnline ? "Online" : "Offline"}
+              </span>
             </div>
             <button
               onClick={triggerRefresh}
               disabled={!hasMounted || !isOnline || isSyncing}
-              title={!isOnline ? "Connect to fetch latest data" : "Fetch latest data from backend"}
+              title={
+                !isOnline
+                  ? "Connect to fetch latest data"
+                  : "Fetch latest data from backend"
+              }
               className="cursor-pointer p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSyncing ? (
-                <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <svg
+                  className="w-5 h-5 animate-spin"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
                 </svg>
               ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
                 </svg>
               )}
             </button>
@@ -174,9 +282,14 @@ export default function Header({ toggleSidebar }) {
           </div>
 
           {/* Desktop: User Info */}
-          <div className="hidden sm:flex items-center gap-3 relative" ref={dropdownRef}>
+          <div
+            className="hidden sm:flex items-center gap-3 relative"
+            ref={dropdownRef}
+          >
             <div className="text-right">
-              <div className="text-sm font-semibold text-gray-900">{displayName}</div>
+              <div className="text-sm font-semibold text-gray-900">
+                {displayName}
+              </div>
               <div className="text-xs text-gray-500">{displayRole}</div>
             </div>
             <button
@@ -251,10 +364,24 @@ export default function Header({ toggleSidebar }) {
           {/* Mobile: Online status + Refresh + Menu (neutral until mounted to avoid hydration mismatch) */}
           <div className="sm:hidden flex items-center gap-2">
             <div
-              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs ${!hasMounted ? "bg-gray-100 text-gray-500" : isOnline ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs ${
+                !hasMounted
+                  ? "bg-gray-100 text-gray-500"
+                  : isOnline
+                  ? "bg-green-50 text-green-700"
+                  : "bg-amber-50 text-amber-700"
+              }`}
               title={!hasMounted ? "" : isOnline ? "Online" : "Offline"}
             >
-              <span className={`w-2 h-2 rounded-full ${!hasMounted ? "bg-gray-400" : isOnline ? "bg-green-500" : "bg-amber-500"}`} />
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  !hasMounted
+                    ? "bg-gray-400"
+                    : isOnline
+                    ? "bg-green-500"
+                    : "bg-amber-500"
+                }`}
+              />
               {!hasMounted ? "—" : isOnline ? "Online" : "Offline"}
             </div>
             <button
@@ -264,12 +391,32 @@ export default function Header({ toggleSidebar }) {
               className="cursor-pointer p-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSyncing ? (
-                <svg className="w-5 h-5 animate-spin text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <svg
+                  className="w-5 h-5 animate-spin text-gray-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
                 </svg>
               ) : (
-                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <svg
+                  className="w-5 h-5 text-gray-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
                 </svg>
               )}
             </button>
@@ -277,20 +424,20 @@ export default function Header({ toggleSidebar }) {
               onClick={() => setIsMobileMenuOpen(true)}
               className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
             >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            </svg>
-          </button>
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            </button>
           </div>
         </div>
       </header>
@@ -305,8 +452,9 @@ export default function Header({ toggleSidebar }) {
 
       {/* Mobile Sidebar */}
       <div
-        className={`sm:hidden fixed top-0 right-0 h-full w-72 bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'
-          }`}
+        className={`sm:hidden fixed top-0 right-0 h-full w-72 bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out ${
+          isMobileMenuOpen ? "translate-x-0" : "translate-x-full"
+        }`}
       >
         {/* Close Button */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
@@ -352,7 +500,9 @@ export default function Header({ toggleSidebar }) {
               )}
             </div>
             <div>
-              <div className="text-sm font-semibold text-gray-900">{displayName}</div>
+              <div className="text-sm font-semibold text-gray-900">
+                {displayName}
+              </div>
               <div className="text-xs text-gray-500">{displayRole}</div>
             </div>
           </div>
