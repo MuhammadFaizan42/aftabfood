@@ -575,10 +575,10 @@ function ProductsContent() {
 
         {/* Products Grid */}
         {!loading && (
-        <div className={`grid grid-cols-1 gap-6 ${isTwoColumnView
-          ? 'sm:grid-cols-1 lg:grid-cols-2'
-          : 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-          }`}>
+          <div className={`grid grid-cols-1 items-start gap-6 ${isTwoColumnView
+            ? 'sm:grid-cols-1 lg:grid-cols-2'
+            : 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+            }`}>
           {filteredProducts.map((product) => {
             const quantity = productQuantities[product.id] || 0;
             const hasQuantity = quantity > 0;
