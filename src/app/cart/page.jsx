@@ -368,7 +368,7 @@ export default function Cart() {
             <img
               src={row.image}
               alt={row.name}
-              className="w-full h-full object-contain"
+              className="w-full h-full object-cover"
               onError={(e) => {
                 e.target.src = DEFAULT_IMG;
               }}

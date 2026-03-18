@@ -512,7 +512,7 @@ function OrderReviewContent() {
                       <div className="flex items-center gap-3">
                         {row.image && (
                           <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                            <img src={row.image} alt="" className="w-full h-full object-contain" />
+                            <img src={row.image} alt="" className="w-full h-full object-cover" />
                           </div>
                         )}
                         <div>

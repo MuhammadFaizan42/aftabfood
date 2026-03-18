@@ -101,6 +101,7 @@ function ProductsContent() {
   const [cartApiLoadingId, setCartApiLoadingId] = useState(null);
   const [cartApiError, setCartApiError] = useState(null);
   const [partyCode, setPartyCode] = useState(null);
+  const [expandedProducts, setExpandedProducts] = useState({});
 
   useEffect(() => {
     const fromUrl = searchParams.get("party_code");
@@ -587,94 +588,28 @@ function ProductsContent() {
             return (
               <div
                 key={product.id}
-                className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col"
               >
-                {/* Product Image – show full image, no cropping */}
-                <div className="relative h-48 bg-white border-b border-gray-200 overflow-hidden flex items-center justify-center">
-                  <img
-                    src={product.image || DEFAULT_PRODUCT_IMAGE}
-                    alt={product.name}
-                    className="max-h-full max-w-full object-contain"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = DEFAULT_PRODUCT_IMAGE;
-                    }}
-                  />
+                {/* Product Image */}
+                <div className="relative w-full pb-[100%] bg-white border-b border-gray-200 overflow-hidden shrink-0">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <img
+                      src={product.image || DEFAULT_PRODUCT_IMAGE}
+                      alt={product.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = DEFAULT_PRODUCT_IMAGE;
+                      }}
+                    />
+                  </div>
                 </div>
 
                 {/* Product Details */}
-                <div className="p-4">
-                  {/* Product Header */}
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className="text-base font-semibold text-gray-900 flex-1">
-                      {product.name}
-                    </h3>
-                    <span className="text-lg font-bold text-blue-600 ml-2">
-                      {currentPrice}
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-gray-600 mb-1">
-                    {product.description}
-                  </p>
-                  <p className="text-xs text-gray-500 mb-2">
-                    Stock: {product.stock} units available
-                  </p>
-
-                  {/* Unit Price */}
-                  <div className="mb-3">
-                    <p className="text-xs text-gray-400 mb-1">Unit Price</p>
-                    <div className="flex items-center justify-between">
-                      {isEditingPrice ? (
-                        <input
-                          type="text"
-                          value={currentPrice}
-                          onChange={(e) => handlePriceEdit(product.id, e.target.value)}
-                          onBlur={() => setEditingPrice(null)}
-                          className="text-lg font-bold text-gray-900 border-b-2 border-blue-500 focus:outline-none w-24"
-                          autoFocus
-                        />
-                      ) : (
-                        <p className="text-lg font-bold text-gray-900">
-                          {currentPrice}
-                        </p>
-                      )}
-                      <button
-                        onClick={() => togglePriceEdit(product.id)}
-                        className="cursor-pointer text-xs text-gray-400 hover:text-blue-600"
-                      >
-                        Tap to edit
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Unit of Measure – sirf us product ka API UOM */}
-                  <div className="mb-3">
-                    <Dropdown
-                      label="Unit of Measure"
-                      name={`unit-${product.id}`}
-                      value={selectedUnits[product.id] ?? product.unitOfMeasure}
-                      onChange={(e) => setSelectedUnits(prev => ({ ...prev, [product.id]: e.target.value }))}
-                      options={[
-                        { value: product.unitOfMeasure, label: product.unitOfMeasure },
-                      ]}
-                    />
-                  </div>
-
-                  {/* Comments/Remarks – API me comments bhejte hain */}
-                  <div className="mb-3">
-                    <p className="text-xs text-gray-400 mb-1">Comments / Remarks</p>
-                    <textarea
-                      placeholder="Add remark if any..."
-                      rows={2}
-                      value={productComments[product.id] ?? ""}
-                      onChange={(e) => setProductComments((prev) => ({ ...prev, [product.id]: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm text-gray-600 placeholder-gray-400 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                    />
-                  </div>
+                <div className="p-4 flex flex-col flex-1 pb-2">
 
                   {/* Quantity Controls */}
-                  <div className="flex items-center justify-between mb-3 bg-gray-50 rounded-lg p-2">
+                  <div className="flex items-center justify-between mb-3 bg-gray-50 rounded-lg p-2 mt-auto">
                     <button
                       onClick={() => handleQuantityChange(product.id, -1)}
                       className="cursor-pointer w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors text-lg"
@@ -703,23 +638,110 @@ function ProductsContent() {
                   </div>
 
                   {/* Action Button */}
-                  {hasQuantity ? (
-                    <button
-                      onClick={() => handleUpdateCart(product)}
-                      disabled={cartApiLoadingId === product.id}
-                      className="cursor-pointer w-full h-11 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors"
-                    >
-                      {cartApiLoadingId === product.id ? "Updating..." : "Update Cart"}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleAddToCart(product)}
-                      disabled={quantity <= 0 || cartApiLoadingId === product.id}
-                      className="cursor-pointer w-full h-11 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
-                    >
-                      {cartApiLoadingId === product.id ? "Adding..." : "Add to Cart"}
-                    </button>
-                  )}
+                  <div className="mb-2">
+                    {hasQuantity ? (
+                      <button
+                        onClick={() => handleUpdateCart(product)}
+                        disabled={cartApiLoadingId === product.id}
+                        className="cursor-pointer w-full h-11 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors"
+                      >
+                        {cartApiLoadingId === product.id ? "Updating..." : "Update Cart"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleAddToCart(product)}
+                        disabled={quantity <= 0 || cartApiLoadingId === product.id}
+                        className="cursor-pointer w-full h-11 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+                      >
+                        {cartApiLoadingId === product.id ? "Adding..." : "Add to Cart"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Toggle Rest of Details Button */}
+                  <button
+                    onClick={() => setExpandedProducts(prev => ({ ...prev, [product.id]: !prev[product.id] }))}
+                    className="cursor-pointer flex justify-center items-center pt-3 pb-1 w-full text-gray-500 hover:text-gray-700 transition"
+                  >
+                    <span className="text-sm mr-1">{expandedProducts[product.id] ? "Hide Details" : "Show Details"}</span>
+                    <svg className={`w-5 h-5 transform transition-transform ${expandedProducts[product.id] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  <div className={`overflow-hidden transition-all duration-300 ${expandedProducts[product.id] ? 'max-h-[1000px] opacity-100 mt-1 border-t border-gray-100 pt-3' : 'max-h-0 opacity-0'}`}>
+                    <h3 className="text-base font-semibold text-gray-900 mb-2">
+                      {product.name}
+                    </h3>
+
+                    <div className="flex items-center justify-between mb-3 mt-1">
+                      <span className="text-xl font-bold text-blue-600">
+                        {currentPrice}
+                      </span>
+                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                        {product.sku}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-gray-600 mb-1">
+                      {product.description}
+                    </p>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Stock: {product.stock} units available
+                    </p>
+
+                    {/* Unit Price */}
+                    <div className="mb-3">
+                      <p className="text-xs text-gray-400 mb-1">Unit Price</p>
+                      <div className="flex items-center justify-between">
+                        {isEditingPrice ? (
+                          <input
+                            type="text"
+                            value={currentPrice}
+                            onChange={(e) => handlePriceEdit(product.id, e.target.value)}
+                            onBlur={() => setEditingPrice(null)}
+                            className="text-lg font-bold text-gray-900 border-b-2 border-blue-500 focus:outline-none w-24"
+                            autoFocus
+                          />
+                        ) : (
+                          <p className="text-lg font-bold text-gray-900">
+                            {currentPrice}
+                          </p>
+                        )}
+                        <button
+                          onClick={() => togglePriceEdit(product.id)}
+                          className="cursor-pointer text-xs text-gray-400 hover:text-blue-600"
+                        >
+                          Tap to edit
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Unit of Measure – sirf us product ka API UOM */}
+                    <div className="mb-3">
+                      <Dropdown
+                        label="Unit of Measure"
+                        name={`unit-${product.id}`}
+                        value={selectedUnits[product.id] ?? product.unitOfMeasure}
+                        onChange={(e) => setSelectedUnits(prev => ({ ...prev, [product.id]: e.target.value }))}
+                        options={[
+                          { value: product.unitOfMeasure, label: product.unitOfMeasure },
+                        ]}
+                      />
+                    </div>
+
+                    {/* Comments/Remarks – API me comments bhejte hain */}
+                    <div className="mb-1">
+                      <p className="text-xs text-gray-400 mb-1">Comments / Remarks</p>
+                      <textarea
+                        placeholder="Add remark if any..."
+                        rows={2}
+                        value={productComments[product.id] ?? ""}
+                        onChange={(e) => setProductComments((prev) => ({ ...prev, [product.id]: e.target.value }))}
+                        className="w-full px-3 py-2 text-sm text-gray-600 placeholder-gray-400 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             );
