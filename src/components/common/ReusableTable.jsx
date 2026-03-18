@@ -18,52 +18,53 @@ export default function ReusableTable({
     setCurrentPage(page);
   };
 
-  // Slice data for current page
-  const paginatedData = data.slice(
-    (currentPage - 1) * rowsPerPage,
-    currentPage * rowsPerPage
-  );
+  // Slice data for current page ONLY if pagination is requested
+  const paginatedData = showPagination 
+    ? data.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
+    : data;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* Table Container with Horizontal Scroll */}
       <div className="overflow-x-auto table-scroll" style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
-        <table style={{ minWidth: columns.reduce((acc, col) => acc + (parseInt(col.minWidth) || 120), 0) + 'px', width: '100%', borderCollapse: 'collapse' }}>
-          {/* Table Header */}
-          <thead className="bg-blue-50 border-b border-gray-200">
-            <tr>
-              {columns.map((col) => (
-                <th
-                  key={col.accessor}
-                  className="text-sm font-semibold text-blue-700 whitespace-nowrap text-left px-4 py-4"
-                  style={{ minWidth: col.minWidth || '100px', width: col.width || 'auto' }}
-                >
-                  {col.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          {/* Table Body */}
-          <tbody className="divide-y divide-gray-200">
-            {paginatedData.map((row, idx) => (
-              <tr
-                key={idx}
-                className="hover:bg-gray-50 transition-colors"
-              >
+        <div className="max-h-[600px] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
+          <table style={{ minWidth: columns.reduce((acc, col) => acc + (parseInt(col.minWidth) || 120), 0) + 'px', width: '100%', borderCollapse: 'collapse' }}>
+            {/* Table Header */}
+            <thead className="bg-blue-50 border-b border-gray-200 sticky top-0 z-10">
+              <tr>
                 {columns.map((col) => (
-                  <td
+                  <th
                     key={col.accessor}
-                    className="text-sm px-4 py-4"
+                    className="text-sm font-semibold text-blue-700 whitespace-nowrap text-left px-4 py-4"
                     style={{ minWidth: col.minWidth || '100px', width: col.width || 'auto' }}
                   >
-                    {col.render ? col.render(row) : row[col.accessor]}
-                  </td>
+                    {col.header}
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+
+            {/* Table Body */}
+            <tbody className="divide-y divide-gray-200">
+              {paginatedData.map((row, idx) => (
+                <tr
+                  key={idx}
+                  className="hover:bg-gray-50 transition-colors"
+                >
+                  {columns.map((col) => (
+                    <td
+                      key={col.accessor}
+                      className="text-sm px-4 py-4"
+                      style={{ minWidth: col.minWidth || '100px', width: col.width || 'auto' }}
+                    >
+                      {col.render ? col.render(row) : row[col.accessor]}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Total Section */}

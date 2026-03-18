@@ -49,9 +49,9 @@ export default function Dropdown({
           type="button"
           onClick={() => !disabled && setIsOpen(!isOpen)}
           disabled={disabled}
-          className={`cursor-pointer w-full px-4 py-3 pr-10 bg-white border text-left focus:outline-none focus:ring-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-[15px] ${error
-            ? "border-red-300 focus:ring-red-500 focus:border-transparent"
-            : "border-gray-200 focus:ring-blue-500 focus:border-transparent hover:border-gray-300"
+          className={`cursor-pointer w-full px-4 py-3 pr-10 bg-white border text-left focus:outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-[15px] ${error
+            ? "border-red-300 focus:ring-red-500"
+            : "border-gray-200 focus:ring-blue-500 hover:border-gray-300"
             } ${!selectedOption ? "text-gray-400" : "text-gray-900"}`}
         >
           {displayText}

@@ -86,11 +86,10 @@ export default function Header({ toggleSidebar }) {
       )}
       {hasMounted && isOnline && (syncMessage || isSyncing) && (
         <div
-          className={`text-center text-xs py-1.5 px-4 flex items-center justify-center gap-2 ${
-            isSyncing
+          className={`text-center text-xs py-1.5 px-4 flex items-center justify-center gap-2 ${isSyncing
               ? "bg-blue-500 text-white"
               : "bg-green-50 text-green-800 border-b border-green-200"
-          }`}
+            }`}
         >
           {isSyncing ? (
             <>
@@ -129,7 +128,7 @@ export default function Header({ toggleSidebar }) {
           )}
         </div>
       )}
-      <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 sticky top-0 z-10">
+      <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 sticky top-0 z-100">
         {/* Hidden file input */}
         <input
           type="file"
@@ -154,19 +153,18 @@ export default function Header({ toggleSidebar }) {
           {/* Online/Offline + Refresh icons (neutral until mounted to avoid hydration mismatch) */}
           <div className="hidden sm:flex items-center gap-2">
             <div
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg ${
-                !hasMounted
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg ${!hasMounted
                   ? "bg-gray-100 text-gray-500"
                   : isOnline
-                  ? "bg-green-50 text-green-700"
-                  : "bg-amber-50 text-amber-700"
-              }`}
+                    ? "bg-green-50 text-green-700"
+                    : "bg-amber-50 text-amber-700"
+                }`}
               title={
                 !hasMounted
                   ? ""
                   : isOnline
-                  ? "Online"
-                  : "Offline – using cached data"
+                    ? "Online"
+                    : "Offline – using cached data"
               }
             >
               {!hasMounted ? (
@@ -364,23 +362,21 @@ export default function Header({ toggleSidebar }) {
           {/* Mobile: Online status + Refresh + Menu (neutral until mounted to avoid hydration mismatch) */}
           <div className="sm:hidden flex items-center gap-2">
             <div
-              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs ${
-                !hasMounted
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs ${!hasMounted
                   ? "bg-gray-100 text-gray-500"
                   : isOnline
-                  ? "bg-green-50 text-green-700"
-                  : "bg-amber-50 text-amber-700"
-              }`}
+                    ? "bg-green-50 text-green-700"
+                    : "bg-amber-50 text-amber-700"
+                }`}
               title={!hasMounted ? "" : isOnline ? "Online" : "Offline"}
             >
               <span
-                className={`w-2 h-2 rounded-full ${
-                  !hasMounted
+                className={`w-2 h-2 rounded-full ${!hasMounted
                     ? "bg-gray-400"
                     : isOnline
-                    ? "bg-green-500"
-                    : "bg-amber-500"
-                }`}
+                      ? "bg-green-500"
+                      : "bg-amber-500"
+                  }`}
               />
               {!hasMounted ? "—" : isOnline ? "Online" : "Offline"}
             </div>
@@ -452,9 +448,8 @@ export default function Header({ toggleSidebar }) {
 
       {/* Mobile Sidebar */}
       <div
-        className={`sm:hidden fixed top-0 right-0 h-full w-72 bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out ${
-          isMobileMenuOpen ? "translate-x-0" : "translate-x-full"
-        }`}
+        className={`sm:hidden fixed top-0 right-0 h-full w-72 bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? "translate-x-0" : "translate-x-full"
+          }`}
       >
         {/* Close Button */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">

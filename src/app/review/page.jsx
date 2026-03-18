@@ -355,7 +355,7 @@ function OrderReviewContent() {
       pay_terms: payTerms,
       discount_val: discountVal,
       remarks: remarks,
-    }).catch(() => {});
+    }).catch(() => { });
   }, [trnsId, isOfflineOrder, deliveryDate, payTerms, discountVal, remarks]);
 
   const handleSubmitOrder = async () => {
@@ -396,23 +396,23 @@ function OrderReviewContent() {
   const storedPartyCode = typeof window !== "undefined" ? getSaleOrderPartyCode() : null;
   const baseInfo = customer
     ? {
-        name: customer.CUSTOMER_NAME ?? customer.name ?? customer.customer_name ?? "—",
-        accountId: customer.SHORT_CODE ?? customer.PARTY_CODE ?? customer.party_code ?? customer.customer_id ?? customer.account_id ?? storedPartyCode ?? "—",
-        deliveryArea: customer.ADRES ?? customer.ADDRESS ?? customer.address ?? customer.delivery_address ?? ((typeof customer.ADRES === "string" ? customer.ADRES : [customer.ST, customer.ADRES, customer.DIVISION, customer.PROVINCES].filter(Boolean).join(", ")) || "—"),
-        paymentTerms: customer.pay_terms ?? customer.PAY_TERMS ?? customer.payment_terms ?? "—",
-      }
+      name: customer.CUSTOMER_NAME ?? customer.name ?? customer.customer_name ?? "—",
+      accountId: customer.SHORT_CODE ?? customer.PARTY_CODE ?? customer.party_code ?? customer.customer_id ?? customer.account_id ?? storedPartyCode ?? "—",
+      deliveryArea: customer.ADRES ?? customer.ADDRESS ?? customer.address ?? customer.delivery_address ?? ((typeof customer.ADRES === "string" ? customer.ADRES : [customer.ST, customer.ADRES, customer.DIVISION, customer.PROVINCES].filter(Boolean).join(", ")) || "—"),
+      paymentTerms: customer.pay_terms ?? customer.PAY_TERMS ?? customer.payment_terms ?? "—",
+    }
     : {
-        name: "—",
-        accountId: storedPartyCode ?? "—",
-        deliveryArea: "—",
-        paymentTerms: "—",
-      };
+      name: "—",
+      accountId: storedPartyCode ?? "—",
+      deliveryArea: "—",
+      paymentTerms: "—",
+    };
   const customerInfo = customerEnrich
     ? {
-        ...baseInfo,
-        deliveryArea: baseInfo.deliveryArea && baseInfo.deliveryArea !== "—" ? baseInfo.deliveryArea : customerEnrich.deliveryArea,
-        paymentTerms: baseInfo.paymentTerms && baseInfo.paymentTerms !== "—" ? baseInfo.paymentTerms : customerEnrich.paymentTerms,
-      }
+      ...baseInfo,
+      deliveryArea: baseInfo.deliveryArea && baseInfo.deliveryArea !== "—" ? baseInfo.deliveryArea : customerEnrich.deliveryArea,
+      paymentTerms: baseInfo.paymentTerms && baseInfo.paymentTerms !== "—" ? baseInfo.paymentTerms : customerEnrich.paymentTerms,
+    }
     : baseInfo;
 
   if (loading) {
@@ -604,14 +604,14 @@ function OrderReviewContent() {
                       <span className="text-gray-600">Subtotal</span>
                       <span className="font-medium text-gray-900">{formatPrice(subtotal)}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
+                    {/* <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Tax</span>
                       <span className="font-medium text-gray-900">{formatPrice(tax)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Discount</span>
                       <span className="font-medium text-green-600">-{formatPrice(discountAmount)}</span>
-                    </div>
+                    </div> */}
                     <div className="flex justify-between pt-3 border-t border-gray-200">
                       <span className="text-lg font-semibold text-gray-900">Grand Total</span>
                       <span className="text-xl font-bold text-gray-900">{formatPrice(displayGrandTotal)}</span>

@@ -507,14 +507,14 @@ export default function Cart() {
                     <span className="text-gray-600">Subtotal ({totalItems} items)</span>
                     <span className="font-medium text-gray-900">{formatPrice(subtotal)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
+                  {/* <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">Tax</span>
                     <span className="font-medium text-gray-900">{formatPrice(tax)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">Discount</span>
                     <span className="font-medium text-green-600">-{formatPrice(discount)}</span>
-                  </div>
+                  </div> */}
                 </div>
                 <div className="border-t border-gray-200 pt-4 mb-6">
                   <div className="flex items-center justify-between">
