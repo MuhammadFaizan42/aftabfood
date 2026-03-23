@@ -223,6 +223,7 @@ function CustomerDashboardClient() {
           amount: formatAmount(summary.total_sales_amount),
           subtext: `${summary.total_orders ?? 0} orders`,
           trend: "neutral",
+          hasLink: true,
         },
         {
           title: "Payable Amount",
@@ -757,7 +758,17 @@ function CustomerDashboardClient() {
                 {metric.hasLink && (
                   <Link
                     href={
-                      metric.title === "Receivable Amount"
+                      metric.title === "Total Sales Amount"
+                        ? `/existing-orders?party_code=${encodeURIComponent(
+                            partyCode || "",
+                          )}${
+                            customerInfo.name && customerInfo.name !== "—"
+                              ? `&customer_name=${encodeURIComponent(
+                                  customerInfo.name,
+                                )}`
+                              : ""
+                          }`
+                        : metric.title === "Receivable Amount"
                         ? `/receivable-amount?party_code=${encodeURIComponent(
                             partyCode || "",
                           )}`
