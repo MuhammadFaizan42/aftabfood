@@ -592,6 +592,14 @@ function ProductsContent() {
               >
                 {/* Product Image */}
                 <div className="relative w-full pb-[100%] bg-white border-b border-gray-200 overflow-hidden shrink-0">
+                  {!product.inStock && (
+                    <span
+                      className="absolute top-2 left-2 z-10 rounded-md bg-red-600 text-white text-[10px] sm:text-xs font-semibold uppercase tracking-wide px-2 py-1 shadow-md pointer-events-none"
+                      aria-label="Out of stock"
+                    >
+                      Out of stock
+                    </span>
+                  )}
                   <div className="absolute inset-0 flex items-center justify-center">
                     <img
                       src={product.image || DEFAULT_PRODUCT_IMAGE}

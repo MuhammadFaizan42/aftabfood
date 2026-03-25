@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getExistingOrders, getOrderReview, getOrderSummary, addToCart } from "@/services/shetApi";
+import { getOrderLineItems } from "@/lib/orderLineItems";
 import { setCartTrnsId, setSaleOrderPartyCode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { cacheExistingOrders, getCachedExistingOrders, getOfflineOrdersFromStore } from "@/lib/offline/bootstrapLoader";
@@ -74,7 +75,7 @@ function buildOrderShareText(row) {
 }
 
 function mapOrderDetails(res) {
-  const d = res?.data ?? res;
+  const d = res?.data?.data ?? res?.data ?? res;
   if (!d || typeof d !== "object") return null;
   const rawCustomer = d.customer ?? d.customer_info ?? d.party ?? {};
   const customer = {
@@ -106,21 +107,32 @@ function mapOrderDetails(res) {
     CONT_NUM: rawCustomer.CONT_NUM ?? rawCustomer.contactNum ?? rawCustomer.mobile,
   };
   const rawItems =
-    d.items ?? d.lines ?? d.order_items ?? d.cart ?? d.line_items ?? (Array.isArray(d) ? d : []);
+    d.items ??
+    d.lines ??
+    d.cart ??
+    d.order_items ??
+    d.line_items ??
+    d.data?.items ??
+    d.data?.lines ??
+    d.data?.cart ??
+    d.data?.order_items ??
+    d.data?.line_items ??
+    (Array.isArray(d) ? d : []);
   const items = (Array.isArray(rawItems) ? rawItems : []).map((r) => ({
     name: r.product_name ?? r.PRODUCT_NAME ?? r.item_name ?? r.ITEM_NAME ?? r.name ?? "—",
     quantity: Number(r.qty ?? r.quantity ?? r.QTY ?? 0) || 0,
     unitPrice: Number(r.unit_price ?? r.UNIT_PRICE ?? r.ITEM_RATE ?? r.price ?? 0) || 0,
     total:
-      Number(r.line_total ?? r.LINE_TOTAL ?? r.total ?? r.amount ?? 0) || 0,
+      Number(r.line_total ?? r.LINE_TOTAL ?? r.total ?? r.LC_AMT ?? r.amount ?? 0) || 0,
   }));
   const subtotal =
-    Number(d.subtotal ?? d.sub_total ?? 0) ||
+    Number(d.subtotal ?? d.sub_total ?? d.SUBTOTAL ?? d.data?.subtotal ?? d.data?.sub_total ?? 0) ||
     items.reduce((s, r) => s + (r.total || r.quantity * r.unitPrice || 0), 0);
-  const tax = Number(d.tax ?? 0) || 0;
-  const discount = Number(d.discount ?? 0) || 0;
+  const tax = Number(d.tax ?? d.TAX ?? d.data?.tax ?? 0) || 0;
+  const discount = Number(d.discount ?? d.DISCOUNT ?? d.data?.discount ?? 0) || 0;
   const grandTotal =
-    Number(d.grand_total ?? d.total ?? 0) || subtotal + tax - discount;
+    Number(d.grand_total ?? d.total ?? d.GRAND_TOTAL ?? d.data?.grand_total ?? d.data?.total ?? 0) ||
+    subtotal + tax - discount;
   return { customer, items, subtotal, tax, discount, grandTotal };
 }
 
@@ -147,32 +159,6 @@ function buildDetailedShareText(displayId, row, orderDetails) {
   if (Number(discount ?? 0) !== 0) text += `Discount: £${Number(discount).toFixed(2)}\n`;
   text += `Grand Total: £${Number(grandTotal ?? 0).toFixed(2)}\n`;
   return text;
-}
-
-/** Extract line items { itemId, qty, unitPrice } from order_review or order_summary response */
-function getOrderLineItems(res) {
-  if (!res?.data) return [];
-  const d = res.data;
-  const rawItems = d.items ?? d.lines ?? d.order_items ?? d.cart ?? d.line_items ?? (Array.isArray(d) ? d : []);
-  const arr = Array.isArray(rawItems) ? rawItems : [];
-  return arr.map((r) => {
-    const itemId = String(r.item_id ?? r.product_id ?? r.PRODUCT_ID ?? r.ITEM_ID ?? r.id ?? "").trim();
-    const itemName = String(
-      r.item_name ??
-        r.product_name ??
-        r.ITEM_NAME ??
-        r.PRODUCT_NAME ??
-        r.name ??
-        itemId ??
-        "",
-    ).trim();
-    const image = String(r.image ?? r.IMAGE_URL ?? r.image_url ?? r.IMAGE ?? "").trim();
-    const sku = String(r.sku ?? r.SKU ?? r.ITEM_CODE ?? r.CODE ?? itemId ?? "—").trim();
-    const qty = Number(r.qty ?? r.quantity ?? r.QTY ?? 0) || 0;
-    const unitPrice = Number(r.unit_price ?? r.UNIT_PRICE ?? r.ITEM_RATE ?? r.price ?? 0) || 0;
-    const lineAmount = Number(r.amount ?? r.line_total ?? r.LINE_TOTAL ?? (qty * unitPrice)) || 0;
-    return { itemId, itemName, sku, image, qty, unitPrice, lineAmount };
-  }).filter((it) => it.itemId && it.qty > 0);
 }
 
 function mapApiOrders(res) {

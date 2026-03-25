@@ -1,11 +1,19 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
-import { getPartySaleInvDashboard, createSalesVisit, getSalesVisitHistory } from "@/services/shetApi";
-import { setSaleOrderPartyCode, clearCartTrnsId } from "@/lib/api";
+import {
+  getPartySaleInvDashboard,
+  createSalesVisit,
+  getSalesVisitHistory,
+  getOrderReview,
+  getOrderSummary,
+  addToCart,
+} from "@/services/shetApi";
+import { setSaleOrderPartyCode, clearCartTrnsId, setCartTrnsId } from "@/lib/api";
+import { getOrderLineItems } from "@/lib/orderLineItems";
 import { cacheCustomerDashboard, getCachedCustomerDashboard, getCachedCustomers, cacheVisitHistory, getCachedVisitHistory } from "@/lib/offline/bootstrapLoader";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { saveVisit, NO_ORDER_REASONS, getVisitsByPartyCode, getReasonLabel } from "@/lib/visits";
@@ -27,6 +35,7 @@ function formatAmount(val) {
 }
 
 function CustomerDashboardClient() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const partyCode = searchParams.get("party_code");
   const isOnline = useOnlineStatus();
@@ -48,6 +57,64 @@ function CustomerDashboardClient() {
   const [visitSubmitError, setVisitSubmitError] = useState(null);
   const [recentVisits, setRecentVisits] = useState([]);
   const [showCachedBanner, setShowCachedBanner] = useState(false);
+  const [duplicateLoading, setDuplicateLoading] = useState(null);
+  const [duplicateError, setDuplicateError] = useState(null);
+
+  const handleDuplicateOrder = React.useCallback(
+    async (row) => {
+      const orderId = row.id;
+      const pc = row.partyCode ?? partyCode;
+      if (!pc) {
+        setDuplicateError("Customer not found for this order.");
+        return;
+      }
+      if (orderId == null || orderId === "") {
+        setDuplicateError("This order has no transaction ID to duplicate.");
+        return;
+      }
+      if (String(orderId).startsWith("offline_")) {
+        setDuplicateError("Duplicate when online. Opening order in cart.");
+        setSaleOrderPartyCode(pc);
+        setCartTrnsId(orderId);
+        router.push("/cart");
+        return;
+      }
+      setDuplicateLoading(String(orderId));
+      setDuplicateError(null);
+      try {
+        let items = [];
+        try {
+          const res = await getOrderReview(orderId);
+          items = getOrderLineItems(res);
+        } catch {
+          const res = await getOrderSummary(orderId);
+          items = getOrderLineItems(res);
+        }
+        if (!items.length) {
+          setDuplicateError("No items found in this order.");
+          setDuplicateLoading(null);
+          return;
+        }
+        let newTrnsId = null;
+        for (const it of items) {
+          const res = await addToCart(pc, it.itemId, it.qty, newTrnsId, {
+            unit_price: it.unitPrice,
+          });
+          newTrnsId = res?.data?.trns_id ?? res?.trns_id ?? newTrnsId;
+        }
+        if (newTrnsId) setCartTrnsId(newTrnsId);
+        setSaleOrderPartyCode(pc);
+        setDuplicateLoading(null);
+        router.push("/cart");
+      } catch (err) {
+        setDuplicateError(
+          err instanceof Error ? err.message : "Failed to duplicate order.",
+        );
+        setDuplicateLoading(null);
+      }
+    },
+    [partyCode, router],
+  );
 
   const loadDashboard = React.useCallback(async () => {
     if (!partyCode) return;
@@ -198,7 +265,10 @@ function CustomerDashboardClient() {
 
   const customer = data?.customer;
   const summary = data?.summary;
-  const recentOrdersRaw = data?.recent_orders || [];
+  /** Recent Orders card: only `recent_orders` (not `recent_invoices`). */
+  const recentOrdersRaw = Array.isArray(data?.recent_orders)
+    ? data.recent_orders
+    : [];
 
   const customerInfo = customer
     ? {
@@ -248,12 +318,42 @@ function CustomerDashboardClient() {
       ]
     : [];
 
-  const recentOrders = recentOrdersRaw.map((o) => ({
-    orderNum: o.BRV_NUM || "—",
-    date: o.DATED || "—",
-    amount: formatAmount(o.INVOICE_AMT ?? o.LC_AMT),
-    status: o.STATUS || "—",
-  }));
+  const recentOrders = recentOrdersRaw.map((o) => {
+    const trns =
+      o.TRNS_ID ?? o.trns_id ?? o.TRNSID ?? o.transaction_id ?? o.id ?? null;
+    return {
+      id:
+        trns != null && trns !== ""
+          ? String(trns)
+          : null,
+      partyCode:
+        partyCode ??
+        o.CUSTOMER_ID ??
+        o.customer_id ??
+        o.PARTY_CODE ??
+        o.party_code ??
+        null,
+      orderNum:
+        o.ORDER_NO ??
+        o.BRV_NUM ??
+        o.INVOICE_NO ??
+        o.order_number ??
+        o.order_id ??
+        o.ORDER_ID ??
+        "—",
+      date:
+        o.ORDER_DATE ??
+        o.DATED ??
+        o.INVOICE_DATE ??
+        o.order_date ??
+        o.date ??
+        "—",
+      amount: formatAmount(
+        o.ORDER_AMOUNT ?? o.INVOICE_AMT ?? o.LC_AMT ?? o.amount,
+      ),
+      status: o.STATUS_RAW ?? o.STATUS ?? o.status ?? o.order_status ?? "—",
+    };
+  });
 
   const searchLower = searchItems.trim().toLowerCase();
   const filteredRecentOrders = searchLower
@@ -371,30 +471,6 @@ function CustomerDashboardClient() {
         {/* Search and Action Bar */}
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-1">
-            {/* Item Search – filters recent orders list by order #, date or amount */}
-            <div className="relative w-full sm:max-w-xs">
-              <input
-                type="text"
-                placeholder="Search items..."
-                value={searchItems}
-                onChange={(e) => setSearchItems(e.target.value)}
-                className="w-full h-11 pl-10 pr-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              />
-              <svg
-                className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-            </div>
-
             {/* Date Range Filter – sent to API as from_date, to_date (YYYY-MM-DD) */}
             <div className="flex flex-col sm:flex-row sm:items-end gap-3">
               <div className="flex flex-col">
@@ -759,7 +835,7 @@ function CustomerDashboardClient() {
                   <Link
                     href={
                       metric.title === "Total Sales Amount"
-                        ? `/existing-orders?party_code=${encodeURIComponent(
+                        ? `/total-sales-invoices?party_code=${encodeURIComponent(
                             partyCode || "",
                           )}${
                             customerInfo.name && customerInfo.name !== "—"
@@ -896,6 +972,18 @@ function CustomerDashboardClient() {
                 View All
               </Link>
             </div>
+            {duplicateError && (
+              <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-900 text-sm flex justify-between items-start gap-2">
+                <span>{duplicateError}</span>
+                <button
+                  type="button"
+                  onClick={() => setDuplicateError(null)}
+                  className="text-amber-700 hover:text-amber-900 font-medium shrink-0"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             <ReusableTable
               columns={[
                 {
@@ -930,26 +1018,43 @@ function CustomerDashboardClient() {
                   header: "Status",
                   accessor: "status",
                   width: "130px",
-                  render: (row) => (
-                    <span
-                      className={`inline-flex items-center text-xs font-medium px-2.5 py-1 rounded ${
-                        row.status === "Completed"
-                          ? "text-green-700 bg-green-50"
-                          : "text-gray-500 bg-gray-100"
-                      }`}
-                    >
-                      {row.status}
-                    </span>
-                  ),
+                  render: (row) => {
+                    const s = String(row.status || "").trim();
+                    const upper = s.toUpperCase();
+                    const badgeClass =
+                      upper === "COMPLETED" || upper === "SUBMITTED"
+                        ? "text-green-700 bg-green-50"
+                        : upper === "DRAFT"
+                          ? "text-amber-700 bg-amber-50"
+                          : /fast/i.test(s)
+                            ? "text-blue-700 bg-blue-50"
+                            : "text-gray-600 bg-gray-100";
+                    return (
+                      <span
+                        className={`inline-flex items-center text-xs font-medium px-2.5 py-1 rounded ${badgeClass}`}
+                      >
+                        {row.status}
+                      </span>
+                    );
+                  },
                 },
                 {
                   header: "Action",
                   accessor: "action",
                   width: "140px",
                   minWidth: "140px",
-                  render: (row) => (
-                    <Link href="/cart">
-                      <button className="cursor-pointer flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50 transition-colors">
+                  render: (row) => {
+                    const busy =
+                      duplicateLoading != null &&
+                      String(duplicateLoading) === String(row.id);
+                    const disabled = !row.id || busy;
+                    return (
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => handleDuplicateOrder(row)}
+                        className="cursor-pointer flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
                         <svg
                           className="w-3 h-3"
                           fill="none"
@@ -963,10 +1068,10 @@ function CustomerDashboardClient() {
                             d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                           />
                         </svg>
-                        Duplicate
+                        {busy ? "…" : "Duplicate"}
                       </button>
-                    </Link>
-                  ),
+                    );
+                  },
                 },
               ]}
               data={filteredRecentOrders}

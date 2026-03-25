@@ -22,12 +22,8 @@ function VisitHistoryContent() {
   const customerNameParam = searchParams.get("customer_name") || "";
   const isOnline = useOnlineStatus();
 
-  const [fromDate, setFromDate] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - 1);
-    return d.toISOString().slice(0, 10);
-  });
-  const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [visits, setVisits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -42,7 +38,11 @@ function VisitHistoryContent() {
         try {
           await cacheVisitHistory(partyCodeParam, res?.data ?? res);
         } catch { /* ignore */ }
-        const items = res?.data?.items;
+        const rawData = res?.data;
+        const items =
+          rawData?.items ??
+          rawData?.data?.items ??
+          (Array.isArray(rawData) ? rawData : []);
         if (Array.isArray(items)) {
           const from = String(fromDate || "").slice(0, 10);
           const to = String(toDate || "").slice(0, 10);
@@ -99,7 +99,7 @@ function VisitHistoryContent() {
           });
         }
         list = list.map((v) => ({ ...v, customer_name: v.customer_name || customerNameParam || "—" }));
-      } else {
+      } else if (!partyCodeParam) {
         list = await getVisits(fromDate || undefined, toDate || undefined);
       }
       setVisits(list);
@@ -204,8 +204,8 @@ function VisitHistoryContent() {
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Visit History</h1>
         <p className="text-sm text-gray-500 mb-6">
           {partyCodeParam
-            ? "Visits for this customer. Use date range to filter."
-            : "All customer visits with or without order. Use date range to filter."}
+            ? "Visits for this customer. Optionally choose a from/to range and click Apply to narrow the list."
+            : "All customer visits with or without order. Optionally choose a from/to range and click Apply to narrow the list."}
         </p>
 
         <div className="bg-white rounded-lg shadow-sm p-4 mb-6 flex flex-wrap items-end gap-4">
@@ -245,7 +245,9 @@ function VisitHistoryContent() {
           <div className="text-center py-12 text-gray-500">Loading visit history...</div>
         ) : tableData.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-            <p className="text-gray-600 mb-2">No visits in this date range.</p>
+            <p className="text-gray-600 mb-2">
+              {fromDate || toDate ? "No visits in this date range." : "No visits found."}
+            </p>
             <p className="text-sm text-gray-500">
               Record &quot;No order – Add remarks&quot; from a customer dashboard to see entries here.
             </p>
