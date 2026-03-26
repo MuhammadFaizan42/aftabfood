@@ -208,7 +208,12 @@ function ProductsContent() {
 
   useEffect(() => {
     const q = products.reduce((acc, p) => ({ ...acc, [p.id]: productQuantities[p.id] ?? 0 }), {});
-    const p = products.reduce((acc, p) => ({ ...acc, [p.id]: editablePrices[p.id] ?? p.price }), {});
+    const p = products.reduce((acc, p) => ({
+      ...acc,
+      [p.id]:
+        editablePrices[p.id] ??
+        Number(String(p.price ?? "").replace(/[^\d.-]/g, "") || 0).toFixed(2),
+    }), {});
     const u = products.reduce((acc, p) => ({ ...acc, [p.id]: selectedUnits[p.id] ?? p.unitOfMeasure }), {});
     const c = products.reduce((acc, p) => ({ ...acc, [p.id]: productComments[p.id] ?? "" }), {});
     setProductQuantities((prev) => ({ ...q, ...prev }));
@@ -583,7 +588,7 @@ function ProductsContent() {
             const quantity = productQuantities[product.id] || 0;
             const hasQuantity = quantity > 0;
             const isEditingPrice = editingPrice === product.id;
-            const currentPrice = editablePrices[product.id] || product.price;
+            const currentPrice = editablePrices[product.id] || Number(String(product.price ?? "").replace(/[^\d.-]/g, "") || 0).toFixed(2);
 
             return (
               <div
@@ -684,7 +689,7 @@ function ProductsContent() {
 
                     <div className="flex items-center justify-between mb-3 mt-1">
                       <span className="text-xl font-bold text-blue-600">
-                        {currentPrice}
+                        £{Number(currentPrice || 0).toFixed(2)}
                       </span>
                       <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
                         {product.sku}
@@ -703,17 +708,25 @@ function ProductsContent() {
                       <p className="text-xs text-gray-400 mb-1">Unit Price</p>
                       <div className="flex items-center justify-between">
                         {isEditingPrice ? (
-                          <input
-                            type="text"
-                            value={currentPrice}
-                            onChange={(e) => handlePriceEdit(product.id, e.target.value)}
-                            onBlur={() => setEditingPrice(null)}
-                            className="text-lg font-bold text-gray-900 border-b-2 border-blue-500 focus:outline-none w-24"
-                            autoFocus
-                          />
+                          <div className="flex items-center border-b-2 border-blue-500">
+                            <span className="text-lg font-bold text-gray-900 pr-1">£</span>
+                            <input
+                              type="text"
+                              value={currentPrice}
+                              onChange={(e) =>
+                                handlePriceEdit(
+                                  product.id,
+                                  e.target.value.replace(/[^\d.]/g, ""),
+                                )
+                              }
+                              onBlur={() => setEditingPrice(null)}
+                              className="text-lg font-bold text-gray-900 focus:outline-none w-20"
+                              autoFocus
+                            />
+                          </div>
                         ) : (
                           <p className="text-lg font-bold text-gray-900">
-                            {currentPrice}
+                            £{Number(currentPrice || 0).toFixed(2)}
                           </p>
                         )}
                         <button

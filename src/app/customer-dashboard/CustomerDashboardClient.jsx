@@ -34,6 +34,15 @@ function formatAmount(val) {
   })}`;
 }
 
+function formatPrice(val) {
+  const n = Number(val);
+  if (Number.isNaN(n)) return "£0.00";
+  return `£${n.toLocaleString("en-GB", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 function CustomerDashboardClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -59,6 +68,9 @@ function CustomerDashboardClient() {
   const [showCachedBanner, setShowCachedBanner] = useState(false);
   const [duplicateLoading, setDuplicateLoading] = useState(null);
   const [duplicateError, setDuplicateError] = useState(null);
+  const [viewLoading, setViewLoading] = useState(null);
+  const [viewError, setViewError] = useState(null);
+  const [viewOrder, setViewOrder] = useState(null);
 
   const handleDuplicateOrder = React.useCallback(
     async (row) => {
@@ -115,6 +127,42 @@ function CustomerDashboardClient() {
     },
     [partyCode, router],
   );
+
+  const handleViewOrder = React.useCallback(async (row) => {
+    const orderId = row.id;
+    if (orderId == null || orderId === "") {
+      setViewError("This order has no transaction ID to view.");
+      setViewOrder(null);
+      return;
+    }
+    setViewLoading(String(orderId));
+    setViewError(null);
+    try {
+      let items = [];
+      try {
+        const res = await getOrderReview(orderId);
+        items = getOrderLineItems(res);
+      } catch {
+        const res = await getOrderSummary(orderId);
+        items = getOrderLineItems(res);
+      }
+      if (!items.length) {
+        setViewError("No item details found for this order.");
+      }
+      setViewOrder({
+        orderId: row.orderNum,
+        date: row.date,
+        amount: row.amount,
+        status: row.status,
+        items,
+      });
+    } catch (err) {
+      setViewError(err instanceof Error ? err.message : "Failed to load order details.");
+      setViewOrder(null);
+    } finally {
+      setViewLoading(null);
+    }
+  }, []);
 
   const loadDashboard = React.useCallback(async () => {
     if (!partyCode) return;
@@ -1041,35 +1089,67 @@ function CustomerDashboardClient() {
                 {
                   header: "Action",
                   accessor: "action",
-                  width: "140px",
-                  minWidth: "140px",
+                  width: "220px",
+                  minWidth: "220px",
                   render: (row) => {
-                    const busy =
+                    const duplicateBusy =
                       duplicateLoading != null &&
                       String(duplicateLoading) === String(row.id);
-                    const disabled = !row.id || busy;
+                    const viewBusy =
+                      viewLoading != null &&
+                      String(viewLoading) === String(row.id);
+                    const disabled = !row.id;
                     return (
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => handleDuplicateOrder(row)}
-                        className="cursor-pointer flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <svg
-                          className="w-3 h-3"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={disabled || viewBusy}
+                          onClick={() => handleViewOrder(row)}
+                          className="cursor-pointer inline-flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900 border border-blue-200 rounded px-3 py-1.5 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                          />
-                        </svg>
-                        {busy ? "…" : "Duplicate"}
-                      </button>
+                          <svg
+                            className="w-3.5 h-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                            />
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                            />
+                          </svg>
+                          {viewBusy ? "…" : "View"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={disabled || duplicateBusy}
+                          onClick={() => handleDuplicateOrder(row)}
+                          className="cursor-pointer inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <svg
+                            className="w-3 h-3"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                            />
+                          </svg>
+                          {duplicateBusy ? "…" : "Duplicate"}
+                        </button>
+                      </div>
                     );
                   },
                 },
@@ -1149,6 +1229,130 @@ function CustomerDashboardClient() {
             />
           </div>
         </div>
+
+        {/* Order View Modal */}
+        {(viewOrder || viewError || viewLoading) && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-4xl bg-white rounded-xl shadow-xl border border-gray-200 max-h-[90vh] overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Order Details
+                  </h3>
+                  {viewOrder && (
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {viewOrder.orderId} · {viewOrder.date}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewOrder(null);
+                    setViewError(null);
+                    setViewLoading(null);
+                  }}
+                  className="text-gray-500 hover:text-gray-900 text-xl leading-none cursor-pointer"
+                  aria-label="Close view modal"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="px-5 py-4 overflow-y-auto max-h-[calc(90vh-72px)]">
+                {viewLoading ? (
+                  <div className="text-sm text-gray-500">Loading order details...</div>
+                ) : viewError ? (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-900 text-sm">
+                    {viewError}
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                      <div className="lg:col-span-2 space-y-3">
+                        {(viewOrder?.items || []).map((it, idx) => (
+                          <div
+                            key={`${it.itemId}-${idx}`}
+                            className="border border-gray-200 rounded-lg p-3"
+                          >
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                                <img
+                                  src={it.image || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect fill='%23e5e7eb' width='64' height='64'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-size='24'%3E📦%3C/text%3E%3C/svg%3E"}
+                                  alt={it.itemName || "Item"}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    e.currentTarget.onerror = null;
+                                    e.currentTarget.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect fill='%23e5e7eb' width='64' height='64'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-size='24'%3E📦%3C/text%3E%3C/svg%3E";
+                                  }}
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-medium text-gray-900 truncate">
+                                  {it.itemName || "—"}
+                                </p>
+                                <p className="text-sm text-gray-500 leading-tight">SKU: {it.sku || "—"}</p>
+                                <p className="text-sm text-gray-400 leading-tight">Item ID: {it.itemId || "—"}</p>
+                              </div>
+                              </div>
+                              <div className="grid grid-cols-3 gap-4 text-right min-w-[260px]">
+                                <div>
+                                  <p className="text-[11px] uppercase tracking-wide text-gray-500">Qty</p>
+                                  <p className="text-sm font-medium text-gray-900">{it.qty ?? 0}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] uppercase tracking-wide text-gray-500">Rate</p>
+                                  <p className="text-sm font-medium text-gray-900">{formatPrice(it.unitPrice)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] uppercase tracking-wide text-gray-500">Total</p>
+                                  <p className="text-sm font-semibold text-gray-900">{formatPrice(it.lineAmount)}</p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {(!viewOrder?.items || viewOrder.items.length === 0) && (
+                          <p className="text-sm text-gray-500">No items found.</p>
+                        )}
+                      </div>
+
+                      <div className="lg:col-span-1">
+                        <div className="border border-gray-200 rounded-lg p-4">
+                          <h4 className="text-base font-semibold text-gray-900 mb-4">Payment Details</h4>
+                          <div className="space-y-3 mb-5">
+                            <div className="flex justify-between items-center text-sm text-gray-600">
+                              <span>Items</span>
+                              <span className="font-semibold text-gray-900">
+                                {(viewOrder?.items || []).reduce((acc, it) => acc + (Number(it.qty) || 0), 0)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm text-gray-600">
+                              <span>Subtotal</span>
+                              <span className="font-semibold text-gray-900">
+                                {formatPrice(
+                                  (viewOrder?.items || []).reduce(
+                                    (acc, it) => acc + (Number(it.lineAmount) || (Number(it.qty) || 0) * (Number(it.unitPrice) || 0)),
+                                    0,
+                                  ),
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="border-t border-gray-200 pt-4 flex justify-between items-center">
+                            <span className="text-sm font-semibold text-gray-900">Order Total</span>
+                            <span className="text-lg font-bold text-gray-900">{viewOrder?.amount || "—"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

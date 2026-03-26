@@ -135,8 +135,8 @@ export async function addToOfflineCart(customerId, item) {
   return cart;
 }
 
-/** Update item qty in offline cart */
-export async function updateOfflineCartItem(itemId, qty) {
+/** Update item qty (and optional unit price) in offline cart */
+export async function updateOfflineCartItem(itemId, qty, options = {}) {
   const cart = await getOfflineCart();
   const idx = cart.items.findIndex(
     (i) => String(i.item_id ?? i.product_id) === String(itemId)
@@ -146,6 +146,12 @@ export async function updateOfflineCartItem(itemId, qty) {
     cart.items.splice(idx, 1);
   } else {
     cart.items[idx].qty = qty;
+    if (options.unitPrice != null && options.unitPrice !== "") {
+      const nextUnitPrice = Number(options.unitPrice);
+      if (Number.isFinite(nextUnitPrice) && nextUnitPrice >= 0) {
+        cart.items[idx].unit_price = nextUnitPrice;
+      }
+    }
   }
   await saveOfflineCart(cart);
   return cart;

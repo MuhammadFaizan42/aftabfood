@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
@@ -97,6 +97,8 @@ export default function Cart() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
+  const [priceDrafts, setPriceDrafts] = useState({});
+  const priceSaveTimersRef = useRef({});
 
   useEffect(() => {
     setHasMounted(true);
@@ -232,6 +234,12 @@ export default function Cart() {
     return () => document.removeEventListener("visibilitychange", handler);
   }, [loadSummary]);
 
+  useEffect(() => {
+    return () => {
+      Object.values(priceSaveTimersRef.current).forEach((timer) => clearTimeout(timer));
+    };
+  }, []);
+
   const rowsToOrderItems = (rows) =>
     (rows || []).map((r) => ({
       id: r.itemIdForApi ?? r.id,
@@ -306,6 +314,121 @@ export default function Cart() {
     const newQty = num === 0 ? 0 : num;
     if (newQty === item.quantity) return;
     updateQuantity(id, newQty - item.quantity);
+  };
+
+  const applyPriceLocally = (id, nextPrice) => {
+    setCartItems((prevRows) => {
+      const newRows = prevRows.map((r) =>
+        r.id === id ? { ...r, price: nextPrice, lineTotal: nextPrice * r.quantity } : r,
+      );
+      const newSubtotal = newRows.reduce((s, r) => s + (r.lineTotal ?? 0), 0);
+      setSubtotal(newSubtotal);
+      setTax(0);
+      setDiscount(0);
+      setGrandTotal(newSubtotal);
+      return newRows;
+    });
+  };
+
+  const persistPrice = async (id, nextPriceRaw) => {
+    if (isCachedOrderReadOnly) return;
+    const item = cartItems.find((i) => i.id === id);
+    if (!item) return;
+    const parsed = Number(nextPriceRaw);
+    if (!Number.isFinite(parsed) || parsed < 0) return;
+    const nextPrice = Number(parsed.toFixed(2));
+    if (nextPrice === Number(item.price)) return;
+
+    if (isOfflineCart) {
+      setActionLoading(id);
+      setError(null);
+      try {
+        if (trnsId && String(trnsId).startsWith("offline_")) {
+          const newRows = cartItems.map((r) =>
+            r.id === id
+              ? { ...r, price: nextPrice, lineTotal: nextPrice * r.quantity }
+              : r,
+          );
+          const newSubtotal = newRows.reduce((s, r) => s + (r.lineTotal ?? 0), 0);
+          setCartItems(newRows);
+          setSubtotal(newSubtotal);
+          setTax(0);
+          setDiscount(0);
+          setGrandTotal(newSubtotal);
+          await updateOfflineOrderInStores(trnsId, {
+            items: rowsToOrderItems(newRows),
+            grandTotal: newSubtotal,
+          });
+        } else {
+          await updateOfflineCartItem(item.itemIdForApi ?? item.sku ?? id, item.quantity, {
+            unitPrice: nextPrice,
+          });
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to update price.");
+      } finally {
+        setActionLoading(null);
+      }
+      return;
+    }
+
+    if (!trnsId) return;
+    const candidate = (item.itemIdForApi ?? item.sku ?? item.id)?.toString?.() ?? "";
+    const validId = candidate && candidate !== "—" ? candidate : String(item.id ?? "");
+    if (!validId) return;
+    setActionLoading(id);
+    setError(null);
+    try {
+      await updateCartItem(
+        trnsId,
+        validId,
+        item.quantity,
+        item.tlId != null ? { tl_id: item.tlId, rate: nextPrice } : { rate: nextPrice },
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update price.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const schedulePricePersist = (id, nextPrice) => {
+    if (priceSaveTimersRef.current[id]) {
+      clearTimeout(priceSaveTimersRef.current[id]);
+    }
+    priceSaveTimersRef.current[id] = setTimeout(() => {
+      persistPrice(id, nextPrice);
+      delete priceSaveTimersRef.current[id];
+    }, 500);
+  };
+
+  const handlePriceInputChange = (row, value) => {
+    const normalized = value.replace(/[^0-9.]/g, "");
+    if (normalized.split(".").length > 2) return;
+    setPriceDrafts((prev) => ({ ...prev, [row.id]: normalized }));
+    const num = Number(normalized);
+    if (!Number.isFinite(num) || num < 0) return;
+    const nextPrice = Number(num.toFixed(2));
+    applyPriceLocally(row.id, nextPrice);
+    schedulePricePersist(row.id, nextPrice);
+  };
+
+  const commitPriceChange = async (row) => {
+    if (priceSaveTimersRef.current[row.id]) {
+      clearTimeout(priceSaveTimersRef.current[row.id]);
+      delete priceSaveTimersRef.current[row.id];
+    }
+    const draft = priceDrafts[row.id];
+    if (draft == null) return;
+    const num = Number(draft);
+    if (!Number.isFinite(num) || num < 0) {
+      setPriceDrafts((prev) => ({ ...prev, [row.id]: row.price.toFixed(2) }));
+      return;
+    }
+    const nextPrice = Number(num.toFixed(2));
+    applyPriceLocally(row.id, nextPrice);
+    await persistPrice(row.id, nextPrice);
+    setPriceDrafts((prev) => ({ ...prev, [row.id]: Number(num).toFixed(2) }));
   };
 
   const removeItem = async (id) => {
@@ -384,9 +507,31 @@ export default function Cart() {
     {
       header: "Price",
       accessor: "price",
-      width: "100px",
-      minWidth: "100px",
-      render: (row) => <div className="font-medium text-gray-900">{formatPrice(row.price)}</div>,
+      width: "150px",
+      minWidth: "150px",
+      render: (row) => (
+        <div className="flex items-center border border-gray-300 rounded-lg bg-white px-2 h-8">
+          <span className="text-gray-500 text-sm mr-1">£</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={priceDrafts[row.id] ?? Number(row.price || 0).toFixed(2)}
+            onFocus={() =>
+              setPriceDrafts((prev) => ({
+                ...prev,
+                [row.id]: prev[row.id] ?? Number(row.price || 0).toFixed(2),
+              }))
+            }
+            onChange={(e) => handlePriceInputChange(row, e.target.value)}
+            onBlur={() => commitPriceChange(row)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+            disabled={isCachedOrderReadOnly}
+            className="w-full text-sm text-gray-900 font-medium bg-transparent border-none focus:outline-none disabled:text-gray-400"
+          />
+        </div>
+      ),
     },
     {
       header: "Quantity",
