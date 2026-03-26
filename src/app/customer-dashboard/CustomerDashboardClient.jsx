@@ -486,8 +486,20 @@ function CustomerDashboardClient() {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         {showCachedBanner && (
-          <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800 text-sm">
-            Showing cached data — server unreachable. Connect to the internet to refresh.
+          <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800 text-sm flex items-center justify-between gap-3">
+            <span>
+              {isOnline
+                ? "Showing cached data — latest server response is unavailable. Please retry in a moment."
+                : "Showing cached data — you are offline. Connect to the internet to refresh."}
+            </span>
+            <button
+              type="button"
+              onClick={() => loadDashboard()}
+              disabled={loading || !isOnline}
+              className="shrink-0 cursor-pointer px-3 py-1.5 rounded-md border border-amber-300 bg-white text-amber-800 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? "Retrying..." : "Retry"}
+            </button>
           </div>
         )}
         {/* Back Link and Title */}

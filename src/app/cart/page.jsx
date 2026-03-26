@@ -99,6 +99,11 @@ export default function Cart() {
   const [actionLoading, setActionLoading] = useState(null);
   const [priceDrafts, setPriceDrafts] = useState({});
   const priceSaveTimersRef = useRef({});
+  const partyCodeForBack = getSaleOrderPartyCode();
+  const trnsIdForBack = getCartTrnsId();
+  const backToProductsHref = partyCodeForBack
+    ? `/products?party_code=${encodeURIComponent(String(partyCodeForBack))}${trnsIdForBack ? `&trns_id=${encodeURIComponent(String(trnsIdForBack))}` : ""}`
+    : "/products";
 
   useEffect(() => {
     setHasMounted(true);
@@ -604,7 +609,7 @@ export default function Cart() {
       <Header />
       <div className="max-w-7xl mx-auto px-8 py-8">
         <Link
-          href="/products"
+          href={backToProductsHref}
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

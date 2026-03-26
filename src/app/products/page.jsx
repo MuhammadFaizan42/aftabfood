@@ -84,6 +84,7 @@ function ProductsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isOnline = useOnlineStatus();
+  const activeDraftTrnsId = getCartTrnsId();
   const [categories, setCategories] = useState(["All Items"]);
   const [activeCategory, setActiveCategory] = useState("All Items");
   const [products, setProducts] = useState([]);
@@ -105,6 +106,7 @@ function ProductsContent() {
 
   useEffect(() => {
     const fromUrl = searchParams.get("party_code");
+    const trnsFromUrl = searchParams.get("trns_id");
     const fromStorage = getSaleOrderPartyCode();
     const code = fromUrl || fromStorage || null;
     if (code) {
@@ -112,6 +114,9 @@ function ProductsContent() {
       if (fromUrl) setSaleOrderPartyCode(code);
     } else {
       setPartyCode(null);
+    }
+    if (trnsFromUrl) {
+      setCartTrnsId(trnsFromUrl);
     }
   }, [searchParams]);
 
@@ -500,6 +505,12 @@ function ProductsContent() {
           {!isOnline && (
             <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800 text-xs">
               Offline mode – using cached data. Orders will sync when back online.
+            </div>
+          )}
+          {activeDraftTrnsId && (
+            <div className="mt-2 inline-flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-blue-800 text-xs sm:text-sm">
+              <span className="font-medium">Editing Draft Order</span>
+              <span className="font-semibold">#{activeDraftTrnsId}</span>
             </div>
           )}
         </div>
