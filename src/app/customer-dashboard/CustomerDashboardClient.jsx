@@ -414,20 +414,37 @@ function CustomerDashboardClient() {
       )
     : recentOrders;
 
-  const chartData = [
-    { month: "JAN", value: 5, label: "5%" },
-    { month: "FEB", value: 7, label: "7%" },
-    { month: "MAR", value: 10, label: "10%" },
-    { month: "APR", value: 12, label: "12%" },
-    { month: "MAY", value: 18, label: "18%" },
-    { month: "JUN", value: 18, label: "18%" },
-    { month: "JUL", value: 20, label: "20%" },
-    { month: "AUG", value: 23, label: "23%" },
-    { month: "SEP", value: 25, label: "25%" },
-    { month: "OCT", value: 28, label: "28%" },
-    { month: "NOV", value: 30, label: "30%" },
-    { month: "DEC", value: 32, label: "32%" },
-  ];
+  const salesTrendRaw = Array.isArray(data?.sales_trend) ? data.sales_trend : [];
+  const salesTrendMap = new Map(
+    salesTrendRaw
+      .map((x) => {
+        const key = String(x?.MONTH_KEY ?? x?.month_key ?? x?.MONTH ?? x?.month ?? "").trim();
+        const amt = Number(x?.TOTAL_AMOUNT ?? x?.total_amount ?? x?.AMOUNT ?? x?.amount ?? 0) || 0;
+        return [key, amt];
+      })
+      .filter(([k]) => /^\d{6}$/.test(String(k))),
+  );
+  const chartMonths = (() => {
+    const now = new Date();
+    const months = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const monthKey = `${yyyy}${mm}`;
+      const monthLabel = d.toLocaleString("en-GB", { month: "short" }).toUpperCase();
+      const amount = salesTrendMap.get(monthKey) ?? 0;
+      months.push({ monthKey, month: monthLabel, amount });
+    }
+    return months;
+  })();
+  const maxAmount = Math.max(1, ...chartMonths.map((m) => Number(m.amount) || 0));
+  const chartData = chartMonths.map((m) => ({
+    month: m.month,
+    value: Math.round(((Number(m.amount) || 0) / maxAmount) * 100),
+    label: formatAmount(m.amount),
+    rawAmount: m.amount,
+  }));
 
   if (!partyCode) {
     return (
@@ -983,7 +1000,7 @@ function CustomerDashboardClient() {
                 <h3 className="text-sm font-semibold text-gray-700 mb-1">
                   MONTHLY SALES GROWTH TREND
                 </h3>
-                <p className="text-xs text-gray-500">Q1 - Q4 2024</p>
+                <p className="text-xs text-gray-500">Last 12 months</p>
               </div>
             </div>
             <div className="relative h-64">
@@ -1009,12 +1026,12 @@ function CustomerDashboardClient() {
               </div>
               {/* Y-axis labels */}
               <div className="absolute left-0 top-0 h-full flex flex-col justify-between text-xs text-gray-500 pb-8 pr-2">
-                <span>$</span>
-                <span>$</span>
-                <span>$</span>
-                <span>$</span>
-                <span>$</span>
-                <span>$</span>
+                <span>£</span>
+                <span>£</span>
+                <span>£</span>
+                <span>£</span>
+                <span>£</span>
+                <span>£</span>
               </div>
             </div>
           </div>

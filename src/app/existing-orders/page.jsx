@@ -3,11 +3,11 @@ import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
-import { getExistingOrders, getOrderReview, getOrderSummary, addToCart } from "@/services/shetApi";
+import { getExistingOrders, getOrderReview, getOrderSummary, addToCart, getPartySaleInvDashboard } from "@/services/shetApi";
 import { getOrderLineItems } from "@/lib/orderLineItems";
 import { setCartTrnsId, setSaleOrderPartyCode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
-import { cacheExistingOrders, getCachedExistingOrders, getOfflineOrdersFromStore } from "@/lib/offline/bootstrapLoader";
+import { cacheExistingOrders, getCachedExistingOrders, getOfflineOrdersFromStore, getCachedCustomers } from "@/lib/offline/bootstrapLoader";
 import { onSyncComplete, syncPendingOrders } from "@/lib/offline/syncManager";
 
 function formatOrderDate(val) {
@@ -159,6 +159,41 @@ function buildDetailedShareText(displayId, row, orderDetails) {
   if (Number(discount ?? 0) !== 0) text += `Discount: £${Number(discount).toFixed(2)}\n`;
   text += `Grand Total: £${Number(grandTotal ?? 0).toFixed(2)}\n`;
   return text;
+}
+
+function formatCustomerAddress(c) {
+  if (!c) return "—";
+  const raw = c.ADRES ?? c.address ?? c.ADDRESS ?? "";
+  const parts = [c.ST, raw, c.DIVISION, c.PROVINCES].filter((x) => String(x || "").trim());
+  const joined = parts.join(", ").trim();
+  return joined || "—";
+}
+
+async function resolveCustomerForShare(partyCode, isOnline) {
+  if (!partyCode) return null;
+  const pc = String(partyCode).trim();
+
+  // 1) Online: prefer dashboard API (most complete customer object)
+  if (isOnline) {
+    try {
+      const res = await getPartySaleInvDashboard(pc, {});
+      const c = res?.data?.customer ?? res?.data?.data?.customer ?? null;
+      if (c && typeof c === "object") return c;
+    } catch {
+      // fall through to cache
+    }
+  }
+
+  // 2) Cached customers (IDB)
+  try {
+    const customers = await getCachedCustomers();
+    const found = customers.find(
+      (x) => String(x.SHORT_CODE ?? x.CUSTOMER_ID ?? x.PARTY_CODE ?? x.code ?? "").trim() === pc,
+    );
+    return found || null;
+  } catch {
+    return null;
+  }
 }
 
 function mapApiOrders(res) {
@@ -482,8 +517,28 @@ function ExistingOrdersContent() {
         details = null;
       }
     }
+
+    // Enrich missing customer fields from master (so share doesn't contain blanks)
+    if (details?.customer) {
+      const master = await resolveCustomerForShare(row.partyCode, isOnline);
+      const addr = String(details.customer.ADRES ?? "").trim();
+      const cont = String(details.customer.CONT_PERSON ?? "").trim();
+      const phone = String(details.customer.CONT_NUM ?? "").trim();
+      const code = String(details.customer.SHORT_CODE ?? "").trim();
+
+      const merged = {
+        ...details.customer,
+        SHORT_CODE: code || String(row.partyCode ?? "") || master?.SHORT_CODE || master?.CUSTOMER_ID || "—",
+        ADRES: addr || formatCustomerAddress(master) || details.customer.ADRES || "—",
+        CONT_PERSON: cont || master?.CONT_PERSON || master?.CONT_PERSON_NAME || master?.contact_person || "—",
+        CONT_NUM: phone || master?.CONT_NUM || master?.MOBILE || master?.mobile || master?.PHONE || "—",
+        CUSTOMER_NAME: details.customer.CUSTOMER_NAME || master?.CUSTOMER_NAME || row.customerName || "—",
+      };
+      details = { ...details, customer: merged };
+    }
+
     return buildDetailedShareText(row.orderId, row, details);
-  }, []);
+  }, [isOnline]);
 
   const handleShareWhatsApp = useCallback(async (row) => {
     const text = await fetchOrderShareText(row);
