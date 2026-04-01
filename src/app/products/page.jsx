@@ -80,6 +80,49 @@ function mapApiProduct(p) {
   };
 }
 
+function categoryNameFromRaw(p) {
+  const c = p?.CATEGORY ?? p?.category;
+  return c != null && String(c).trim() ? String(c).trim() : null;
+}
+
+/** If API sends a full category list on product.php, use it and skip scanning every row. */
+function categoriesFromProductApiResponse(res) {
+  const raw = res?.categories ?? res?.CATEGORIES ?? res?.data?.categories;
+  if (!Array.isArray(raw) || !raw.length) return null;
+  const out = [];
+  for (const item of raw) {
+    if (typeof item === "string" && item.trim()) out.push(item.trim());
+    else if (item && typeof item === "object") {
+      const n = item.CATEGORY ?? item.category ?? item.name ?? item.NAME;
+      if (n && String(n).trim()) out.push(String(n).trim());
+    }
+  }
+  return out.length ? [...new Set(out)].sort((a, b) => a.localeCompare(b)) : null;
+}
+
+/** Paginate product.php to collect every distinct CATEGORY (chips were only from the first limit rows before). */
+async function fetchDistinctProductCategoriesOnline() {
+  const LIMIT = 500;
+  const MAX_PAGES = 30;
+  let offset = 0;
+  const seen = new Set();
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const res = await getProducts({ limit: LIMIT, offset });
+    if (page === 0) {
+      const fromMeta = categoriesFromProductApiResponse(res);
+      if (fromMeta?.length) return fromMeta;
+    }
+    if (!res?.success || !Array.isArray(res.data)) break;
+    for (const p of res.data) {
+      const n = categoryNameFromRaw(p);
+      if (n) seen.add(n);
+    }
+    if (res.data.length < LIMIT) break;
+    offset += LIMIT;
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b));
+}
+
 function ProductsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -175,20 +218,48 @@ function ProductsContent() {
   }, [isOnline]);
 
   useEffect(() => {
-    let cancelled = false;
     (async () => {
-      const list = await fetchProducts({
+      await fetchProducts({
         category: activeCategory === "All Items" ? undefined : activeCategory,
         search: searchQuery || undefined,
       });
-      if (cancelled) return;
-      if (list.length && activeCategory === "All Items" && categories.length <= 1) {
-        const cats = ["All Items", ...new Set(list.map((p) => p.category).filter(Boolean))];
-        setCategories(cats);
+    })();
+  }, [activeCategory, searchQuery, isOnline, fetchProducts]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (isOnline) {
+        try {
+          const names = await fetchDistinctProductCategoriesOnline();
+          if (!cancelled && names.length) setCategories(["All Items", ...names]);
+        } catch {
+          try {
+            const res = await getProducts({ limit: 100 });
+            if (!cancelled && res?.success && Array.isArray(res.data)) {
+              const names = [
+                ...new Set(res.data.map((p) => categoryNameFromRaw(p)).filter(Boolean)),
+              ].sort((a, b) => a.localeCompare(b));
+              if (names.length) setCategories(["All Items", ...names]);
+            }
+          } catch {
+            /* keep default chips */
+          }
+        }
+      } else {
+        try {
+          const raw = await getCachedProducts({});
+          const names = [...new Set(raw.map((p) => categoryNameFromRaw(p)).filter(Boolean))].sort((a, b) =>
+            a.localeCompare(b)
+          );
+          if (!cancelled && names.length) setCategories(["All Items", ...names]);
+        } catch {
+          /* ignore */
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, [activeCategory, searchQuery, isOnline]);
+  }, [isOnline]);
 
   useEffect(() => {
     (async () => {
@@ -287,6 +358,7 @@ function ProductsContent() {
       comments: opts.comments,
       product_name: product.name,
       sku: product.sku,
+      image_url: product.image ?? "",
     };
     const updateCartState = () => {
       setCartItems((prev) => {
@@ -358,6 +430,7 @@ function ProductsContent() {
             comments: opts.comments,
             product_name: product.name,
             sku: product.sku,
+            image_url: product.image ?? "",
           });
           setCartItems((prev) => {
             const existing = prev.find((item) => item.id === productId);
@@ -414,6 +487,7 @@ function ProductsContent() {
               comments: opts.comments,
               product_name: product.name,
               sku: product.sku,
+              image_url: product.image ?? "",
             });
             setCartItems((prev) => {
               const existing = prev.find((item) => item.id === productId);
@@ -517,7 +591,7 @@ function ProductsContent() {
 
         {/* Category Tabs */}
         <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6">
-          <div className="flex gap-2 overflow-x-auto">
+          <div className="flex flex-wrap gap-2">
             {categories.map((category) => (
               <button
                 key={category}

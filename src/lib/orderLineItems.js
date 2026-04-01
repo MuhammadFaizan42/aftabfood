@@ -1,3 +1,5 @@
+import { pickImageFromOrderLine, resolveProductImageUrl } from "./productImage";
+
 /** Extract line items { itemId, qty, unitPrice, ... } from order_review or order_summary response */
 export function getOrderLineItems(res) {
   const d = res?.data?.data ?? res?.data ?? res;
@@ -40,8 +42,19 @@ export function getOrderLineItems(res) {
           itemId ??
           "",
       ).trim();
-      const image = String(r.image ?? r.IMAGE_URL ?? r.image_url ?? r.IMAGE ?? "").trim();
-      const sku = String(r.sku ?? r.SKU ?? r.ITEM_CODE ?? r.CODE ?? itemId ?? "—").trim();
+      const rawImg = pickImageFromOrderLine(r);
+      const image = rawImg ? resolveProductImageUrl(rawImg) : "";
+      const sku = String(
+        r.sku ??
+          r.SKU ??
+          r.PRODUCT_ID ??
+          r.product_id ??
+          r.ITEM_CODE ??
+          r.CODE ??
+          r.product_code ??
+          itemId ??
+          "—",
+      ).trim();
       const qty = Number(r.qty ?? r.quantity ?? r.QTY ?? 0) || 0;
       const unitPrice = Number(r.unit_price ?? r.UNIT_PRICE ?? r.ITEM_RATE ?? r.price ?? 0) || 0;
       const lineAmount =

@@ -5,6 +5,8 @@ import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getExistingOrders, getOrderReview, getOrderSummary, addToCart, getPartySaleInvDashboard } from "@/services/shetApi";
 import { getOrderLineItems } from "@/lib/orderLineItems";
+import { enrichOrderLinesWithImages } from "@/lib/productImage";
+import { getAll } from "@/lib/idb";
 import { setCartTrnsId, setSaleOrderPartyCode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { cacheExistingOrders, getCachedExistingOrders, getOfflineOrdersFromStore, getCachedCustomers } from "@/lib/offline/bootstrapLoader";
@@ -471,6 +473,17 @@ function ExistingOrdersContent() {
       } catch {
         sourceRes = await getOrderSummary(orderId);
         items = getOrderLineItems(sourceRes);
+      }
+      let products = [];
+      try {
+        products = await getAll("products");
+      } catch {
+        products = [];
+      }
+      try {
+        items = await enrichOrderLinesWithImages(items, products, { hydrateFromApi: true });
+      } catch {
+        /* keep raw line items */
       }
       if (!items.length) {
         setViewError("No item details found for this order.");

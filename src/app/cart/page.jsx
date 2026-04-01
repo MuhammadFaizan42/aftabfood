@@ -9,8 +9,32 @@ import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getOfflineCart, getOfflineCartSync, updateOfflineCartItem, removeFromOfflineCart } from "@/lib/offline/offlineCart";
 import { getCachedOrderDetail, updateOfflineOrderInStores } from "@/lib/offline/bootstrapLoader";
 import { getAll } from "@/lib/idb";
+import {
+  DEFAULT_IMG,
+  enrichOrderLinesWithImages,
+  buildProductImageByIdMap,
+  buildProductRowsMap,
+  pickImageFromCachedProduct,
+  pickImageFromOrderLine,
+  resolveProductImageUrl,
+} from "@/lib/productImage";
 
-const DEFAULT_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect fill='%23e5e7eb' width='64' height='64'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-size='24'%3E📦%3C/text%3E%3C/svg%3E";
+async function finalizeCartRows(rows, preloadedProducts = null) {
+  if (!rows?.length) return rows;
+  let products = preloadedProducts;
+  if (products == null) {
+    try {
+      products = await getAll("products");
+    } catch {
+      products = [];
+    }
+  }
+  try {
+    return await enrichOrderLinesWithImages(rows, products, { hydrateFromApi: true });
+  } catch {
+    return rows;
+  }
+}
 
 function formatPrice(val) {
   if (val == null || val === "") return "—";
@@ -37,7 +61,8 @@ function mapOrderSummary(res) {
     const qty = Number(r.qty ?? r.quantity ?? r.QTY ?? 0) || 0;
     const unitPrice = Number(r.unit_price ?? r.UNIT_PRICE ?? r.price ?? r.ITEM_RATE ?? 0) || 0;
     const lineTotal = Number(r.line_total ?? r.total ?? r.LC_AMT ?? unitPrice * qty) || 0;
-    const img = r.image ?? r.IMAGE_URL ?? r.image_url ?? "";
+    const rawImg = pickImageFromOrderLine(r);
+    const img = rawImg ? resolveProductImageUrl(rawImg) : "";
     const id = tlId ?? (itemIdForApi || `line-${index}`);
     const apiId = itemIdForApi || (tlId != null && tlId !== "" ? String(tlId) : null);
     return {
@@ -62,12 +87,38 @@ function mapOrderSummary(res) {
 /** Map offline cart to table rows */
 function mapOfflineCartToRows(cart, products = []) {
   if (!cart?.items?.length) return { rows: [], subtotal: 0, tax: 0, discount: 0, grandTotal: 0 };
-  const prodMap = new Map(products.map((p) => [String(p.PRODUCT_ID ?? p.SKU ?? p.id), p]));
+  const prodMap = buildProductRowsMap(products);
+  const imgMap = buildProductImageByIdMap(products);
   let subtotal = 0;
   const rows = cart.items.map((it) => {
     const lt = (Number(it.unit_price) || 0) * (Number(it.qty) || 0);
     subtotal += lt;
-    const p = prodMap.get(String(it.item_id ?? it.product_id));
+    const keys = [it.item_id, it.product_id, it.sku, it.product_key]
+      .filter((x) => x != null && x !== "")
+      .map((x) => String(x).trim());
+    let p = null;
+    for (const k of keys) {
+      if (prodMap.has(k)) {
+        p = prodMap.get(k);
+        break;
+      }
+    }
+    const savedUrl = it.image_url ?? it.IMAGE_URL;
+    let image = DEFAULT_IMG;
+    if (savedUrl && String(savedUrl).trim()) {
+      image = resolveProductImageUrl(String(savedUrl).trim());
+    } else {
+      for (const k of keys) {
+        if (imgMap.has(k)) {
+          image = imgMap.get(k);
+          break;
+        }
+      }
+      if (image === DEFAULT_IMG && p) {
+        const raw = pickImageFromCachedProduct(p);
+        if (raw) image = resolveProductImageUrl(raw) || DEFAULT_IMG;
+      }
+    }
     return {
       id: it.item_id ?? it.product_id,
       itemIdForApi: it.item_id ?? it.product_id,
@@ -77,7 +128,7 @@ function mapOfflineCartToRows(cart, products = []) {
       quantity: Number(it.qty) || 0,
       price: Number(it.unit_price) || 0,
       lineTotal: lt,
-      image: p?.IMAGE_URL ?? p?.IMAGE ?? p?.image ?? DEFAULT_IMG,
+      image,
     };
   });
   return { rows, subtotal, tax: 0, discount: 0, grandTotal: subtotal };
@@ -121,7 +172,7 @@ export default function Cart() {
           setIsOfflineCart(true);
           setIsCachedOrderReadOnly(false);
           const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary({ success: true, data: cached });
-          setCartItems(rows);
+          setCartItems(await finalizeCartRows(rows));
           setSubtotal(st);
           setTax(t);
           setDiscount(d);
@@ -138,7 +189,7 @@ export default function Cart() {
             setIsOfflineCart(false);
             setIsCachedOrderReadOnly(false);
             const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary(res);
-            setCartItems(rows);
+            setCartItems(await finalizeCartRows(rows));
             setSubtotal(st);
             setTax(t);
             setDiscount(d);
@@ -152,7 +203,7 @@ export default function Cart() {
             setIsOfflineCart(false);
             setIsCachedOrderReadOnly(true);
             const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary({ success: true, data: cached });
-            setCartItems(rows);
+            setCartItems(await finalizeCartRows(rows));
             setSubtotal(st);
             setTax(t);
             setDiscount(d);
@@ -169,7 +220,7 @@ export default function Cart() {
         setIsCachedOrderReadOnly(false);
         const products = await getAll("products");
         const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOfflineCartToRows(syncCart, products);
-        setCartItems(rows);
+        setCartItems(await finalizeCartRows(rows, products));
         setSubtotal(st);
         setTax(t);
         setDiscount(d);
@@ -187,7 +238,7 @@ export default function Cart() {
         setIsCachedOrderReadOnly(false);
         const products = await getAll("products");
         const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOfflineCartToRows(cart, products);
-        setCartItems(rows);
+        setCartItems(await finalizeCartRows(rows, products));
         setSubtotal(st);
         setTax(t);
         setDiscount(d);
@@ -202,7 +253,7 @@ export default function Cart() {
           setIsOfflineCart(false);
           setIsCachedOrderReadOnly(true);
           const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary({ success: true, data: cached });
-          setCartItems(rows);
+          setCartItems(await finalizeCartRows(rows));
           setSubtotal(st);
           setTax(t);
           setDiscount(d);

@@ -14,6 +14,8 @@ import {
 } from "@/services/shetApi";
 import { setSaleOrderPartyCode, clearCartTrnsId, setCartTrnsId } from "@/lib/api";
 import { getOrderLineItems } from "@/lib/orderLineItems";
+import { enrichOrderLinesWithImages, DEFAULT_IMG } from "@/lib/productImage";
+import { getAll } from "@/lib/idb";
 import { cacheCustomerDashboard, getCachedCustomerDashboard, getCachedCustomers, cacheVisitHistory, getCachedVisitHistory } from "@/lib/offline/bootstrapLoader";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { saveVisit, NO_ORDER_REASONS, getVisitsByPartyCode, getReasonLabel } from "@/lib/visits";
@@ -145,6 +147,17 @@ function CustomerDashboardClient() {
       } catch {
         const res = await getOrderSummary(orderId);
         items = getOrderLineItems(res);
+      }
+      let products = [];
+      try {
+        products = await getAll("products");
+      } catch {
+        products = [];
+      }
+      try {
+        items = await enrichOrderLinesWithImages(items, products, { hydrateFromApi: true });
+      } catch {
+        /* keep raw line items */
       }
       if (!items.length) {
         setViewError("No item details found for this order.");
@@ -1308,12 +1321,12 @@ function CustomerDashboardClient() {
                               <div className="flex items-center gap-3 min-w-0">
                               <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                                 <img
-                                  src={it.image || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect fill='%23e5e7eb' width='64' height='64'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-size='24'%3E📦%3C/text%3E%3C/svg%3E"}
+                                  src={it.image || DEFAULT_IMG}
                                   alt={it.itemName || "Item"}
                                   className="w-full h-full object-cover"
                                   onError={(e) => {
                                     e.currentTarget.onerror = null;
-                                    e.currentTarget.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect fill='%23e5e7eb' width='64' height='64'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-size='24'%3E📦%3C/text%3E%3C/svg%3E";
+                                    e.currentTarget.src = DEFAULT_IMG;
                                   }}
                                 />
                               </div>

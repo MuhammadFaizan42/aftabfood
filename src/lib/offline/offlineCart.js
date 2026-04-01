@@ -118,6 +118,8 @@ export async function addToOfflineCart(customerId, item) {
   );
   if (existing) {
     existing.qty = (Number(existing.qty) || 0) + (Number(item.qty) || 0);
+    const nextImg = item.image_url ?? item.IMAGE_URL;
+    if (nextImg && String(nextImg).trim()) existing.image_url = String(nextImg).trim();
   } else {
     cart.items.push({
       item_id: item.item_id ?? item.product_id,
@@ -129,6 +131,7 @@ export async function addToOfflineCart(customerId, item) {
       comments: item.comments || "",
       product_name: item.product_name,
       sku: item.sku,
+      image_url: item.image_url ?? item.IMAGE_URL ?? "",
     });
   }
   await saveOfflineCart(cart);

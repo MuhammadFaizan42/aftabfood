@@ -9,9 +9,28 @@ import { getCartTrnsId, setCartTrnsId, clearCartTrnsId, getSaleOrderPartyCode } 
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getOfflineCart, clearOfflineCart } from "@/lib/offline/offlineCart";
 import { getCachedCustomerDashboard, getCachedOrderDetail, cacheOrderDetail, saveOfflineOrderToExistingOrders, getExistingOrderRow, updateOfflineOrderInStores, generateOfflineOrderId } from "@/lib/offline/bootstrapLoader";
+import { getAll } from "@/lib/idb";
+import {
+  DEFAULT_IMG,
+  enrichOrderLinesWithImages,
+  pickImageFromOrderLine,
+  resolveProductImageUrl,
+} from "@/lib/productImage";
 
-const DEFAULT_IMG =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect fill='%23e5e7eb' width='64' height='64'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-size='24'%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E";
+async function finalizeReviewOrderItems(items) {
+  if (!items?.length) return items;
+  let products = [];
+  try {
+    products = await getAll("products");
+  } catch {
+    products = [];
+  }
+  try {
+    return await enrichOrderLinesWithImages(items, products, { hydrateFromApi: true });
+  } catch {
+    return items;
+  }
+}
 
 function formatPrice(val) {
   if (val == null || val === "") return "—";
@@ -33,11 +52,44 @@ function mapReviewData(res) {
   };
   const rawItems = d.items ?? d.lines ?? d.order_items ?? (Array.isArray(d) ? d : []);
   const items = (Array.isArray(rawItems) ? rawItems : []).map((r) => {
-    const img = r.image ?? r.IMAGE_URL ?? r.image_url ?? "";
+    const rawItemId =
+      r.item_id ??
+      r.product_id ??
+      r.PRODUCT_ID ??
+      r.ITEM_CODE ??
+      r.CODE ??
+      r.sku ??
+      r.SKU ??
+      r.PROD_ID ??
+      r.product_code ??
+      r.PART_NO ??
+      r.PK_INV_ID ??
+      r.id ??
+      r.product?.id ??
+      r.product?.product_id ??
+      r.product?.code ??
+      r.product?.PRODUCT_ID ??
+      r.INV_ITEM_ID ??
+      r.ITEM_ID ??
+      r.PK_ID ??
+      "";
+    const itemIdForApi = String(rawItemId).trim();
+    const rawImg = pickImageFromOrderLine(r);
+    const img = rawImg ? resolveProductImageUrl(rawImg) : "";
+    const sku =
+      r.sku ??
+      r.SKU ??
+      r.PRODUCT_ID ??
+      r.product_id ??
+      r.ITEM_CODE ??
+      r.CODE ??
+      r.product_code ??
+      (itemIdForApi || "");
     return {
-      id: r.item_id ?? r.product_id ?? r.id,
+      id: r.item_id ?? r.product_id ?? r.id ?? itemIdForApi,
+      itemIdForApi: itemIdForApi || null,
       name: r.product_name ?? r.PRODUCT_NAME ?? r.name ?? "—",
-      sku: r.sku ?? r.PRODUCT_ID ?? "",
+      sku: String(sku || itemIdForApi || "—").trim() || "—",
       unitPrice: Number(r.unit_price ?? r.UNIT_PRICE ?? r.ITEM_RATE ?? 0) || 0,
       quantity: Number(r.qty ?? r.quantity ?? 0) || 0,
       total: Number(r.line_total ?? r.total ?? 0) || 0,
@@ -94,7 +146,7 @@ function OrderReviewContent() {
           } catch { /* ignore */ }
           const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData(res);
           setCustomer(c);
-          setOrderItems(items);
+          setOrderItems(await finalizeReviewOrderItems(items));
           setSubtotal(st);
           setTax(t);
           setDiscount(d);
@@ -126,7 +178,7 @@ function OrderReviewContent() {
           if (cached) {
             const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: cached });
             setCustomer(c);
-            setOrderItems(items);
+            setOrderItems(await finalizeReviewOrderItems(items));
             setSubtotal(st);
             setTax(t);
             setDiscount(d);
@@ -168,7 +220,7 @@ function OrderReviewContent() {
         } catch { /* ignore */ }
         const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData(res);
         setCustomer(c);
-        setOrderItems(items);
+        setOrderItems(await finalizeReviewOrderItems(items));
         setSubtotal(st);
         setTax(t);
         setDiscount(d);
@@ -200,7 +252,7 @@ function OrderReviewContent() {
           setIsCachedServerOrder(!isOfflineId);
           const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: cached });
           setCustomer(c);
-          setOrderItems(items);
+          setOrderItems(await finalizeReviewOrderItems(items));
           setSubtotal(st);
           setTax(t);
           setDiscount(d);
@@ -240,7 +292,7 @@ function OrderReviewContent() {
             setIsOfflineOrder(true);
             const { customer: c, items: cachedItems, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: alreadyCached });
             setCustomer(c);
-            setOrderItems(cachedItems);
+            setOrderItems(await finalizeReviewOrderItems(cachedItems));
             setSubtotal(st);
             setTax(t);
             setDiscount(d);
@@ -268,18 +320,24 @@ function OrderReviewContent() {
           setCustomer(customer);
           const items = cart.items.map((it) => {
             const total = (Number(it.unit_price) || 0) * (Number(it.qty) || 0);
+            const saved = it.image_url ?? it.IMAGE_URL;
+            const img =
+              saved && String(saved).trim()
+                ? resolveProductImageUrl(String(saved).trim())
+                : DEFAULT_IMG;
             return {
               id: it.item_id ?? it.product_id,
+              itemIdForApi: it.item_id ?? it.product_id,
               name: it.product_name ?? "—",
-              sku: it.sku ?? it.item_id ?? "",
+              sku: it.sku ?? String(it.item_id ?? "") ?? "",
               unitPrice: Number(it.unit_price) || 0,
               quantity: Number(it.qty) || 0,
               total,
-              image: DEFAULT_IMG,
+              image: img,
             };
           });
           const st = items.reduce((s, r) => s + r.total, 0);
-          setOrderItems(items);
+          setOrderItems(await finalizeReviewOrderItems(items));
           setSubtotal(st);
           setTax(0);
           setDiscount(0);
@@ -301,18 +359,25 @@ function OrderReviewContent() {
         setCustomer(customer);
         const items = cart.items.map((it) => {
           const total = (Number(it.unit_price) || 0) * (Number(it.qty) || 0);
+          const saved = it.image_url ?? it.IMAGE_URL;
+          const img =
+            saved && String(saved).trim()
+              ? resolveProductImageUrl(String(saved).trim())
+              : DEFAULT_IMG;
           return {
             id: it.item_id ?? it.product_id,
+            itemIdForApi: it.item_id ?? it.product_id,
             name: it.product_name ?? "—",
-            sku: it.sku ?? it.item_id ?? "",
+            sku: it.sku ?? String(it.item_id ?? "") ?? "",
             unitPrice: Number(it.unit_price) || 0,
             quantity: Number(it.qty) || 0,
             total,
-            image: DEFAULT_IMG,
+            image: img,
           };
         });
         const st = items.reduce((s, r) => s + r.total, 0);
-        setOrderItems(items);
+        const displayItems = await finalizeReviewOrderItems(items);
+        setOrderItems(displayItems);
         setSubtotal(st);
         setTax(0);
         setDiscount(0);
@@ -320,7 +385,7 @@ function OrderReviewContent() {
         try {
           await saveOfflineOrderToExistingOrders({
             customer,
-            items,
+            items: displayItems,
             subtotal: st,
             tax: 0,
             discount: 0,
@@ -510,11 +575,17 @@ function OrderReviewContent() {
                     accessor: "name",
                     render: (row) => (
                       <div className="flex items-center gap-3">
-                        {row.image && (
-                          <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                            <img src={row.image} alt="" className="w-full h-full object-cover" />
-                          </div>
-                        )}
+                        <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                          <img
+                            src={row.image || DEFAULT_IMG}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = DEFAULT_IMG;
+                            }}
+                          />
+                        </div>
                         <div>
                           <p className="font-semibold text-gray-900">{row.name}</p>
                           <p className="text-xs text-gray-500">SKU: {row.sku}</p>
