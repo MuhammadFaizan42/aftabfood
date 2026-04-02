@@ -1,5 +1,6 @@
 /* PWA Service Worker – offline cache + background sync for orders */
-const CACHE_NAME = "aftabfood-v6";
+const CACHE_NAME = "aftabfood-v7";
+const IMAGE_CACHE = "aftabfood-images-v1";
 const DB_NAME = "aftabfood-offline";
 const DB_VERSION = 6;
 const SYNC_TAG = "sync-orders";
@@ -12,7 +13,11 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter((k) => k !== CACHE_NAME && k !== IMAGE_CACHE)
+          .map((k) => caches.delete(k))
+      )
     )
   );
   self.clients.claim();
@@ -101,12 +106,38 @@ async function syncOrdersInSW() {
 /* Fetch: cache GETs, serve offline when possible */
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
-  if (url.origin !== location.origin) {
-    if (url.pathname.startsWith("/api/") || url.hostname.includes("otwoostores")) return;
-  }
   if (event.request.method !== "GET") return;
 
   const isNavigate = event.request.mode === "navigate";
+
+  // Runtime cache for images (including cross-origin product images).
+  // This is required so <img src="https://..."> can work offline.
+  if (event.request.destination === "image") {
+    event.respondWith(
+      caches.open(IMAGE_CACHE).then(async (cache) => {
+        const cached = await cache.match(event.request, { ignoreSearch: false });
+        if (cached) return cached;
+        try {
+          const res = await fetch(event.request);
+          if (res && (res.ok || res.type === "opaque")) {
+            cache.put(event.request, res.clone());
+          }
+          return res;
+        } catch (e) {
+          // Best-effort: if a matching cached image exists, return it.
+          const fallback = await cache.match(event.request, { ignoreSearch: true });
+          if (fallback) return fallback;
+          return new Response("", { status: 504, statusText: "Image offline" });
+        }
+      })
+    );
+    return;
+  }
+
+  if (url.origin !== location.origin) {
+    // Let the browser handle other cross-origin GETs (API, etc.)
+    if (url.pathname.startsWith("/api/") || url.hostname.includes("otwoostores")) return;
+  }
 
   event.respondWith(
     fetch(event.request)
