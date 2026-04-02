@@ -159,6 +159,15 @@ export async function submitOrder(trnsId, options = {}) {
   return api.post(`${SALE_ORDER_BASE}?action=submit_order`, body);
 }
 
+/**
+ * Delete draft order on backend (Swagger: delete_draft_order)
+ * DELETE /models/sale_order.php?action=delete_draft_order (body: { trns_id })
+ */
+export async function deleteDraftOrder(trnsId) {
+  const body = { trns_id: toNum(trnsId) ?? trnsId };
+  return api.delete(`${SALE_ORDER_BASE}?action=delete_draft_order`, body);
+}
+
 /** Existing orders list – GET action=existing_orders; optional from_date, to_date (YYYY-MM-DD) */
 export async function getExistingOrders(params = {}) {
   const q = new URLSearchParams({ action: "existing_orders" });

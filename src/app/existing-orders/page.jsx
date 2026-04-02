@@ -3,13 +3,26 @@ import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
-import { getExistingOrders, getOrderReview, getOrderSummary, addToCart, getPartySaleInvDashboard } from "@/services/shetApi";
+import {
+  getExistingOrders,
+  getOrderReview,
+  getOrderSummary,
+  addToCart,
+  getPartySaleInvDashboard,
+  deleteDraftOrder,
+} from "@/services/shetApi";
 import { getOrderLineItems } from "@/lib/orderLineItems";
 import { enrichOrderLinesWithImages } from "@/lib/productImage";
 import { getAll } from "@/lib/idb";
 import { setCartTrnsId, setSaleOrderPartyCode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
-import { cacheExistingOrders, getCachedExistingOrders, getOfflineOrdersFromStore, getCachedCustomers } from "@/lib/offline/bootstrapLoader";
+import {
+  cacheExistingOrders,
+  getCachedExistingOrders,
+  getOfflineOrdersFromStore,
+  getCachedCustomers,
+  deleteOfflineOrder,
+} from "@/lib/offline/bootstrapLoader";
 import { onSyncComplete, syncPendingOrders } from "@/lib/offline/syncManager";
 
 function formatOrderDate(val) {
@@ -287,6 +300,10 @@ function ExistingOrdersContent() {
   const [duplicateError, setDuplicateError] = useState(null);
   const [viewLoading, setViewLoading] = useState(null);
   const [viewError, setViewError] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTargetOrder, setDeleteTargetOrder] = useState(null);
   const [viewOrder, setViewOrder] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
@@ -460,6 +477,46 @@ function ExistingOrdersContent() {
     }
   }, [partyCodeParam, router]);
 
+  const openDeleteDraftConfirm = useCallback((row) => {
+    const orderId = row?.id;
+    if (!orderId) return;
+
+    const status = (row?.status ?? row?._raw?.status ?? "").toString();
+    const isDraft = status.toLowerCase() === "draft";
+    if (!isDraft) return;
+
+    setDeleteError(null);
+    setDeleteTargetOrder(row);
+    setDeleteConfirmOpen(true);
+  }, []);
+
+  const confirmDeleteDraft = useCallback(async () => {
+    const row = deleteTargetOrder;
+    const orderId = row?.id;
+    if (!orderId) {
+      setDeleteConfirmOpen(false);
+      setDeleteTargetOrder(null);
+      return;
+    }
+
+    setDeleteLoading(orderId);
+    setDeleteError(null);
+    try {
+      if (String(orderId).startsWith("offline_")) {
+        await deleteOfflineOrder(orderId);
+      } else {
+        await deleteDraftOrder(orderId);
+      }
+      await loadOrders();
+      setDeleteConfirmOpen(false);
+      setDeleteTargetOrder(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete draft order.");
+    } finally {
+      setDeleteLoading(null);
+    }
+  }, [deleteTargetOrder, loadOrders]);
+
   const handleViewOrder = useCallback(async (row) => {
     const orderId = row.id;
     setViewLoading(orderId);
@@ -623,6 +680,9 @@ function ExistingOrdersContent() {
       render: (row) => {
         const isDuplicating = duplicateLoading === row.id;
         const isViewing = viewLoading === row.id;
+        const isDeleting = deleteLoading === row.id;
+        const status = (row.status || "").toString().toLowerCase();
+        const showDelete = status === "draft";
         return (
           <div className="flex items-center gap-2">
             <button
@@ -660,6 +720,23 @@ function ExistingOrdersContent() {
                 </>
               )}
             </button>
+            {showDelete && (
+              <button
+                type="button"
+                disabled={isDeleting}
+                className="cursor-pointer flex items-center gap-1 text-xs text-red-700 hover:text-red-900 border border-red-200 rounded px-3 py-1.5 hover:bg-red-50 transition-colors disabled:opacity-60 disabled:cursor-wait"
+                onClick={() => openDeleteDraftConfirm(row)}
+                title="Delete Draft"
+              >
+                {isDeleting ? (
+                  <span className="animate-pulse">Deleting...</span>
+                ) : (
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3m-4 0h14" />
+                  </svg>
+                )}
+              </button>
+            )}
           </div>
         );
       },
@@ -779,6 +856,22 @@ function ExistingOrdersContent() {
               </svg>
             </button>
           )}
+          {(row.status || "").toString().toLowerCase() === "draft" && (
+            <button
+              className="cursor-pointer p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-wait"
+              title="Delete Draft"
+              disabled={deleteLoading === row.id}
+              onClick={() => openDeleteDraftConfirm(row)}
+            >
+              {deleteLoading === row.id ? (
+                <span className="text-xs font-medium">Deleting...</span>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3m-4 0h14" />
+                </svg>
+              )}
+            </button>
+          )}
         </div>
       ),
     },
@@ -889,6 +982,12 @@ function ExistingOrdersContent() {
             <button type="button" onClick={() => setDuplicateError(null)} className="text-amber-600 hover:text-amber-900 font-medium">×</button>
           </div>
         )}
+        {deleteError && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm mb-6 flex items-center justify-between gap-2">
+            <span>{deleteError}</span>
+            <button type="button" onClick={() => setDeleteError(null)} className="text-red-600 hover:text-red-900 font-medium">×</button>
+          </div>
+        )}
         {syncing && (
           <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-2 text-blue-700 text-sm mb-4 flex items-center gap-2">
             <span className="inline-block w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -908,7 +1007,7 @@ function ExistingOrdersContent() {
           <ReusableTable
             columns={columns}
             data={orders}
-            rowsPerPage={5}
+            rowsPerPage={20}
             totalAmount={`£${totalAmount.toLocaleString("en-GB", {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
@@ -1011,6 +1110,68 @@ function ExistingOrdersContent() {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {deleteConfirmOpen && deleteTargetOrder && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-md bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Delete Draft Order</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {deleteTargetOrder.orderId ? String(deleteTargetOrder.orderId) : String(deleteTargetOrder.id)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="text-gray-500 hover:text-gray-900 text-xl leading-none cursor-pointer"
+                  onClick={() => {
+                    setDeleteConfirmOpen(false);
+                    setDeleteTargetOrder(null);
+                    setDeleteError(null);
+                  }}
+                  aria-label="Close delete modal"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="px-5 py-4 space-y-3">
+                <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-800 text-sm">
+                  Warning: This will permanently delete the draft order. This action cannot be undone.
+                </div>
+
+                {deleteError && (
+                  <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">
+                    {deleteError}
+                  </div>
+                )}
+              </div>
+
+              <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className="cursor-pointer px-4 py-2 rounded-lg text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-60 disabled:cursor-wait"
+                  disabled={deleteLoading != null}
+                  onClick={() => {
+                    setDeleteConfirmOpen(false);
+                    setDeleteTargetOrder(null);
+                    setDeleteError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="cursor-pointer px-4 py-2 rounded-lg text-sm text-white bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-60 disabled:cursor-wait flex items-center gap-2"
+                  disabled={deleteLoading != null}
+                  onClick={() => confirmDeleteDraft()}
+                >
+                  {deleteLoading ? "Deleting..." : "Delete Draft"}
+                </button>
               </div>
             </div>
           </div>

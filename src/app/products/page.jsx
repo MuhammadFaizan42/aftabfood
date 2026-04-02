@@ -513,7 +513,10 @@ function ProductsContent() {
     return cartItems.reduce((acc, item) => acc + item.quantity, 0);
   };
 
-  const isCartEmpty = cartItems.length === 0;
+  const isDraftEditing = !!activeDraftTrnsId;
+  // When editing an existing Draft order, allow going to cart/order-summary
+  // even if cartItems is temporarily empty on this page.
+  const isCartEmpty = cartItems.length === 0 && !isDraftEditing;
 
   if (partyCode === null) {
     return (

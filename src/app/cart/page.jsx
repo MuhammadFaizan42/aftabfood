@@ -554,7 +554,14 @@ export default function Cart() {
             />
           </div>
           <div>
-            <div className="font-medium text-gray-900">{row.name}</div>
+            <div className="font-medium text-gray-900 flex items-center gap-2">
+              <span className="truncate">{row.name}</span>
+              {(row.inStock === false || Number(row.stock ?? 1) <= 0) && (
+                <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
+                  Out of stock
+                </span>
+              )}
+            </div>
             <div className="text-sm text-gray-500">SKU: {row.sku}</div>
           </div>
         </div>
@@ -653,7 +660,9 @@ export default function Cart() {
     },
   ];
 
-  const emptyCart = (isOnline ? !trnsId : false) || cartItems.length === 0;
+  // If user is editing an existing draft order (has `trnsId`), we still show
+  // the Order Summary UI even when there are 0 items yet.
+  const emptyCart = !trnsId && cartItems.length === 0;
 
   return (
     <div className="min-h-screen bg-[#F8F9FC]">
