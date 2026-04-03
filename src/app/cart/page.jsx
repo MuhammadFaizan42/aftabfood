@@ -178,34 +178,51 @@ export default function Cart() {
       }
 
       if (id && !String(id).startsWith("offline_")) {
-        try {
-          const res = await getOrderSummary(id);
-          if (res?.success && res?.data) {
-            setTrnsId(id);
-            setIsOfflineCart(false);
-            setIsCachedOrderReadOnly(false);
-            const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary(res);
-            setCartItems(await finalizeCartRows(rows));
-            setSubtotal(st);
-            setTax(t);
-            setDiscount(d);
-            setGrandTotal(gt);
-            return;
+        const maxAttempts = isOnline ? 3 : 1;
+        let summaryRes = null;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          try {
+            const res = await getOrderSummary(id);
+            if (res?.success && res?.data) {
+              summaryRes = res;
+              break;
+            }
+            break;
+          } catch {
+            if (attempt < maxAttempts - 1 && isOnline) {
+              await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+              continue;
+            }
+            break;
           }
-        } catch {
-          const cached = await getCachedOrderDetail(id);
-          if (cached) {
-            setTrnsId(id);
-            setIsOfflineCart(false);
-            setIsCachedOrderReadOnly(true);
-            const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary({ success: true, data: cached });
-            setCartItems(await finalizeCartRows(rows));
-            setSubtotal(st);
-            setTax(t);
-            setDiscount(d);
-            setGrandTotal(gt);
-            return;
-          }
+        }
+        if (summaryRes) {
+          setTrnsId(id);
+          setIsOfflineCart(false);
+          setIsCachedOrderReadOnly(false);
+          const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary(summaryRes);
+          setCartItems(await finalizeCartRows(rows));
+          setSubtotal(st);
+          setTax(t);
+          setDiscount(d);
+          setGrandTotal(gt);
+          return;
+        }
+        const cachedAfterSummaryFail = await getCachedOrderDetail(id);
+        if (cachedAfterSummaryFail) {
+          setTrnsId(id);
+          setIsOfflineCart(false);
+          setIsCachedOrderReadOnly(!isOnline);
+          const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary({
+            success: true,
+            data: cachedAfterSummaryFail,
+          });
+          setCartItems(await finalizeCartRows(rows));
+          setSubtotal(st);
+          setTax(t);
+          setDiscount(d);
+          setGrandTotal(gt);
+          return;
         }
       }
 
@@ -247,7 +264,7 @@ export default function Cart() {
         if (cached) {
           setTrnsId(id);
           setIsOfflineCart(false);
-          setIsCachedOrderReadOnly(true);
+          setIsCachedOrderReadOnly(!isOnline);
           const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary({ success: true, data: cached });
           setCartItems(await finalizeCartRows(rows));
           setSubtotal(st);

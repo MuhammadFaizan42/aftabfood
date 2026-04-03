@@ -220,8 +220,15 @@ function ProductsContent() {
           });
           mapped = raw.map(mapApiProduct);
           setProducts(mapped);
-          if (mapped.length > 0) setError("Showing cached products — server unreachable.");
-          else setError(apiErr instanceof Error ? apiErr.message : "Could not load products. Open when online to cache.");
+          if (mapped.length > 0) {
+            setError(
+              isOnline
+                ? "Could not refresh from the server — showing cached products. Use refresh to try again."
+                : "Showing cached products — server unreachable."
+            );
+          } else {
+            setError(apiErr instanceof Error ? apiErr.message : "Could not load products. Open when online to cache.");
+          }
           return mapped;
         }
         return mapped;
