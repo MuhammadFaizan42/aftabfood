@@ -101,6 +101,38 @@ function categoriesFromProductApiResponse(res) {
 }
 
 /** Paginate product.php to collect every distinct CATEGORY (chips were only from the first limit rows before). */
+/** Same caps as offline bootstrap – listing was stuck at limit 100 so many SKUs never appeared. */
+const PRODUCTS_LIST_MAX = 2000;
+const PRODUCTS_PAGE_SIZE = 500;
+
+function dedupeRawProducts(rows) {
+  const map = new Map();
+  for (const p of rows) {
+    const k = String(p.PK_INV_ID ?? p.PK_ID ?? p.PRODUCT_ID ?? p.SKU ?? p.id ?? "");
+    const key = k || `idx_${map.size}`;
+    if (!map.has(key)) map.set(key, p);
+  }
+  return [...map.values()];
+}
+
+/** Paginate product.php until empty or cap (All Items / category / search). */
+async function fetchProductsPaginatedOnline(params = {}) {
+  const all = [];
+  let offset = 0;
+  for (let page = 0; page < 40; page++) {
+    const res = await getProducts({
+      limit: PRODUCTS_PAGE_SIZE,
+      offset,
+      ...params,
+    });
+    if (!res?.success || !Array.isArray(res.data) || res.data.length === 0) break;
+    all.push(...res.data);
+    if (res.data.length < PRODUCTS_PAGE_SIZE || all.length >= PRODUCTS_LIST_MAX) break;
+    offset += PRODUCTS_PAGE_SIZE;
+  }
+  return dedupeRawProducts(all).slice(0, PRODUCTS_LIST_MAX);
+}
+
 async function fetchDistinctProductCategoriesOnline() {
   const LIMIT = 500;
   const MAX_PAGES = 30;
@@ -172,33 +204,26 @@ function ProductsContent() {
     setError(null);
     try {
       if (isOnline) {
-        const params = {
-          limit: 100,
+        const listParams = {
           ...(opts.category && opts.category !== "All Items" && { category: opts.category }),
-          ...(opts.search && { search: opts.search }),
+          ...(opts.search && String(opts.search).trim() && { search: String(opts.search).trim() }),
         };
-        let res;
+        let mapped;
         try {
-          res = await getProducts(params);
+          const rawRows = await fetchProductsPaginatedOnline(listParams);
+          mapped = rawRows.map(mapApiProduct);
+          setProducts(mapped);
         } catch (apiErr) {
           const raw = await getCachedProducts({
             category: opts.category,
             search: opts.search,
           });
-          const mapped = raw.map(mapApiProduct);
+          mapped = raw.map(mapApiProduct);
           setProducts(mapped);
           if (mapped.length > 0) setError("Showing cached products — server unreachable.");
           else setError(apiErr instanceof Error ? apiErr.message : "Could not load products. Open when online to cache.");
           return mapped;
         }
-        if (!res?.success || !Array.isArray(res.data)) {
-          const raw = await getCachedProducts({ category: opts.category, search: opts.search });
-          const mapped = raw.map(mapApiProduct);
-          setProducts(mapped);
-          return mapped;
-        }
-        const mapped = res.data.map(mapApiProduct);
-        setProducts(mapped);
         return mapped;
       }
       const raw = await getCachedProducts({
@@ -858,6 +883,25 @@ function ProductsContent() {
         </div>
         )}
       </main>
+
+      {/* Total products (listing) — bottom right, above Checkout */}
+      <div
+        className="fixed bottom-28 right-6 z-40 max-w-[min(90vw,14rem)] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 text-right shadow-md backdrop-blur-sm"
+        aria-live="polite"
+      >
+        {loading ? (
+          <span className="text-sm text-gray-500">Loading products…</span>
+        ) : (
+          <span className="text-sm font-medium text-gray-700">
+            {products.length.toLocaleString()} {products.length === 1 ? "product" : "products"}
+            {activeCategory !== "All Items" && (
+              <span className="block text-xs font-normal text-gray-500 truncate" title={activeCategory}>
+                in {activeCategory}
+              </span>
+            )}
+          </span>
+        )}
+      </div>
 
       {/* Fixed Checkout Button */}
       <button
