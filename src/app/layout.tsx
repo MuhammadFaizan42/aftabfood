@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Inter } from "next/font/google";
+import ChunkLoadRecovery from "@/components/ChunkLoadRecovery";
 import Footer from "@/components/common/Footer";
 import OfflineProvider from "@/components/offline/OfflineProvider";
 import PWAInstallPrompt from "@/components/offline/PWAInstallPrompt";
@@ -21,6 +22,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var K='aftab-chunk-reload-once';function go(){if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,'1');var u=new URL(location.href);u.searchParams.set('_cb',String(Date.now()));location.replace(u.toString());}function isChunk(r){if(!r)return false;var m=String(r.message||r||'');return/ChunkLoadError|Loading chunk|Failed to fetch dynamically imported module/i.test(m);}window.addEventListener('unhandledrejection',function(e){if(isChunk(e.reason)){e.preventDefault();go();}});window.addEventListener('error',function(e){var t=e.target;if(!t)return;var u=t.src||t.href||'';if(u.indexOf('/_next/')===-1)return;if((t.tagName==='SCRIPT'||t.tagName==='LINK')&&!sessionStorage.getItem(K))go();},true);})();`,
+          }}
+        />
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#2563eb" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -39,6 +45,7 @@ export default function RootLayout({
         />
       </head>
       <body className={inter.className}>
+        <ChunkLoadRecovery />
         <OfflineProvider>
           <SyncStatusProvider>
             <main className="min-h-screen">{children}</main>

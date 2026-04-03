@@ -18,6 +18,7 @@ import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import {
   cacheExistingOrders,
   getCachedExistingOrders,
+  getCachedOrderDetail,
   getOfflineOrdersFromStore,
   getCachedCustomers,
   deleteOfflineOrder,
@@ -211,10 +212,34 @@ async function resolveCustomerForShare(partyCode, isOnline) {
   }
 }
 
+function collectApiOrderKeys(apiOrders) {
+  const keys = new Set();
+  for (const o of apiOrders) {
+    const r = o._raw ?? {};
+    const candidates = [
+      r.trns_id,
+      r.TRNS_ID,
+      r.id,
+      r.order_id,
+      r.ORDER_ID,
+      r.order_number,
+      r.ORDER_NUMBER,
+      o.id,
+      o.orderId,
+    ];
+    for (const c of candidates) {
+      if (c != null && c !== "") keys.add(String(c).trim());
+    }
+  }
+  return keys;
+}
+
 function mapApiOrders(res) {
   if (!res?.success || !res?.data) return [];
   const raw = res.data.orders ?? res.data.list ?? res.data.items ?? (Array.isArray(res.data) ? res.data : []);
-  return (Array.isArray(raw) ? raw : []).map((r, i) => {
+  return (Array.isArray(raw) ? raw : [])
+    .filter((r) => r != null && typeof r === "object")
+    .map((r, i) => {
     const orderDate = r.order_date ?? r.ORDER_DATE ?? r.created_at ?? r.date ?? r.trns_date ?? "";
     const orderId = r.order_id ?? r.ORDER_ID ?? r.order_number ?? r.trns_id ?? r.id ?? `#${i + 1}`;
     const customerName = r.customer_name ?? r.CUSTOMER_NAME ?? r.party_name ?? r.PARTY_NAME ?? r.customer ?? "—";
@@ -256,7 +281,9 @@ function mapApiOrders(res) {
 
 function mapRawToOrders(rawList) {
   if (!Array.isArray(rawList)) return [];
-  return rawList.map((r, i) => {
+  return rawList
+    .filter((r) => r != null && typeof r === "object")
+    .map((r, i) => {
     const orderDate = r.order_date ?? r.ORDER_DATE ?? r.created_at ?? r.date ?? r.trns_date ?? "";
     const orderId = r.backend_trns_id ?? r.order_id ?? r.ORDER_ID ?? r.order_number ?? r.trns_id ?? r.id ?? `#${i + 1}`;
     const customerName = r.customer_name ?? r.CUSTOMER_NAME ?? r.party_name ?? r.PARTY_NAME ?? r.customer ?? "—";
@@ -360,17 +387,12 @@ function ExistingOrdersContent() {
             appliedToDate,
           ),
         );
-        // Deduplicate: same order can appear from API (SO number) and from IDB (synced with backend_trns_id). Keep only API row (SO) and drop IDB row with same backend_trns_id.
-        const apiTrnsIds = new Set(
-          apiOrders
-            .map((o) => o._raw?.trns_id ?? o._raw?.TRNS_ID ?? o.id)
-            .filter((v) => v != null && v !== "")
-            .map((v) => String(v))
-        );
+        // Deduplicate: API uses trns_id; offline sync stores SO# in backend_trns_id — match all keys so one row is not shown twice.
+        const apiKeys = collectApiOrderKeys(apiOrders);
         const offlineDeduped = offlineOrders.filter((o) => {
           const bid = o._raw?.backend_trns_id;
-          if (bid == null) return true;
-          return !apiTrnsIds.has(String(bid));
+          if (bid == null || bid === "") return true;
+          return !apiKeys.has(String(bid).trim());
         });
         let merged = [...apiOrders, ...offlineDeduped].sort((a, b) => {
           const dA = a._raw?.order_date ?? a._raw?._orderDateStr ?? "";
@@ -545,8 +567,16 @@ function ExistingOrdersContent() {
         sourceRes = await getOrderReview(orderId);
         items = getOrderLineItems(sourceRes);
       } catch {
-        sourceRes = await getOrderSummary(orderId);
-        items = getOrderLineItems(sourceRes);
+        try {
+          sourceRes = await getOrderSummary(orderId);
+          items = getOrderLineItems(sourceRes);
+        } catch {
+          const cached = await getCachedOrderDetail(String(orderId)).catch(() => null);
+          if (cached) {
+            sourceRes = { success: true, data: cached };
+            items = getOrderLineItems(sourceRes);
+          }
+        }
       }
       const products = await getAllProductsSnapshot();
       const online = typeof navigator !== "undefined" && navigator.onLine;
@@ -563,7 +593,7 @@ function ExistingOrdersContent() {
         date: row.orderDate,
         amount: row.amount,
         status: row.status,
-        items,
+        items: Array.isArray(items) ? items : [],
         raw: sourceRes?.data ?? null,
       });
     } catch (err) {
@@ -640,7 +670,7 @@ function ExistingOrdersContent() {
     )}&body=${encodeURIComponent(body)}`;
   }, [fetchOrderShareText]);
 
-  const totalAmount = orders.reduce((sum, order) => sum + order.amount, 0);
+  const totalAmount = orders.reduce((sum, order) => sum + (Number(order?.amount) || 0), 0);
 
   const isCustomerView = !!partyCodeParam;
 
@@ -1047,12 +1077,12 @@ function ExistingOrdersContent() {
                 </button>
               </div>
               <div className="px-5 py-4 overflow-y-auto max-h-[calc(90vh-72px)]">
-                {viewOrder.items.length === 0 ? (
+                {(Array.isArray(viewOrder.items) ? viewOrder.items : []).length === 0 ? (
                   <p className="text-sm text-gray-500">No items found for this order.</p>
                 ) : (
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                     <div className="lg:col-span-2 space-y-3">
-                      {viewOrder.items.map((it, idx) => (
+                      {(Array.isArray(viewOrder.items) ? viewOrder.items : []).map((it, idx) => (
                         <div key={`${it.itemId}_${idx}`} className="border border-gray-200 rounded-lg p-3">
                           <div className="flex items-center justify-between gap-4">
                             <div className="flex items-center gap-3 min-w-0">
@@ -1104,12 +1134,12 @@ function ExistingOrdersContent() {
                         <div className="space-y-2">
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-600">Items</span>
-                            <span className="font-medium text-gray-900">{viewOrder.items.length}</span>
+                            <span className="font-medium text-gray-900">{(Array.isArray(viewOrder.items) ? viewOrder.items : []).length}</span>
                           </div>
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-600">Subtotal</span>
                             <span className="font-medium text-gray-900">
-                              {formatPrice(viewOrder.items.reduce((s, i) => s + (Number(i.lineAmount) || Number(i.qty) * Number(i.unitPrice) || 0), 0))}
+                              {formatPrice((Array.isArray(viewOrder.items) ? viewOrder.items : []).reduce((s, i) => s + (Number(i.lineAmount) || Number(i.qty) * Number(i.unitPrice) || 0), 0))}
                             </span>
                           </div>
                         </div>

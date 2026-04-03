@@ -11,7 +11,9 @@ export default function ReusableTable({
 }) {
   const [currentPage, setCurrentPage] = useState(1);
 
-  const totalPages = Math.ceil(data.length / rowsPerPage);
+  const rows = Array.isArray(data) ? data : [];
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / rowsPerPage));
 
   const handlePageChange = (page) => {
     if (page < 1 || page > totalPages) return;
@@ -19,9 +21,9 @@ export default function ReusableTable({
   };
 
   // Slice data for current page ONLY if pagination is requested
-  const paginatedData = showPagination 
-    ? data.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
-    : data;
+  const paginatedData = showPagination
+    ? rows.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
+    : rows;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

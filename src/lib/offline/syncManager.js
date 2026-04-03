@@ -62,10 +62,17 @@ export async function syncPendingOrders() {
         continue;
       }
       if (String(r.uuid).startsWith(offlinePrefix)) {
-        /* Remove local offline_* row so it cannot sync again and duplicate on the server; list comes from API + cache. */
-        await deleteOfflineOrder(r.uuid);
+        try {
+          await deleteOfflineOrder(r.uuid);
+        } catch {
+          /* IDB may fail in private mode — sync still succeeded on server */
+        }
       } else {
-        await removeOrder(r.uuid);
+        try {
+          await removeOrder(r.uuid);
+        } catch {
+          /* ignore */
+        }
       }
       synced++;
     }
