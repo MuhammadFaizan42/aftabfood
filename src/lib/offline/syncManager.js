@@ -3,7 +3,7 @@
  * Offline orders get backend_trns_id stored; queue orders are removed on success.
  */
 import { getPendingOrders, removeOrder } from "./orderQueue";
-import { getOfflineOrdersForSync, updateOfflineOrderWithBackendTrnsId } from "./bootstrapLoader";
+import { getOfflineOrdersForSync, deleteOfflineOrder } from "./bootstrapLoader";
 import { getAuthToken } from "../api";
 
 const SYNC_API = "/api/sales/sync-orders";
@@ -61,9 +61,9 @@ export async function syncPendingOrders() {
         failed++;
         continue;
       }
-      const backendOrderId = r.order_id ?? r.order_number ?? r.trns_id;
       if (String(r.uuid).startsWith(offlinePrefix)) {
-        await updateOfflineOrderWithBackendTrnsId(r.uuid, backendOrderId);
+        /* Remove local offline_* row so it cannot sync again and duplicate on the server; list comes from API + cache. */
+        await deleteOfflineOrder(r.uuid);
       } else {
         await removeOrder(r.uuid);
       }
