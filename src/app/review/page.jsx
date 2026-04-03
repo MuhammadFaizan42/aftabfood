@@ -130,6 +130,14 @@ function OrderReviewContent() {
     setCustomerEnrich(null);
     const id = getCartTrnsId();
     const online = typeof navigator !== "undefined" && navigator.onLine;
+    let hasOfflineCartItems = false;
+    try {
+      const oc = await getOfflineCart();
+      hasOfflineCartItems = Array.isArray(oc?.items) && oc.items.length > 0;
+    } catch {
+      hasOfflineCartItems = false;
+    }
+    const isOfflineTrnsId = Boolean(id && String(id).startsWith("offline_"));
 
     if (isViewOnly && id) {
       if (online) {
@@ -278,7 +286,9 @@ function OrderReviewContent() {
         setLoading(false);
       }
     } else {
-      if (!online && id) {
+      // Stale server trns_id in storage must not hide an offline cart: only use cached-by-id when
+      // there is no pending offline cart, or we are resuming an offline_* draft.
+      if (!online && id && (!hasOfflineCartItems || isOfflineTrnsId)) {
         const cached = await getCachedOrderDetail(id);
         if (cached) {
           setTrnsId(id);
@@ -372,12 +382,32 @@ function OrderReviewContent() {
             };
           });
           const st = items.reduce((s, r) => s + r.total, 0);
-          setOrderItems(await finalizeReviewOrderItems(items));
+          const displayItems = await finalizeReviewOrderItems(items);
+          setOrderItems(displayItems);
           setSubtotal(st);
           setTax(0);
           setDiscount(0);
           setGrandTotal(st);
+          setTrnsId(orderId);
           setHasBackendTrnsId(false);
+          try {
+            await saveOfflineOrderToExistingOrders({
+              customer,
+              items: displayItems,
+              subtotal: st,
+              tax: 0,
+              discount: 0,
+              grandTotal: st,
+              customer_id: cart.customer_id,
+              delivery_date: "",
+              pay_terms: "",
+              discount_val: "",
+              remarks: "",
+              orderId,
+            });
+          } catch {
+            /* ignore IDB errors */
+          }
           setLoading(false);
           return;
         }

@@ -12,7 +12,7 @@ import { getSaleOrderPartyCode, setSaleOrderPartyCode, getCartTrnsId, setCartTrn
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getCachedProducts } from "@/lib/offline/bootstrapLoader";
 import { getDB } from "@/lib/idb";
-import { addToOfflineCart, removeFromOfflineCart, getOfflineCart } from "@/lib/offline/offlineCart";
+import { addToOfflineCart, removeFromOfflineCart, getOfflineCart, updateOfflineCartItem } from "@/lib/offline/offlineCart";
 
 const DEFAULT_PRODUCT_IMAGE = "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop";
 
@@ -452,18 +452,27 @@ function ProductsContent() {
           setCartItems((prev) => prev.filter((item) => item.id !== productId));
         } else {
           const opts = getAddToCartPayload(product);
-          await addToOfflineCart(partyCode || null, {
-            item_id: itemIdForApi,
-            product_id: itemIdForApi,
-            product_key: productId,
-            qty: quantity,
-            unit_price: opts.unit_price,
-            uom: opts.uom,
-            comments: opts.comments,
-            product_name: product.name,
-            sku: product.sku,
-            image_url: product.image ?? "",
-          });
+          const cart = await getOfflineCart();
+          const key = String(itemIdForApi);
+          const lineExists = cart.items.some(
+            (i) => String(i.item_id ?? i.product_id) === key
+          );
+          if (lineExists) {
+            await updateOfflineCartItem(itemIdForApi, quantity, { unitPrice: opts.unit_price });
+          } else {
+            await addToOfflineCart(partyCode || null, {
+              item_id: itemIdForApi,
+              product_id: itemIdForApi,
+              product_key: productId,
+              qty: quantity,
+              unit_price: opts.unit_price,
+              uom: opts.uom,
+              comments: opts.comments,
+              product_name: product.name,
+              sku: product.sku,
+              image_url: product.image ?? "",
+            });
+          }
           setCartItems((prev) => {
             const existing = prev.find((item) => item.id === productId);
             if (existing) {
@@ -509,18 +518,27 @@ function ProductsContent() {
             setCartItems((prev) => prev.filter((item) => item.id !== productId));
           } else {
             const opts = getAddToCartPayload(product);
-            await addToOfflineCart(partyCode || null, {
-              item_id: itemIdForApi,
-              product_id: itemIdForApi,
-              product_key: productId,
-              qty: quantity,
-              unit_price: opts.unit_price,
-              uom: opts.uom,
-              comments: opts.comments,
-              product_name: product.name,
-              sku: product.sku,
-              image_url: product.image ?? "",
-            });
+            const cart = await getOfflineCart();
+            const key = String(itemIdForApi);
+            const lineExists = cart.items.some(
+              (i) => String(i.item_id ?? i.product_id) === key
+            );
+            if (lineExists) {
+              await updateOfflineCartItem(itemIdForApi, quantity, { unitPrice: opts.unit_price });
+            } else {
+              await addToOfflineCart(partyCode || null, {
+                item_id: itemIdForApi,
+                product_id: itemIdForApi,
+                product_key: productId,
+                qty: quantity,
+                unit_price: opts.unit_price,
+                uom: opts.uom,
+                comments: opts.comments,
+                product_name: product.name,
+                sku: product.sku,
+                image_url: product.image ?? "",
+              });
+            }
             setCartItems((prev) => {
               const existing = prev.find((item) => item.id === productId);
               if (existing) {
@@ -549,6 +567,14 @@ function ProductsContent() {
   // When editing an existing Draft order, allow going to cart/order-summary
   // even if cartItems is temporarily empty on this page.
   const isCartEmpty = cartItems.length === 0 && !isDraftEditing;
+
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(typeof window !== "undefined" && window.scrollY > 280);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   if (partyCode === null) {
     return (
@@ -624,21 +650,23 @@ function ProductsContent() {
           )}
         </div>
 
-        {/* Category Tabs */}
-        <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6">
-          <div className="flex flex-wrap gap-2">
-            {categories.map((category) => (
-              <button
-                key={category}
-                onClick={() => setActiveCategory(category)}
-                className={`cursor-pointer px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${activeCategory === category
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-              >
-                {category}
-              </button>
-            ))}
+        {/* Category Tabs — sticky below app header while scrolling */}
+        <div className="sticky z-[90] top-[max(4.5rem,env(safe-area-inset-top,0px))] sm:top-[7rem] -mx-4 sm:-mx-6 px-4 sm:px-6 mb-6 bg-gray-50/80 backdrop-blur-sm border-b border-gray-200/90 shadow-sm">
+          <div className="bg-white rounded-lg shadow-sm px-4 py-3 sm:px-6 sm:py-4 max-w-none">
+            <div className="flex flex-wrap gap-x-2 gap-y-1">
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  onClick={() => setActiveCategory(category)}
+                  className={`cursor-pointer px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${activeCategory === category
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -890,6 +918,20 @@ function ProductsContent() {
         </div>
         )}
       </main>
+
+      {/* Back to top — bottom left */}
+      {showScrollTop && (
+        <button
+          type="button"
+          aria-label="Back to top"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="fixed bottom-24 left-4 sm:left-6 z-50 flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-lg transition hover:bg-gray-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        >
+          <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+          </svg>
+        </button>
+      )}
 
       {/* Total products (listing) — bottom right, above Checkout */}
       <div

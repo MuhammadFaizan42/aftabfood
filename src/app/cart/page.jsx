@@ -7,7 +7,15 @@ import { getOrderSummary, updateCartItem, removeCartItem } from "@/services/shet
 import { getCartTrnsId, getSaleOrderPartyCode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getOfflineCart, getOfflineCartSync, updateOfflineCartItem, removeFromOfflineCart } from "@/lib/offline/offlineCart";
-import { getCachedOrderDetail, getAllProductsSnapshot, updateOfflineOrderInStores } from "@/lib/offline/bootstrapLoader";
+import {
+  getCachedOrderDetail,
+  getAllProductsSnapshot,
+  updateOfflineOrderInStores,
+  mergeOfflineOrderDetailWithOfflineCart,
+  hydrateOfflineCartFromOfflineOrder,
+  syncOfflineCartWithMergedOrderItems,
+  syncOfflineCartWithOrderItems,
+} from "@/lib/offline/bootstrapLoader";
 import {
   DEFAULT_IMG,
   enrichOrderLinesWithImages,
@@ -164,10 +172,37 @@ export default function Cart() {
       if (id && String(id).startsWith("offline_")) {
         const cached = await getCachedOrderDetail(id);
         if (cached) {
+          let cart = await getOfflineCart();
+          if ((!cart?.items?.length) && Array.isArray(cached.items) && cached.items.length > 0) {
+            await hydrateOfflineCartFromOfflineOrder(id, cached);
+            cart = await getOfflineCart();
+          }
+          const merged = mergeOfflineOrderDetailWithOfflineCart(cached, cart);
+          try {
+            await updateOfflineOrderInStores(id, {
+              items: merged.items,
+              grandTotal: merged.grand_total,
+            });
+          } catch {
+            /* ignore */
+          }
+          const party =
+            merged.customer?.SHORT_CODE ??
+            merged.customer?.PARTY_CODE ??
+            merged.customer?.party_code ??
+            getSaleOrderPartyCode();
+          try {
+            await syncOfflineCartWithMergedOrderItems(party, merged.items);
+          } catch {
+            /* ignore */
+          }
           setTrnsId(id);
           setIsOfflineCart(true);
           setIsCachedOrderReadOnly(false);
-          const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary({ success: true, data: cached });
+          const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary({
+            success: true,
+            data: merged,
+          });
           setCartItems(await finalizeCartRows(rows));
           setSubtotal(st);
           setTax(t);
@@ -340,7 +375,9 @@ export default function Cart() {
           setTax(0);
           setDiscount(0);
           setGrandTotal(newSubtotal);
-          await updateOfflineOrderInStores(trnsId, { items: rowsToOrderItems(newRows), grandTotal: newSubtotal });
+          const payloadItems = rowsToOrderItems(newRows);
+          await updateOfflineOrderInStores(trnsId, { items: payloadItems, grandTotal: newSubtotal });
+          await syncOfflineCartWithOrderItems(getSaleOrderPartyCode(), payloadItems);
         } else {
           await updateOfflineCartItem(item.itemIdForApi ?? item.sku ?? id, newQty);
           await loadSummary();
@@ -424,10 +461,12 @@ export default function Cart() {
           setTax(0);
           setDiscount(0);
           setGrandTotal(newSubtotal);
+          const payloadItems = rowsToOrderItems(newRows);
           await updateOfflineOrderInStores(trnsId, {
-            items: rowsToOrderItems(newRows),
+            items: payloadItems,
             grandTotal: newSubtotal,
           });
+          await syncOfflineCartWithOrderItems(getSaleOrderPartyCode(), payloadItems);
         } else {
           await updateOfflineCartItem(item.itemIdForApi ?? item.sku ?? id, item.quantity, {
             unitPrice: nextPrice,
@@ -516,7 +555,9 @@ export default function Cart() {
           setTax(0);
           setDiscount(0);
           setGrandTotal(newSubtotal);
-          await updateOfflineOrderInStores(trnsId, { items: rowsToOrderItems(newRows), grandTotal: newSubtotal });
+          const payloadItems = rowsToOrderItems(newRows);
+          await updateOfflineOrderInStores(trnsId, { items: payloadItems, grandTotal: newSubtotal });
+          await syncOfflineCartWithOrderItems(getSaleOrderPartyCode(), payloadItems);
         } else {
           await removeFromOfflineCart(item.itemIdForApi ?? item.sku ?? id);
           await loadSummary();

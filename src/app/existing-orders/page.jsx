@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
@@ -78,6 +78,73 @@ function inDateRange(rawDate, fromDate, toDate) {
   if (from && d < from) return false;
   if (to && d > to) return false;
   return true;
+}
+
+/** Milliseconds for sorting — newest first. Handles API strings, cache, and offline_<timestamp> ids. */
+function orderRowSortTimeMs(row) {
+  const r = row?._raw ?? {};
+  const tryOne = (val) => {
+    if (val == null || val === "") return null;
+    if (typeof val === "number" && Number.isFinite(val)) return val;
+    const s = String(val).trim();
+    const n = normalizeDateInput(s);
+    if (n) return n.getTime();
+    const parsed = Date.parse(s);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+  for (const f of [
+    r.order_date,
+    r.ORDER_DATE,
+    r._orderDateStr,
+    r.created_at,
+    r.date,
+    r.trns_date,
+    r.dated,
+    r.DATED,
+    r.updatedAt,
+  ]) {
+    const t = tryOne(f);
+    if (t != null) return t;
+  }
+  const idStr = String(row?.id ?? r.id ?? "");
+  const offlineMs = idStr.match(/^offline_(\d{10,})/);
+  if (offlineMs) return Number(offlineMs[1]);
+  return 0;
+}
+
+function sortOrdersNewestFirst(list) {
+  if (!Array.isArray(list) || list.length < 2) return list ? [...list] : [];
+  return [...list].sort((a, b) => orderRowSortTimeMs(b) - orderRowSortTimeMs(a));
+}
+
+function isPendingOfflineLocalRow(row) {
+  const rawId = String(row?.id ?? row?._raw?.id ?? "");
+  return (
+    rawId.startsWith("offline_") &&
+    (row?._raw?.backend_trns_id == null || row?._raw?.backend_trns_id === "")
+  );
+}
+
+function rowMatchesStatusFilter(row, statusFilter) {
+  if (!statusFilter) return true;
+  const st = String(row?.status ?? "").trim().toLowerCase();
+  const pendingLocal = isPendingOfflineLocalRow(row);
+  switch (statusFilter) {
+    case "offline_local":
+      return pendingLocal;
+    case "offline":
+      return pendingLocal || st === "offline" || st.includes("offline");
+    case "draft":
+      return st === "draft";
+    case "submitted":
+      return st === "submitted" || st.includes("submit");
+    case "synced":
+      return st === "synced" || st === "sync";
+    case "completed":
+      return st === "completed" || st === "complete";
+    default:
+      return true;
+  }
 }
 
 function buildOrderShareText(row) {
@@ -342,6 +409,9 @@ function ExistingOrdersContent() {
   const [viewOrder, setViewOrder] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
+  const [customerSearchInput, setCustomerSearchInput] = useState("");
+  const [orderNumberSearchInput, setOrderNumberSearchInput] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -394,11 +464,7 @@ function ExistingOrdersContent() {
           if (bid == null || bid === "") return true;
           return !apiKeys.has(String(bid).trim());
         });
-        let merged = [...apiOrders, ...offlineDeduped].sort((a, b) => {
-          const dA = a._raw?.order_date ?? a._raw?._orderDateStr ?? "";
-          const dB = b._raw?.order_date ?? b._raw?._orderDateStr ?? "";
-          return String(dB).localeCompare(String(dA));
-        });
+        let merged = sortOrdersNewestFirst([...apiOrders, ...offlineDeduped]);
         if (partyCodeParam) {
           const pc = String(partyCodeParam).trim();
           merged = merged.filter((o) => String(o.partyCode ?? "").trim() === pc);
@@ -432,7 +498,7 @@ function ExistingOrdersContent() {
           const pc = String(partyCodeParam).trim();
           list = list.filter((o) => String(o.partyCode ?? "").trim() === pc);
         }
-        setOrders(list);
+        setOrders(sortOrdersNewestFirst(list));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load existing orders.");
@@ -522,7 +588,9 @@ function ExistingOrdersContent() {
 
     const status = (row?.status ?? row?._raw?.status ?? "").toString();
     const isDraft = status.toLowerCase() === "draft";
-    if (!isDraft) return;
+    const isPendingOffline =
+      String(orderId).startsWith("offline_") && (row?._raw?.backend_trns_id == null || row?._raw?.backend_trns_id === "");
+    if (!isDraft && !isPendingOffline) return;
 
     setDeleteError(null);
     setDeleteTargetOrder(row);
@@ -670,7 +738,21 @@ function ExistingOrdersContent() {
     )}&body=${encodeURIComponent(body)}`;
   }, [fetchOrderShareText]);
 
-  const totalAmount = orders.reduce((sum, order) => sum + (Number(order?.amount) || 0), 0);
+  const filteredOrders = useMemo(() => {
+    const c = customerSearchInput.trim().toLowerCase();
+    const o = orderNumberSearchInput.trim().toLowerCase();
+    return orders.filter((row) => {
+      if (c && !String(row.customerName ?? "").toLowerCase().includes(c)) return false;
+      if (o) {
+        const hay = `${row.orderId ?? ""} ${row.id ?? ""}`.toLowerCase();
+        if (!hay.includes(o)) return false;
+      }
+      if (!rowMatchesStatusFilter(row, statusFilter)) return false;
+      return true;
+    });
+  }, [orders, customerSearchInput, orderNumberSearchInput, statusFilter]);
+
+  const totalAmount = filteredOrders.reduce((sum, order) => sum + (Number(order?.amount) || 0), 0);
 
   const isCustomerView = !!partyCodeParam;
 
@@ -702,15 +784,20 @@ function ExistingOrdersContent() {
       accessor: "status",
       width: "130px",
       render: (row) => {
-        const s = (row.status || "").toString();
+        const pendingLocal = isPendingOfflineLocalRow(row);
+        const label = pendingLocal ? "Offline · local" : (row.status || "—").toString();
+        const s = label;
         const statusClass =
-          s === "Synced" ? "text-green-700 bg-green-50"
-            : s === "Offline" ? "text-amber-700 bg-amber-50"
-              : s.toLowerCase() === "completed" ? "text-green-700 bg-green-50"
+          s === "Synced" || (row.status || "").toString() === "Synced"
+            ? "text-green-700 bg-green-50"
+            : pendingLocal || (row.status || "").toString() === "Offline"
+              ? "text-amber-700 bg-amber-50"
+              : (row.status || "").toString().toLowerCase() === "completed"
+                ? "text-green-700 bg-green-50"
                 : "text-gray-500 bg-gray-100";
         return (
           <span className={`inline-flex items-center text-xs font-medium px-2.5 py-1 rounded ${statusClass}`}>
-            {row.status}
+            {label}
           </span>
         );
       },
@@ -725,7 +812,8 @@ function ExistingOrdersContent() {
         const isViewing = viewLoading === row.id;
         const isDeleting = deleteLoading === row.id;
         const status = (row.status || "").toString().toLowerCase();
-        const showDelete = status === "draft";
+        const pendingOffline = isPendingOfflineLocalRow(row);
+        const showDelete = status === "draft" || pendingOffline;
         return (
           <div className="flex items-center gap-2">
             <button
@@ -810,15 +898,20 @@ function ExistingOrdersContent() {
       accessor: "status",
       width: "1fr",
       render: (row) => {
-        const s = (row.status || "").toString();
+        const pendingLocal = isPendingOfflineLocalRow(row);
+        const label = pendingLocal ? "Offline · local" : (row.status || "—").toString();
+        const rs = (row.status || "").toString();
         const statusClass =
-          s === "Synced" ? "bg-green-100 text-green-700"
-            : s === "Offline" ? "bg-amber-100 text-amber-700"
-              : s === "Draft" ? "bg-blue-100 text-blue-700"
+          rs === "Synced" || label === "Synced"
+            ? "bg-green-100 text-green-700"
+            : pendingLocal || rs === "Offline"
+              ? "bg-amber-100 text-amber-700"
+              : rs === "Draft"
+                ? "bg-blue-100 text-blue-700"
                 : "bg-green-100 text-green-700";
         return (
           <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${statusClass}`}>
-            {row.status}
+            {label}
           </span>
         );
       },
@@ -899,7 +992,9 @@ function ExistingOrdersContent() {
               </svg>
             </button>
           )}
-          {(row.status || "").toString().toLowerCase() === "draft" && (
+          {((row.status || "").toString().toLowerCase() === "draft" ||
+            (String(row.id ?? "").startsWith("offline_") &&
+              (row._raw?.backend_trns_id == null || row._raw?.backend_trns_id === ""))) && (
             <button
               className="cursor-pointer p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-wait"
               title="Delete Draft"
@@ -1006,6 +1101,67 @@ function ExistingOrdersContent() {
               </button>
             </div>
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-5 mt-5 border-t border-gray-100 sm:items-end">
+            <div className="min-w-0">
+              <label htmlFor="eo-search-customer" className="block text-sm font-medium text-gray-600 mb-2">
+                Customer name
+              </label>
+              <input
+                id="eo-search-customer"
+                type="search"
+                value={customerSearchInput}
+                onChange={(e) => setCustomerSearchInput(e.target.value)}
+                placeholder="Search by customer…"
+                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div className="min-w-0">
+              <label htmlFor="eo-search-order" className="block text-sm font-medium text-gray-600 mb-2">
+                Order number
+              </label>
+              <input
+                id="eo-search-order"
+                type="search"
+                value={orderNumberSearchInput}
+                onChange={(e) => setOrderNumberSearchInput(e.target.value)}
+                placeholder="SO/… or offline id…"
+                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div className="min-w-0">
+              <label htmlFor="eo-filter-status" className="block text-sm font-medium text-gray-600 mb-2">
+                Status
+              </label>
+              <select
+                id="eo-filter-status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
+              >
+                <option value="">All statuses</option>
+                <option value="offline_local">Offline · local</option>
+                <option value="offline">Offline (any)</option>
+                <option value="draft">Draft</option>
+                <option value="submitted">Submitted</option>
+                <option value="synced">Synced</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+            <div className="flex sm:items-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomerSearchInput("");
+                  setOrderNumberSearchInput("");
+                  setStatusFilter("");
+                }}
+                className="cursor-pointer w-full sm:w-auto px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Clear search and status
+              </button>
+            </div>
+          </div>
         </div>
 
         {error && (
@@ -1046,10 +1202,16 @@ function ExistingOrdersContent() {
         {/* Orders Table */}
         {loading && orders.length === 0 ? (
           <div className="text-center py-12 text-gray-500">Loading existing orders...</div>
+        ) : filteredOrders.length === 0 ? (
+          <div className="text-center py-12 text-gray-500 rounded-xl border border-dashed border-gray-200 bg-white">
+            {orders.length === 0
+              ? "No orders in this date range."
+              : "No orders match your customer name, order number, or status filter."}
+          </div>
         ) : (
           <ReusableTable
             columns={columns}
-            data={orders}
+            data={filteredOrders}
             rowsPerPage={20}
             totalAmount={`£${totalAmount.toLocaleString("en-GB", {
               minimumFractionDigits: 2,

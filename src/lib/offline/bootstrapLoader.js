@@ -3,6 +3,7 @@
  */
 import { putMany, putOne, putManyMerge, getAll, getByKey, deleteByKey, setMeta, getMeta } from "../idb";
 import { getProducts, getCustomers, getPartySaleInvDashboard, getExistingOrders } from "@/services/shetApi";
+import { setOfflineCart } from "./offlineCart";
 
 const META_LAST_SYNC = "master_last_sync";
 const SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour – refresh cache
@@ -373,6 +374,175 @@ export async function getOfflineOrdersFromStore() {
  * Update an offline order's items, total, and optional meta in both existingOrders and orderDetails.
  * Use when user edits cart (qty/remove) or delivery_date/pay_terms/discount/remarks for sync.
  */
+function lineItemKeyFromOrder(it) {
+  return String(
+    it?.item_id ??
+      it?.itemIdForApi ??
+      it?.product_id ??
+      it?.PRODUCT_ID ??
+      it?.sku ??
+      it?.SKU ??
+      it?.id ??
+      ""
+  ).trim();
+}
+
+function lineItemKeyFromCart(it) {
+  return String(it?.item_id ?? it?.product_id ?? "").trim();
+}
+
+/**
+ * Merge saved offline order lines (IndexedDB orderDetails) with session offline_cart lines.
+ * Products page only writes to offline_cart; without this merge, order summary stays stale.
+ */
+export function mergeOfflineOrderDetailWithOfflineCart(cachedData, offlineCart) {
+  if (!cachedData || typeof cachedData !== "object") return cachedData;
+  const out = { ...cachedData };
+  const cartItems = Array.isArray(offlineCart?.items) ? offlineCart.items : [];
+  const orderItems = Array.isArray(cachedData.items) ? cachedData.items.map((x) => ({ ...x })) : [];
+  if (!cartItems.length) {
+    return out;
+  }
+  const byKey = new Map();
+  for (const it of orderItems) {
+    const k = lineItemKeyFromOrder(it);
+    if (k) byKey.set(k, { ...it });
+  }
+  for (const cit of cartItems) {
+    const k = lineItemKeyFromCart(cit);
+    if (!k) continue;
+    const qty = Number(cit.qty) || 0;
+    const unitPrice = Number(cit.unit_price) || 0;
+    if (qty <= 0) {
+      byKey.delete(k);
+      continue;
+    }
+    const prev = byKey.get(k) || {};
+    const name = cit.product_name ?? prev.product_name ?? prev.name ?? "—";
+    const sku = cit.sku ?? prev.sku ?? k;
+    const img = cit.image_url ?? prev.image_url ?? prev.image ?? "";
+    byKey.set(k, {
+      ...prev,
+      item_id: k,
+      product_id: k,
+      itemIdForApi: k,
+      id: cit.product_key ?? prev.id ?? k,
+      name,
+      product_name: name,
+      sku,
+      qty,
+      quantity: qty,
+      unit_price: unitPrice,
+      unitPrice,
+      line_total: qty * unitPrice,
+      total: qty * unitPrice,
+      LC_AMT: qty * unitPrice,
+      image: img,
+      image_url: img,
+      uom: cit.uom ?? prev.uom ?? "",
+      comments: cit.comments ?? prev.comments ?? "",
+    });
+  }
+  const mergedItems = [...byKey.values()].filter((it) => (Number(it.qty ?? it.quantity ?? 0) || 0) > 0);
+  const subtotal = mergedItems.reduce((s, it) => {
+    const q = Number(it.qty ?? it.quantity ?? 0) || 0;
+    const p = Number(it.unit_price ?? it.unitPrice ?? 0) || 0;
+    return s + (Number(it.line_total ?? it.total ?? q * p) || q * p);
+  }, 0);
+  out.items = mergedItems;
+  out.subtotal = subtotal;
+  out.sub_total = subtotal;
+  out.grand_total = subtotal;
+  out.total = subtotal;
+  return out;
+}
+
+/** When opening an offline_* order and session cart is empty, copy order lines into offline_cart so the products page matches. */
+export async function hydrateOfflineCartFromOfflineOrder(trnsId, cachedData) {
+  if (!trnsId || !String(trnsId).startsWith(OFFLINE_ORDER_ID_PREFIX) || !cachedData) return;
+  const items = Array.isArray(cachedData.items) ? cachedData.items : [];
+  if (!items.length) return;
+  const customer_id =
+    cachedData.customer?.SHORT_CODE ??
+    cachedData.customer?.PARTY_CODE ??
+    cachedData.customer?.party_code ??
+    cachedData.customer?.customer_id ??
+    null;
+  const cartItems = items
+    .map((it) => {
+      const id = lineItemKeyFromOrder(it);
+      const qty = Number(it.qty ?? it.quantity ?? 0) || 0;
+      if (!id || qty <= 0) return null;
+      const unitPrice = Number(it.unit_price ?? it.unitPrice ?? 0) || 0;
+      const img = typeof it.image === "string" ? it.image : it.image_url ?? "";
+      return {
+        item_id: id,
+        product_id: id,
+        product_key: it.id ?? id,
+        qty,
+        unit_price: unitPrice,
+        uom: it.uom ?? "",
+        comments: it.comments ?? "",
+        product_name: it.product_name ?? it.name ?? "—",
+        sku: it.sku ?? id,
+        image_url: img && String(img).trim() ? String(img).trim() : "",
+      };
+    })
+    .filter(Boolean);
+  if (!cartItems.length) return;
+  await setOfflineCart(customer_id, cartItems);
+}
+
+/** Keep session offline_cart aligned with merged order lines (fixes qty drift after order summary loads). */
+export async function syncOfflineCartWithMergedOrderItems(customerId, mergedItems) {
+  if (!Array.isArray(mergedItems)) return;
+  const cartItems = mergedItems
+    .map((it) => {
+      const id = lineItemKeyFromOrder(it);
+      const qty = Number(it.qty ?? it.quantity ?? 0) || 0;
+      if (!id || qty <= 0) return null;
+      const unitPrice = Number(it.unit_price ?? it.unitPrice ?? 0) || 0;
+      const img = typeof it.image === "string" ? it.image : it.image_url ?? "";
+      return {
+        item_id: id,
+        product_id: id,
+        product_key: it.id ?? id,
+        qty,
+        unit_price: unitPrice,
+        uom: it.uom ?? "",
+        comments: it.comments ?? "",
+        product_name: it.product_name ?? it.name ?? "—",
+        sku: it.sku ?? id,
+        image_url: img && String(img).trim() ? String(img).trim() : "",
+      };
+    })
+    .filter(Boolean);
+  await setOfflineCart(customerId || null, cartItems);
+}
+
+/** Sync session offline_cart after cart-summary edits (rowsToOrderItems shape). */
+export async function syncOfflineCartWithOrderItems(customerId, items) {
+  if (!Array.isArray(items) || !items.length) {
+    await setOfflineCart(customerId || null, []);
+    return;
+  }
+  const mergedItems = items.map((it) => ({
+    item_id: String(it.id ?? it.item_id ?? ""),
+    itemIdForApi: String(it.id ?? it.item_id ?? ""),
+    qty: Number(it.quantity ?? it.qty) || 0,
+    quantity: Number(it.quantity ?? it.qty) || 0,
+    unit_price: Number(it.unitPrice ?? it.unit_price) || 0,
+    unitPrice: Number(it.unitPrice ?? it.unit_price) || 0,
+    product_name: it.name ?? it.product_name ?? "—",
+    name: it.name ?? it.product_name ?? "—",
+    sku: it.sku ?? String(it.id ?? ""),
+    image: it.image ?? it.image_url ?? "",
+    image_url: it.image ?? it.image_url ?? "",
+    id: it.id,
+  }));
+  await syncOfflineCartWithMergedOrderItems(customerId, mergedItems);
+}
+
 export async function updateOfflineOrderInStores(trnsId, payload) {
   const { items, grandTotal, delivery_date, pay_terms, discount_val, remarks } = payload;
   if (!trnsId || !String(trnsId).startsWith(OFFLINE_ORDER_ID_PREFIX)) return;
