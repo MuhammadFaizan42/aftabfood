@@ -7,8 +7,7 @@ import { getOrderSummary, updateCartItem, removeCartItem } from "@/services/shet
 import { getCartTrnsId, getSaleOrderPartyCode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getOfflineCart, getOfflineCartSync, updateOfflineCartItem, removeFromOfflineCart } from "@/lib/offline/offlineCart";
-import { getCachedOrderDetail, updateOfflineOrderInStores } from "@/lib/offline/bootstrapLoader";
-import { getAll } from "@/lib/idb";
+import { getCachedOrderDetail, getAllProductsSnapshot, updateOfflineOrderInStores } from "@/lib/offline/bootstrapLoader";
 import {
   DEFAULT_IMG,
   enrichOrderLinesWithImages,
@@ -23,14 +22,11 @@ async function finalizeCartRows(rows, preloadedProducts = null) {
   if (!rows?.length) return rows;
   let products = preloadedProducts;
   if (products == null) {
-    try {
-      products = await getAll("products");
-    } catch {
-      products = [];
-    }
+    products = await getAllProductsSnapshot();
   }
+  const online = typeof navigator !== "undefined" && navigator.onLine;
   try {
-    return await enrichOrderLinesWithImages(rows, products, { hydrateFromApi: true });
+    return await enrichOrderLinesWithImages(rows, products, { hydrateFromApi: online });
   } catch {
     return rows;
   }
@@ -218,7 +214,7 @@ export default function Cart() {
         setTrnsId(null);
         setIsOfflineCart(true);
         setIsCachedOrderReadOnly(false);
-        const products = await getAll("products");
+        const products = await getAllProductsSnapshot();
         const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOfflineCartToRows(syncCart, products);
         setCartItems(await finalizeCartRows(rows, products));
         setSubtotal(st);
@@ -236,7 +232,7 @@ export default function Cart() {
         setTrnsId(null);
         setIsOfflineCart(true);
         setIsCachedOrderReadOnly(false);
-        const products = await getAll("products");
+        const products = await getAllProductsSnapshot();
         const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOfflineCartToRows(cart, products);
         setCartItems(await finalizeCartRows(rows, products));
         setSubtotal(st);

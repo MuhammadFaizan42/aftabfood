@@ -36,6 +36,7 @@ async function loadProducts() {
     id: p.PK_INV_ID ?? p.PK_ID ?? p.PRODUCT_ID ?? p.id ?? p.SKU ?? String(Math.random()),
   }));
   await putMany("products", items);
+  invalidateProductsListSnapshot();
 }
 
 /** Load customers from API and store – fetch in pages until we have up to CUSTOMERS_LIMIT */
@@ -148,9 +149,28 @@ export async function bootstrapMasterData(force = false) {
   await setMeta(META_LAST_SYNC, now).catch(() => {});
 }
 
+/** In-memory snapshot so cart/review/products do not each call getAll("products") (large offline cost). */
+let _productsListSnapshot = null;
+
+export function invalidateProductsListSnapshot() {
+  _productsListSnapshot = null;
+}
+
+/** Full product list from IDB, cached until next bootstrap sync replaces the store. */
+export async function getAllProductsSnapshot() {
+  if (_productsListSnapshot == null) {
+    try {
+      _productsListSnapshot = await getAll("products");
+    } catch {
+      _productsListSnapshot = [];
+    }
+  }
+  return _productsListSnapshot;
+}
+
 /** Get products from cache (IndexedDB) */
 export async function getCachedProducts(params = {}) {
-  const all = await getAll("products");
+  const all = await getAllProductsSnapshot();
   let list = all;
   const { category, search } = params || {};
   if (category && category !== "All Items") {
@@ -213,15 +233,22 @@ export async function cacheExistingOrders(apiResponse) {
   await putManyMerge("existingOrders", items, "id");
 }
 
-/** Get cached existing orders filtered by date range */
+function orderRowDateStr(o) {
+  const raw = o._orderDateStr ?? o.order_date ?? o.ORDER_DATE ?? "";
+  if (typeof raw === "string" && raw.length >= 10) return raw.slice(0, 10);
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw.toISOString().slice(0, 10);
+  return "";
+}
+
+/** Get cached existing orders filtered by date range (includes offline_* rows; undated rows stay visible). */
 export async function getCachedExistingOrders(fromDate, toDate) {
   const all = await getAll("existingOrders");
   if (!fromDate && !toDate) return all;
   const from = fromDate ? String(fromDate).slice(0, 10) : "";
   const to = toDate ? String(toDate).slice(0, 10) : "";
   return all.filter((o) => {
-    const d = o._orderDateStr ?? o.order_date ?? o.ORDER_DATE ?? "";
-    const dStr = typeof d === "string" ? d.slice(0, 10) : "";
+    const dStr = orderRowDateStr(o);
+    if (!dStr) return true;
     if (from && dStr < from) return false;
     if (to && dStr > to) return false;
     return true;

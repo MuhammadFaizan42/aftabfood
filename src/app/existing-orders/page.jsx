@@ -13,7 +13,6 @@ import {
 } from "@/services/shetApi";
 import { getOrderLineItems } from "@/lib/orderLineItems";
 import { enrichOrderLinesWithImages } from "@/lib/productImage";
-import { getAll } from "@/lib/idb";
 import { setCartTrnsId, setSaleOrderPartyCode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import {
@@ -22,6 +21,7 @@ import {
   getOfflineOrdersFromStore,
   getCachedCustomers,
   deleteOfflineOrder,
+  getAllProductsSnapshot,
 } from "@/lib/offline/bootstrapLoader";
 import { onSyncComplete, syncPendingOrders } from "@/lib/offline/syncManager";
 
@@ -220,7 +220,11 @@ function mapApiOrders(res) {
     const customerName = r.customer_name ?? r.CUSTOMER_NAME ?? r.party_name ?? r.PARTY_NAME ?? r.customer ?? "—";
     const status = (r.status ?? r.STATUS ?? r.order_status ?? "Draft").toString();
     const amount = Number(r.amount ?? r.AMOUNT ?? r.total ?? r.grand_total ?? r.TOTAL ?? 0) || 0;
-    const canEdit = status?.toLowerCase() === "draft" || r.can_edit === true || r.can_edit === "Y";
+    const canEdit =
+      status?.toLowerCase() === "draft" ||
+      status?.toLowerCase() === "offline" ||
+      r.can_edit === true ||
+      r.can_edit === "Y";
     const id =
       r.trns_id ??
       r.TRNS_ID ??
@@ -258,7 +262,11 @@ function mapRawToOrders(rawList) {
     const customerName = r.customer_name ?? r.CUSTOMER_NAME ?? r.party_name ?? r.PARTY_NAME ?? r.customer ?? "—";
     const status = (r.status ?? r.STATUS ?? r.order_status ?? "Draft").toString();
     const amount = Number(r.amount ?? r.AMOUNT ?? r.total ?? r.grand_total ?? r.TOTAL ?? 0) || 0;
-    const canEdit = status?.toLowerCase() === "draft" || r.can_edit === true || r.can_edit === "Y";
+    const canEdit =
+      status?.toLowerCase() === "draft" ||
+      status?.toLowerCase() === "offline" ||
+      r.can_edit === true ||
+      r.can_edit === "Y";
     const id = r.trns_id ?? r.TRNS_ID ?? r.id ?? r.pk_id ?? orderId ?? i;
     const partyCode = r.party_code ?? r.PARTY_CODE ?? r.customer_id ?? r.CUSTOMER_ID ?? r.account_id ?? r.ACCOUNT_ID ?? null;
     return {
@@ -311,8 +319,9 @@ function ExistingOrdersContent() {
   const loadOrders = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const online = typeof navigator !== "undefined" && navigator.onLine;
     try {
-      if (isOnline) {
+      if (online) {
         const res = await getExistingOrders({
           from_date: appliedFromDate || undefined,
           to_date: appliedToDate || undefined,
@@ -375,7 +384,15 @@ function ExistingOrdersContent() {
         setOrders(merged);
       } else {
         const cached = await getCachedExistingOrders(appliedFromDate, appliedToDate);
-        let list = mapRawToOrders(cached);
+        const offlineRows = await getOfflineOrdersFromStore();
+        const byId = new Map();
+        for (const o of cached) {
+          if (o?.id != null) byId.set(String(o.id), o);
+        }
+        for (const o of offlineRows) {
+          if (o?.id != null && !byId.has(String(o.id))) byId.set(String(o.id), o);
+        }
+        let list = mapRawToOrders([...byId.values()]);
         list = list.filter((o) =>
           inDateRange(
             o._raw?.order_date ??
@@ -531,14 +548,10 @@ function ExistingOrdersContent() {
         sourceRes = await getOrderSummary(orderId);
         items = getOrderLineItems(sourceRes);
       }
-      let products = [];
+      const products = await getAllProductsSnapshot();
+      const online = typeof navigator !== "undefined" && navigator.onLine;
       try {
-        products = await getAll("products");
-      } catch {
-        products = [];
-      }
-      try {
-        items = await enrichOrderLinesWithImages(items, products, { hydrateFromApi: true });
+        items = await enrichOrderLinesWithImages(items, products, { hydrateFromApi: online });
       } catch {
         /* keep raw line items */
       }

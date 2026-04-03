@@ -256,8 +256,12 @@ export function enrichOrderTableRows(rows, products) {
  * When IndexedDB has no image (or line IDs do not match catalog keys), fetch product.php by search (SKU / code).
  * Only runs in the browser; no-op safe when offline / API fails.
  */
+const HYDRATE_API_TIMEOUT_MS = 5000;
+
 export async function hydrateLineImagesFromProductApi(rows) {
   if (!rows?.length || typeof window === "undefined") return rows;
+  /* Offline: never call product.php — each search was blocking UI for TCP timeouts (5–30s+). */
+  if (typeof navigator !== "undefined" && !navigator.onLine) return rows;
   const needApi = rows.some((r) => isPlaceholderCartImage(r.image));
   const needStock = rows.some((r) => r.stock == null && r.inStock == null);
   if (!needApi && !needStock) return rows;
@@ -272,7 +276,12 @@ export async function hydrateLineImagesFromProductApi(rows) {
     let resolved = null;
     let stockVal = null;
     try {
-      const res = await getProducts({ search: k, limit: 50 });
+      const res = await Promise.race([
+        getProducts({ search: k, limit: 50 }),
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("hydrate-timeout")), HYDRATE_API_TIMEOUT_MS);
+        }),
+      ]);
       if (res?.success && Array.isArray(res.data) && res.data.length) {
         const exact = res.data.find((p) => {
           const ids = [
@@ -294,6 +303,7 @@ export async function hydrateLineImagesFromProductApi(rows) {
       }
     } catch {
       resolved = null;
+      stockVal = null;
     }
     const payload = { image: resolved, stock: stockVal };
     searchCache.set(k, payload);

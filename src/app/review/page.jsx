@@ -8,8 +8,7 @@ import { getOrderReview, submitOrder, getPartySaleInvDashboard } from "@/service
 import { getCartTrnsId, setCartTrnsId, clearCartTrnsId, getSaleOrderPartyCode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getOfflineCart, clearOfflineCart } from "@/lib/offline/offlineCart";
-import { getCachedCustomerDashboard, getCachedOrderDetail, cacheOrderDetail, saveOfflineOrderToExistingOrders, getExistingOrderRow, updateOfflineOrderInStores, generateOfflineOrderId } from "@/lib/offline/bootstrapLoader";
-import { getAll } from "@/lib/idb";
+import { getCachedCustomerDashboard, getCachedOrderDetail, cacheOrderDetail, saveOfflineOrderToExistingOrders, getExistingOrderRow, getAllProductsSnapshot, updateOfflineOrderInStores, generateOfflineOrderId } from "@/lib/offline/bootstrapLoader";
 import {
   DEFAULT_IMG,
   enrichOrderLinesWithImages,
@@ -19,14 +18,10 @@ import {
 
 async function finalizeReviewOrderItems(items) {
   if (!items?.length) return items;
-  let products = [];
+  const products = await getAllProductsSnapshot();
+  const online = typeof navigator !== "undefined" && navigator.onLine;
   try {
-    products = await getAll("products");
-  } catch {
-    products = [];
-  }
-  try {
-    return await enrichOrderLinesWithImages(items, products, { hydrateFromApi: true });
+    return await enrichOrderLinesWithImages(items, products, { hydrateFromApi: online });
   } catch {
     return items;
   }
@@ -134,9 +129,10 @@ function OrderReviewContent() {
     setError(null);
     setCustomerEnrich(null);
     const id = getCartTrnsId();
+    const online = typeof navigator !== "undefined" && navigator.onLine;
 
     if (isViewOnly && id) {
-      if (isOnline) {
+      if (online) {
         setTrnsId(id);
         setIsOfflineOrder(false);
         try {
@@ -164,7 +160,26 @@ function OrderReviewContent() {
             } catch { /* ignore */ }
           }
         } catch (err) {
-          setError(err instanceof Error ? err.message : "Failed to load order review.");
+          try {
+            const cached = await getCachedOrderDetail(id);
+            if (cached) {
+              const isOfflineId = id && String(id).startsWith("offline_");
+              setTrnsId(id);
+              setIsOfflineOrder(!!isOfflineId);
+              setIsCachedServerOrder(!isOfflineId);
+              const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: cached });
+              setCustomer(c);
+              setOrderItems(await finalizeReviewOrderItems(items));
+              setSubtotal(st);
+              setTax(t);
+              setDiscount(d);
+              setGrandTotal(gt);
+            } else {
+              setError(err instanceof Error ? err.message : "Failed to load order review.");
+            }
+          } catch {
+            setError(err instanceof Error ? err.message : "Failed to load order review.");
+          }
         } finally {
           setLoading(false);
         }
@@ -205,14 +220,10 @@ function OrderReviewContent() {
       return;
     }
 
-    if (isOnline) {
+    if (online && id) {
       setIsCachedServerOrder(false);
       setTrnsId(id);
       setIsOfflineOrder(false);
-      if (!id) {
-        setLoading(false);
-        return;
-      }
       try {
         const res = await getOrderReview(id);
         try {
@@ -238,12 +249,36 @@ function OrderReviewContent() {
           } catch { /* ignore */ }
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load order review.");
+        const cached = await getCachedOrderDetail(id).catch(() => null);
+        if (cached) {
+          const isOfflineId = String(id).startsWith("offline_");
+          setTrnsId(id);
+          setIsOfflineOrder(isOfflineId);
+          setIsCachedServerOrder(!isOfflineId);
+          const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: cached });
+          setCustomer(c);
+          setOrderItems(await finalizeReviewOrderItems(items));
+          setSubtotal(st);
+          setTax(t);
+          setDiscount(d);
+          setGrandTotal(gt);
+          if (isOfflineId) {
+            const row = await getExistingOrderRow(id);
+            setHasBackendTrnsId(!!row?.backend_trns_id);
+            setBackendTrnsId(row?.backend_trns_id ?? null);
+            setDeliveryDate(cached.delivery_date ?? "");
+            setPayTerms(cached.pay_terms ?? "");
+            setDiscountVal(cached.discount_val ?? "");
+            setRemarks(cached.remarks ?? "");
+          }
+        } else {
+          setError(err instanceof Error ? err.message : "Failed to load order review.");
+        }
       } finally {
         setLoading(false);
       }
     } else {
-      if (!isOnline && id) {
+      if (!online && id) {
         const cached = await getCachedOrderDetail(id);
         if (cached) {
           setTrnsId(id);

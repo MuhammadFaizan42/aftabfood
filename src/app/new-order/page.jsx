@@ -43,26 +43,56 @@ export default function NewOrder() {
   const [successMessage, setSuccessMessage] = useState("");
 
   const loadCustomers = useCallback(async () => {
-    setLoading(true);
     setError(null);
+    const online = typeof navigator !== "undefined" && navigator.onLine;
+
+    let cached = [];
     try {
-      if (isOnline) {
-        const res = await getCustomers();
-        if (!res?.success || !Array.isArray(res.data)) {
+      cached = await getCachedCustomers();
+    } catch {
+      cached = [];
+    }
+
+    /* Cache-first: show list immediately when IDB has data (offline / flaky “online”). */
+    if (cached.length) {
+      setCustomers(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
+    if (!online) {
+      if (!cached.length) {
+        setError("No cached customers. Open this page once when online to sync.");
+        setCustomers([]);
+      }
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const res = await getCustomers();
+      if (!res?.success || !Array.isArray(res.data)) {
+        if (!cached.length) {
           setCustomers([]);
-          return;
+          setError("Could not load customers.");
         }
-        setCustomers(res.data);
-        try {
-          await cacheCustomers(res.data);
-        } catch { /* ignore */ }
-      } else {
-        const cached = await getCachedCustomers();
-        setCustomers(cached || []);
+        setLoading(false);
+        return;
+      }
+      setCustomers(res.data);
+      try {
+        await cacheCustomers(res.data);
+      } catch {
+        /* ignore */
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load customers.");
-      setCustomers([]);
+      if (cached.length) {
+        setCustomers(cached);
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to load customers.");
+        setCustomers([]);
+      }
     } finally {
       setLoading(false);
     }

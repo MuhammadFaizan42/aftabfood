@@ -15,8 +15,7 @@ import {
 import { setSaleOrderPartyCode, clearCartTrnsId, setCartTrnsId } from "@/lib/api";
 import { getOrderLineItems } from "@/lib/orderLineItems";
 import { enrichOrderLinesWithImages, DEFAULT_IMG } from "@/lib/productImage";
-import { getAll } from "@/lib/idb";
-import { cacheCustomerDashboard, getCachedCustomerDashboard, getCachedCustomers, cacheVisitHistory, getCachedVisitHistory } from "@/lib/offline/bootstrapLoader";
+import { cacheCustomerDashboard, getCachedCustomerDashboard, getCachedCustomers, cacheVisitHistory, getAllProductsSnapshot, getCachedVisitHistory } from "@/lib/offline/bootstrapLoader";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { saveVisit, NO_ORDER_REASONS, getVisitsByPartyCode, getReasonLabel } from "@/lib/visits";
 
@@ -148,14 +147,10 @@ function CustomerDashboardClient() {
         const res = await getOrderSummary(orderId);
         items = getOrderLineItems(res);
       }
-      let products = [];
+      const products = await getAllProductsSnapshot();
+      const online = typeof navigator !== "undefined" && navigator.onLine;
       try {
-        products = await getAll("products");
-      } catch {
-        products = [];
-      }
-      try {
-        items = await enrichOrderLinesWithImages(items, products, { hydrateFromApi: true });
+        items = await enrichOrderLinesWithImages(items, products, { hydrateFromApi: online });
       } catch {
         /* keep raw line items */
       }
@@ -179,71 +174,90 @@ function CustomerDashboardClient() {
 
   const loadDashboard = React.useCallback(async () => {
     if (!partyCode) return;
-    setLoading(true);
     setError(null);
-    setShowCachedBanner(false);
+    const online = typeof navigator !== "undefined" && navigator.onLine;
+
+    let cached = null;
     try {
-      if (isOnline) {
-        const params = {
-          recent_limit: 10,
-          ...(appliedFrom && { from_date: appliedFrom }),
-          ...(appliedTo && { to_date: appliedTo }),
-        };
-        let res;
+      cached = await getCachedCustomerDashboard(partyCode);
+    } catch {
+      /* ignore */
+    }
+
+    /* Cache-first: show dashboard immediately when IDB has data (critical for offline / flaky "online"). */
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
+    if (!online) {
+      setShowCachedBanner(false);
+      if (!cached) {
+        let customerLabel = partyCode;
         try {
-          res = await getPartySaleInvDashboard(partyCode, params);
-        } catch (apiErr) {
-          const cached = await getCachedCustomerDashboard(partyCode);
-          if (cached) {
-            setData(cached);
-            setShowCachedBanner(true);
-          } else {
-            setError(apiErr instanceof Error ? apiErr.message : "Could not reach server. Open this page once when online to cache for offline.");
-            setData(null);
-          }
-          return;
-        }
-        if (!res?.success || !res?.data) {
-          const cached = await getCachedCustomerDashboard(partyCode);
-          if (cached) {
-            setData(cached);
-            setShowCachedBanner(true);
-          } else {
-            setError(res?.message || "Failed to load dashboard.");
-            setData(null);
-          }
-          return;
-        }
-        setData(res.data);
-        try {
-          await cacheCustomerDashboard(partyCode, res.data);
+          const customers = await getCachedCustomers();
+          const c = customers.find(
+            (x) => String(x.SHORT_CODE ?? x.CUSTOMER_ID ?? x.PARTY_CODE ?? x.code ?? "").trim() === String(partyCode).trim()
+          );
+          if (c) customerLabel = c.CUSTOMER_NAME ?? c.PARTY_NAME ?? c.SHORT_CODE ?? partyCode;
         } catch {
-          // ignore cache errors
+          /* ignore */
         }
-      } else {
-        const cached = await getCachedCustomerDashboard(partyCode);
+        setError(`No cached data for ${customerLabel}. Open this page once when online on this device to use offline.`);
+        setData(null);
+      }
+      setLoading(false);
+      return;
+    }
+
+    const params = {
+      recent_limit: 10,
+      ...(appliedFrom && { from_date: appliedFrom }),
+      ...(appliedTo && { to_date: appliedTo }),
+    };
+    try {
+      let res;
+      try {
+        res = await getPartySaleInvDashboard(partyCode, params);
+      } catch (apiErr) {
         if (cached) {
           setData(cached);
+          setShowCachedBanner(true);
         } else {
-          let customerLabel = partyCode;
-          try {
-            const customers = await getCachedCustomers();
-            const c = customers.find(
-              (x) => String(x.SHORT_CODE ?? x.CUSTOMER_ID ?? x.PARTY_CODE ?? x.code ?? "").trim() === String(partyCode).trim()
-            );
-            if (c) customerLabel = c.CUSTOMER_NAME ?? c.PARTY_NAME ?? c.SHORT_CODE ?? partyCode;
-          } catch {
-            // keep customerLabel as partyCode
-          }
-          setError(`No cached data for ${customerLabel}. Open this page once when online on this device to use offline.`);
+          setError(apiErr instanceof Error ? apiErr.message : "Could not reach server. Open this page once when online to cache for offline.");
           setData(null);
         }
+        setLoading(false);
+        return;
+      }
+      if (!res?.success || !res?.data) {
+        if (cached) {
+          setData(cached);
+          setShowCachedBanner(true);
+        } else {
+          setError(res?.message || "Failed to load dashboard.");
+          setData(null);
+        }
+        setLoading(false);
+        return;
+      }
+      setData(res.data);
+      setShowCachedBanner(false);
+      try {
+        await cacheCustomerDashboard(partyCode, res.data);
+      } catch {
+        /* ignore cache errors */
       }
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load dashboard.",
-      );
-      setData(null);
+      setError(err instanceof Error ? err.message : "Failed to load dashboard.");
+      if (cached) {
+        setData(cached);
+        setShowCachedBanner(true);
+      } else {
+        setData(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -259,7 +273,8 @@ function CustomerDashboardClient() {
 
   const loadRecentVisits = React.useCallback(async () => {
     if (!partyCode) return;
-    if (isOnline) {
+    const online = typeof navigator !== "undefined" && navigator.onLine;
+    if (online) {
       try {
         const res = await getSalesVisitHistory(partyCode, partyCode);
         try {
