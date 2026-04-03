@@ -14,7 +14,12 @@ export default function PWAInstallPrompt() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const key = "pwa_install_dismissed";
-    const dismissedAt = parseInt(localStorage.getItem(key) || "0", 10);
+    let dismissedAt = 0;
+    try {
+      dismissedAt = parseInt(localStorage.getItem(key) || "0", 10);
+    } catch {
+      dismissedAt = 0;
+    }
     if (Date.now() - dismissedAt < 7 * 24 * 60 * 60 * 1000) setDismissed(true);
 
     const handler = (e) => {
@@ -37,7 +42,13 @@ export default function PWAInstallPrompt() {
   const handleDismiss = () => {
     setShow(false);
     setDismissed(true);
-    if (typeof window !== "undefined") localStorage.setItem("pwa_install_dismissed", String(Date.now()));
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("pwa_install_dismissed", String(Date.now()));
+      } catch {
+        /* ignore */
+      }
+    }
   };
 
   if (!show || dismissed) return null;

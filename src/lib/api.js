@@ -18,58 +18,111 @@ const AUTH_USER_KEY = "auth_user";
 const CART_TRNS_ID_KEY = "sale_order_trns_id";
 const SALE_ORDER_PARTY_CODE_KEY = "sale_order_party_code";
 
-export const getAuthToken = () => {
+/** Never throw — storage can throw after "clear site data", in private mode, or when disabled. */
+function lsGet(key) {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(AUTH_TOKEN_KEY) || null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function lsSet(key, value) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* quota / disabled */
+  }
+}
+
+function lsRemove(key) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+}
+
+function ssGet(key) {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function ssSet(key, value) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(key, value);
+  } catch {
+    /* ignore */
+  }
+}
+
+function ssRemove(key) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+}
+
+export const getAuthToken = () => {
+  return lsGet(AUTH_TOKEN_KEY) || null;
 };
 
 export function setAuthToken(token, user = null) {
   if (typeof window === "undefined") return;
-  if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
-  if (user != null) localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
-  if (token && typeof window !== "undefined") {
+  if (token) lsSet(AUTH_TOKEN_KEY, token);
+  if (user != null) {
+    try {
+      lsSet(AUTH_USER_KEY, JSON.stringify(user));
+    } catch {
+      /* ignore */
+    }
+  }
+  if (token) {
     import("@/lib/idb").then(({ setMeta }) => setMeta("auth_token", token).catch(() => {}));
   }
 }
 
 export function clearAuthToken() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(AUTH_TOKEN_KEY);
-  localStorage.removeItem(AUTH_USER_KEY);
+  lsRemove(AUTH_TOKEN_KEY);
+  lsRemove(AUTH_USER_KEY);
   import("@/lib/idb").then(({ deleteByKey }) => deleteByKey("meta", "auth_token").catch(() => {}));
 }
 
 /** Sale order draft – trns_id (persist across tabs) */
 export function getCartTrnsId() {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(CART_TRNS_ID_KEY) || null;
+  return lsGet(CART_TRNS_ID_KEY) || null;
 }
 export function setCartTrnsId(trnsId) {
-  if (typeof window === "undefined") return;
-  if (trnsId) localStorage.setItem(CART_TRNS_ID_KEY, String(trnsId));
-  else localStorage.removeItem(CART_TRNS_ID_KEY);
+  if (trnsId) lsSet(CART_TRNS_ID_KEY, String(trnsId));
+  else lsRemove(CART_TRNS_ID_KEY);
 }
 export function clearCartTrnsId() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(CART_TRNS_ID_KEY);
+  lsRemove(CART_TRNS_ID_KEY);
 }
 
 /** Party/customer for current sale order (session – lost on tab close) */
 export function getSaleOrderPartyCode() {
-  if (typeof window === "undefined") return null;
-  return sessionStorage.getItem(SALE_ORDER_PARTY_CODE_KEY) || null;
+  return ssGet(SALE_ORDER_PARTY_CODE_KEY) || null;
 }
 export function setSaleOrderPartyCode(partyCode) {
-  if (typeof window === "undefined") return;
-  if (partyCode) sessionStorage.setItem(SALE_ORDER_PARTY_CODE_KEY, String(partyCode));
-  else sessionStorage.removeItem(SALE_ORDER_PARTY_CODE_KEY);
+  if (partyCode) ssSet(SALE_ORDER_PARTY_CODE_KEY, String(partyCode));
+  else ssRemove(SALE_ORDER_PARTY_CODE_KEY);
 }
 
 /** Logged-in user (from login response). Has LOGIN, U_ID, etc. */
 export function getAuthUser() {
-  if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(AUTH_USER_KEY);
+    const raw = lsGet(AUTH_USER_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;

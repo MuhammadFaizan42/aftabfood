@@ -17,11 +17,15 @@ export default function Header({ toggleSidebar }) {
   const dropdownRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Load logged-in user and profile image from localStorage
+  // Load logged-in user and profile image from localStorage (safe when storage empty/disabled)
   useEffect(() => {
     setUser(getAuthUser());
-    const savedImage = localStorage.getItem("profileImage");
-    if (savedImage) setProfileImage(savedImage);
+    try {
+      const savedImage = typeof localStorage !== "undefined" ? localStorage.getItem("profileImage") : null;
+      if (savedImage) setProfileImage(savedImage);
+    } catch {
+      /* storage blocked or cleared */
+    }
   }, []);
 
   // Close dropdown when clicking outside
@@ -43,7 +47,11 @@ export default function Header({ toggleSidebar }) {
       reader.onloadend = () => {
         const base64String = reader.result;
         setProfileImage(base64String);
-        localStorage.setItem("profileImage", base64String);
+        try {
+          localStorage.setItem("profileImage", base64String);
+        } catch {
+          /* quota / disabled */
+        }
       };
       reader.readAsDataURL(file);
     }

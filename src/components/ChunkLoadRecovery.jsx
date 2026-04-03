@@ -20,8 +20,12 @@ export default function ChunkLoadRecovery() {
   useEffect(() => {
     const onRejection = (e) => {
       if (!isChunkLoadFailure(e.reason)) return;
-      if (sessionStorage.getItem(STORAGE_KEY)) return;
-      sessionStorage.setItem(STORAGE_KEY, "1");
+      try {
+        if (sessionStorage.getItem(STORAGE_KEY)) return;
+        sessionStorage.setItem(STORAGE_KEY, "1");
+      } catch {
+        /* sessionStorage unavailable — still try one reload */
+      }
       e.preventDefault();
       window.location.reload();
     };
