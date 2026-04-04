@@ -3,15 +3,23 @@
  * Base URL: .env.local me NEXT_PUBLIC_API_BASE_URL (optional; default below)
  */
 
+/** Override with NEXT_PUBLIC_API_BASE_URL / API_BASE_URL if needed (e.g. another tenant host). */
 const DEFAULT_API_BASE_URL = "https://api.otwoostores.com/restful";
 
 const getBaseUrl = () => {
-  const envUrl =
-    typeof window !== "undefined"
-      ? process.env.NEXT_PUBLIC_API_BASE_URL
-      : process.env.NEXT_PUBLIC_API_BASE_URL;
-  return (envUrl && envUrl.trim()) || DEFAULT_API_BASE_URL;
+  if (typeof process === "undefined") return DEFAULT_API_BASE_URL;
+  if (typeof window === "undefined") {
+    const serverOnly = process.env.API_BASE_URL?.trim();
+    if (serverOnly) return serverOnly;
+  }
+  const envUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  return envUrl || DEFAULT_API_BASE_URL;
 };
+
+/** Public REST base (no trailing slash) — product IMAGE_URL paths resolve against this origin. */
+export function getApiBaseUrl() {
+  return getBaseUrl().replace(/\/$/, "");
+}
 
 const AUTH_TOKEN_KEY = "auth_token";
 const AUTH_USER_KEY = "auth_user";
@@ -135,8 +143,15 @@ export function getAuthUser() {
  * @param {RequestInit} options - fetch options (method, body, headers)
  */
 export async function apiRequest(path, options = {}) {
-  const baseUrl = getBaseUrl().replace(/\/$/, "");
-  const url = path.startsWith("http") ? path : `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+  let url;
+  if (path.startsWith("http")) {
+    url = path;
+  } else if (typeof window !== "undefined" && path.startsWith("/api/")) {
+    url = new URL(path.startsWith("/") ? path : `/${path}`, window.location.origin).href;
+  } else {
+    const baseUrl = getBaseUrl().replace(/\/$/, "");
+    url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+  }
 
   const token = getAuthToken();
   const headers = {

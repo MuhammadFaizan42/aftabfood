@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-
-const OTWOO_BASE = "https://api.otwoostores.com/restful";
-const SALE_ORDER = `${OTWOO_BASE}/models/sale_order.php`;
+import { getApiBaseUrl } from "@/lib/api";
 
 /**
  * Batch sync offline orders
@@ -64,7 +62,7 @@ export async function POST(request) {
         };
         if (trnsId != null) addBody.trns_id = trnsId;
 
-        const addRes = await fetch(`${SALE_ORDER}?action=add_to_cart`, {
+        const addRes = await fetch(`${saleOrderUrl}?action=add_to_cart`, {
           method: "POST",
           headers,
           body: JSON.stringify(addBody),
@@ -84,7 +82,7 @@ export async function POST(request) {
         ...(opts.remarks && { remarks: opts.remarks }),
       };
 
-      const submitRes = await fetch(`${SALE_ORDER}?action=submit_order`, {
+      const submitRes = await fetch(`${saleOrderUrl}?action=submit_order`, {
         method: "POST",
         headers,
         body: JSON.stringify(submitBody),

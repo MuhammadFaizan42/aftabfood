@@ -3,9 +3,16 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "@/services/shetApi";
 import { setAuthToken } from "@/lib/api";
+import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
+import {
+  persistOfflineLoginProfile,
+  tryOfflineLogin,
+  isLikelyNetworkError,
+} from "@/lib/offline/offlineAuth";
 
 export default function Home() {
   const router = useRouter();
+  const isOnline = useOnlineStatus();
   const [showPassword, setShowPassword] = useState(false);
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
@@ -21,13 +28,43 @@ export default function Home() {
     }
     setLoading(true);
     try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        const offline = await tryOfflineLogin(loginId, password);
+        if (offline?.token) {
+          setAuthToken(offline.token, offline.user ?? undefined);
+          router.push("/dashboard");
+          return;
+        }
+        setError(
+          "You are offline. Sign in once while online on this device, then you can use the same login here without internet.",
+        );
+        return;
+      }
+
       const res = await login(loginId.trim(), password);
       if (!res?.success) {
         throw new Error(res?.message || "Login failed.");
       }
-      setAuthToken(res.data.token, res.data.user);
+      const token = res.data?.token;
+      const user = res.data?.user;
+      if (!token) {
+        throw new Error("Invalid login response from server.");
+      }
+      await persistOfflineLoginProfile(loginId.trim(), password, token, user);
+      setAuthToken(token, user);
       router.push("/dashboard");
     } catch (err) {
+      const netFail =
+        (typeof navigator !== "undefined" && !navigator.onLine) ||
+        isLikelyNetworkError(err);
+      if (netFail) {
+        const offline = await tryOfflineLogin(loginId, password);
+        if (offline?.token) {
+          setAuthToken(offline.token, offline.user ?? undefined);
+          router.push("/dashboard");
+          return;
+        }
+      }
       setError(
         err instanceof Error ? err.message : "Login failed. Please try again.",
       );
@@ -51,6 +88,11 @@ export default function Home() {
 
           {/* Login Form */}
           <form className="space-y-5" onSubmit={handleSubmit}>
+            {!isOnline && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900">
+                Offline mode — if you have signed in on this device before while online, use the same login and password to continue.
+              </div>
+            )}
             {error && (
               <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
                 {error}

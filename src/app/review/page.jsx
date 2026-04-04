@@ -519,6 +519,7 @@ function OrderReviewContent() {
       router.push(`/order-success?order_id=${encodeURIComponent(orderId)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit order.");
+    } finally {
       setSubmitting(false);
     }
   };

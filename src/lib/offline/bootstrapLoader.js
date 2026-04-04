@@ -441,6 +441,7 @@ export function mergeOfflineOrderDetailWithOfflineCart(cachedData, offlineCart) 
       image_url: img,
       uom: cit.uom ?? prev.uom ?? "",
       comments: cit.comments ?? prev.comments ?? "",
+      batch_no: cit.batch_no ?? prev.batch_no ?? "",
     });
   }
   const mergedItems = [...byKey.values()].filter((it) => (Number(it.qty ?? it.quantity ?? 0) || 0) > 0);
@@ -483,6 +484,7 @@ export async function hydrateOfflineCartFromOfflineOrder(trnsId, cachedData) {
         unit_price: unitPrice,
         uom: it.uom ?? "",
         comments: it.comments ?? "",
+        batch_no: it.batch_no ?? "",
         product_name: it.product_name ?? it.name ?? "—",
         sku: it.sku ?? id,
         image_url: img && String(img).trim() ? String(img).trim() : "",
@@ -511,6 +513,7 @@ export async function syncOfflineCartWithMergedOrderItems(customerId, mergedItem
         unit_price: unitPrice,
         uom: it.uom ?? "",
         comments: it.comments ?? "",
+        batch_no: it.batch_no ?? "",
         product_name: it.product_name ?? it.name ?? "—",
         sku: it.sku ?? id,
         image_url: img && String(img).trim() ? String(img).trim() : "",
@@ -538,6 +541,7 @@ export async function syncOfflineCartWithOrderItems(customerId, items) {
     sku: it.sku ?? String(it.id ?? ""),
     image: it.image ?? it.image_url ?? "",
     image_url: it.image ?? it.image_url ?? "",
+    batch_no: it.batch_no ?? "",
     id: it.id,
   }));
   await syncOfflineCartWithMergedOrderItems(customerId, mergedItems);
@@ -619,6 +623,7 @@ export async function getOfflineOrdersForSync() {
       unit_price: Number(it.unit_price ?? it.unitPrice ?? 0) || 0,
       uom: it.uom ?? "",
       comments: it.comments ?? "",
+      ...(String(it.batch_no ?? "").trim() ? { batch_no: String(it.batch_no).trim() } : {}),
     })).filter((it) => it.item_id && it.qty > 0);
     if (!customer_id || items.length === 0) continue;
     out.push({

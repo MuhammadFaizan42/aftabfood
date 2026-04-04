@@ -1,5 +1,6 @@
 "use client";
 import React, { Suspense, useState, useEffect, useCallback } from "react";
+import { buildProductCatalogPdfBlob, shareOrDownloadPdf } from "@/lib/productCatalogPdf";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
@@ -44,6 +45,36 @@ function mapApiProduct(p) {
     p.unitOfMeasure ??
     "Unit";
 
+  const rawUomOpts = p.UOM_OPTIONS ?? p.uom_options;
+  let uomOptions = [];
+  if (Array.isArray(rawUomOpts) && rawUomOpts.length) {
+    uomOptions = [...new Set(rawUomOpts.map((x) => String(x ?? "").trim()).filter(Boolean))];
+  }
+  if (!uomOptions.length) {
+    const single = String(unitMeasure || "Unit").trim() || "Unit";
+    uomOptions = [single];
+  }
+
+  const rawBatchNums = p.BATCH_NUMBERS ?? p.batch_numbers;
+  let batchNumbers = [];
+  if (Array.isArray(rawBatchNums) && rawBatchNums.length) {
+    batchNumbers = [...new Set(rawBatchNums.map((x) => String(x ?? "").trim()).filter(Boolean))];
+  }
+  if (!batchNumbers.length) {
+    const batchNos = p.BATCH_NOS ?? p.batch_nos ?? "";
+    if (batchNos && String(batchNos).trim()) {
+      batchNumbers = [
+        ...new Set(
+          String(batchNos)
+            .split(/[,;]/)
+            .map((s) => s.trim())
+            .filter(Boolean),
+        ),
+      ];
+    }
+  }
+  const defaultBatch = batchNumbers[0] ?? "";
+
   const stockVal = p.STOCK ?? p.QTY ?? p.stock ?? 0;
   const stock = Number(stockVal) || 0;
 
@@ -71,6 +102,9 @@ function mapApiProduct(p) {
     // Saath me clean numeric ITEM_RATE bhi expose kar dein
     itemRate: itemRateNumber,
     unitOfMeasure: unitMeasure,
+    uomOptions,
+    batchNumbers,
+    defaultBatch,
     image: img && img.trim() ? img.trim() : DEFAULT_PRODUCT_IMAGE,
     sku,
     inStock: stock > 0,
@@ -78,6 +112,56 @@ function mapApiProduct(p) {
     stock,
     _raw: p,
   };
+}
+
+/** Batch line for PDF catalog (default first, then other batch numbers). */
+function batchesForPdfCatalog(p) {
+  const nums = Array.isArray(p.batchNumbers)
+    ? [...new Set(p.batchNumbers.map((x) => String(x ?? "").trim()).filter(Boolean))]
+    : [];
+  const def = p.defaultBatch && String(p.defaultBatch).trim();
+  const ordered = [];
+  if (def) ordered.push(def);
+  for (const n of nums) {
+    if (!ordered.includes(n)) ordered.push(n);
+  }
+  if (!ordered.length) return "—";
+  return ordered.join(", ");
+}
+
+/** Dropdown value + options from API UOM_OPTIONS (fallback single UOM). */
+function uomSelectModel(product, selectedForProduct) {
+  const opts = (Array.isArray(product.uomOptions) && product.uomOptions.length
+    ? product.uomOptions
+    : [product.unitOfMeasure]
+  ).map((u) => ({ value: u, label: u }));
+  const base = opts.some((o) => o.value === product.unitOfMeasure)
+    ? product.unitOfMeasure
+    : opts[0]?.value ?? product.unitOfMeasure;
+  const raw = selectedForProduct ?? base;
+  const value = opts.some((o) => o.value === raw) ? raw : base;
+  return { options: opts, value };
+}
+
+/** Dropdown for BATCH_NUMBERS / BATCH_NOS (same pattern as UOM). */
+function batchSelectModel(product, selectedForProduct) {
+  const list =
+    Array.isArray(product.batchNumbers) && product.batchNumbers.length
+      ? product.batchNumbers
+      : product.defaultBatch
+        ? [product.defaultBatch]
+        : [];
+  if (!list.length) {
+    return { options: [{ value: "", label: "No batch" }], value: "" };
+  }
+  const opts = list.map((b) => ({ value: b, label: b }));
+  const base =
+    product.defaultBatch && list.includes(product.defaultBatch)
+      ? product.defaultBatch
+      : list[0];
+  const raw = selectedForProduct ?? base;
+  const value = list.includes(raw) ? raw : base;
+  return { options: opts, value };
 }
 
 function categoryNameFromRaw(p) {
@@ -172,10 +256,13 @@ function ProductsContent() {
   const [productQuantities, setProductQuantities] = useState({});
   const [editablePrices, setEditablePrices] = useState({});
   const [selectedUnits, setSelectedUnits] = useState({});
+  const [selectedBatches, setSelectedBatches] = useState({});
   const [editingPrice, setEditingPrice] = useState(null);
   const [productComments, setProductComments] = useState({});
   const [cartApiLoadingId, setCartApiLoadingId] = useState(null);
   const [cartApiError, setCartApiError] = useState(null);
+  const [catalogPdfBusy, setCatalogPdfBusy] = useState(null);
+  const [catalogPdfError, setCatalogPdfError] = useState(null);
   const [partyCode, setPartyCode] = useState(null);
   const [expandedProducts, setExpandedProducts] = useState({});
 
@@ -323,14 +410,92 @@ function ProductsContent() {
         Number(String(p.price ?? "").replace(/[^\d.-]/g, "") || 0).toFixed(2),
     }), {});
     const u = products.reduce((acc, p) => ({ ...acc, [p.id]: selectedUnits[p.id] ?? p.unitOfMeasure }), {});
+    const batchDefaults = products.reduce((acc, p) => {
+      const first = p.defaultBatch ?? (Array.isArray(p.batchNumbers) && p.batchNumbers[0] ? p.batchNumbers[0] : "");
+      return { ...acc, [p.id]: selectedBatches[p.id] ?? first ?? "" };
+    }, {});
     const c = products.reduce((acc, p) => ({ ...acc, [p.id]: productComments[p.id] ?? "" }), {});
     setProductQuantities((prev) => ({ ...q, ...prev }));
     setEditablePrices((prev) => ({ ...p, ...prev }));
     setSelectedUnits((prev) => ({ ...u, ...prev }));
+    setSelectedBatches((prev) => ({ ...batchDefaults, ...prev }));
     setProductComments((prev) => ({ ...c, ...prev }));
   }, [products]);
 
   const filteredProducts = products;
+
+  const handleCatalogPdf = useCallback(
+    async (mode) => {
+      setCatalogPdfError(null);
+      setCatalogPdfBusy(mode);
+      try {
+        let list;
+        let title;
+        const subtitleParts = [`Party: ${partyCode ?? "—"}`];
+
+        if (mode === "full") {
+          const raw = isOnline
+            ? await fetchProductsPaginatedOnline({})
+            : await getCachedProducts({});
+          list = raw.map(mapApiProduct);
+          title = "Majestic — Full catalog (all categories)";
+          if (!isOnline) subtitleParts.push("Offline: cached catalog");
+        } else {
+          list = products;
+          title =
+            activeCategory === "All Items"
+              ? "Majestic — Current list"
+              : `Majestic — ${activeCategory}`;
+          if (searchQuery) subtitleParts.push(`Search: ${searchQuery}`);
+        }
+
+        const catalogItems = list.map((p) => ({
+          image: p.image,
+          category: (p.category && String(p.category).trim()) || "—",
+          name: p.name || "—",
+          sku: String(p.sku ?? "—"),
+          uom: p.unitOfMeasure || "—",
+          price: p.price || "—",
+          stock: p.stock != null ? String(p.stock) : "—",
+          batch: batchesForPdfCatalog(p),
+        }));
+
+        if (!catalogItems.length) {
+          setCatalogPdfError("No products to put in the PDF.");
+          return;
+        }
+
+        catalogItems.sort((a, b) => {
+          const c = a.category.localeCompare(b.category, undefined, { sensitivity: "base" });
+          if (c !== 0) return c;
+          return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+        });
+
+        const blob = await buildProductCatalogPdfBlob(catalogItems, {
+          title,
+          subtitle: subtitleParts.join(" · "),
+        });
+
+        const safeParty = String(partyCode || "catalog").replace(/[^a-zA-Z0-9-_]/g, "_").slice(0, 28);
+        const scope =
+          mode === "full"
+            ? "all"
+            : activeCategory === "All Items"
+              ? "current"
+              : activeCategory.replace(/[^a-zA-Z0-9-_]/g, "_").slice(0, 24);
+        const filename = `Majestic_${safeParty}_${scope}_${new Date().toISOString().slice(0, 10)}.pdf`;
+
+        const hint = `Product catalog (with images) — ${catalogItems.length} items. PDF attached or saved as ${filename}.`;
+        await shareOrDownloadPdf(blob, filename, hint);
+      } catch (e) {
+        console.error(e);
+        setCatalogPdfError(e instanceof Error ? e.message : "Could not create PDF.");
+      } finally {
+        setCatalogPdfBusy(null);
+      }
+    },
+    [isOnline, partyCode, products, activeCategory, searchQuery],
+  );
 
   const handleQuantityChange = (productId, delta) => {
     setProductQuantities((prev) => ({
@@ -364,10 +529,18 @@ function ProductsContent() {
   const getAddToCartPayload = (product) => {
     const productId = product.id;
     const currentPriceStr = editablePrices[productId] ?? product.price;
+    const batchList = Array.isArray(product.batchNumbers) ? product.batchNumbers : [];
+    const batchDefault = product.defaultBatch ?? batchList[0] ?? "";
+    const rawBatch = selectedBatches[productId] ?? batchDefault;
+    const batch_no =
+      batchList.length && !batchList.includes(rawBatch)
+        ? batchDefault
+        : rawBatch;
     return {
       unit_price: parseUnitPrice(currentPriceStr, product.itemRate ?? 0),
       uom: selectedUnits[productId] ?? product.unitOfMeasure ?? "",
       comments: productComments[productId] ?? "",
+      batch_no: String(batch_no ?? "").trim(),
     };
   };
 
@@ -388,6 +561,7 @@ function ProductsContent() {
       unit_price: opts.unit_price,
       uom: opts.uom,
       comments: opts.comments,
+      batch_no: opts.batch_no,
       product_name: product.name,
       sku: product.sku,
       image_url: product.image ?? "",
@@ -458,7 +632,12 @@ function ProductsContent() {
             (i) => String(i.item_id ?? i.product_id) === key
           );
           if (lineExists) {
-            await updateOfflineCartItem(itemIdForApi, quantity, { unitPrice: opts.unit_price });
+            await updateOfflineCartItem(itemIdForApi, quantity, {
+              unitPrice: opts.unit_price,
+              uom: opts.uom,
+              comments: opts.comments,
+              batch_no: opts.batch_no,
+            });
           } else {
             await addToOfflineCart(partyCode || null, {
               item_id: itemIdForApi,
@@ -468,6 +647,7 @@ function ProductsContent() {
               unit_price: opts.unit_price,
               uom: opts.uom,
               comments: opts.comments,
+              batch_no: opts.batch_no,
               product_name: product.name,
               sku: product.sku,
               image_url: product.image ?? "",
@@ -524,7 +704,12 @@ function ProductsContent() {
               (i) => String(i.item_id ?? i.product_id) === key
             );
             if (lineExists) {
-              await updateOfflineCartItem(itemIdForApi, quantity, { unitPrice: opts.unit_price });
+              await updateOfflineCartItem(itemIdForApi, quantity, {
+                unitPrice: opts.unit_price,
+                uom: opts.uom,
+                comments: opts.comments,
+                batch_no: opts.batch_no,
+              });
             } else {
               await addToOfflineCart(partyCode || null, {
                 item_id: itemIdForApi,
@@ -534,6 +719,7 @@ function ProductsContent() {
                 unit_price: opts.unit_price,
                 uom: opts.uom,
                 comments: opts.comments,
+                batch_no: opts.batch_no,
                 product_name: product.name,
                 sku: product.sku,
                 image_url: product.image ?? "",
@@ -670,30 +856,75 @@ function ProductsContent() {
           </div>
         </div>
 
-        {/* Search Bar – search by name or code (API search param) */}
+        {/* Search Bar – search by name or code (API search param) + catalog PDF for WhatsApp */}
         <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search products by name or SKU..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="w-full h-11 pl-10 pr-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            <svg
-              className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+            <div className="relative flex-1 min-w-0">
+              <input
+                type="text"
+                placeholder="Search products by name or SKU..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="w-full h-11 pl-10 pr-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-            </svg>
+              <svg
+                className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </div>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <button
+                type="button"
+                disabled={!!catalogPdfBusy || loading}
+                onClick={() => handleCatalogPdf("screen")}
+                className="cursor-pointer inline-flex items-center justify-center gap-2 h-11 px-4 rounded-lg text-sm font-medium text-white bg-[#25D366] hover:bg-[#20bd5a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="PDF of the list you see now (category + search)"
+              >
+                {catalogPdfBusy === "screen" ? (
+                  <span className="animate-pulse">PDF…</span>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                    </svg>
+                    PDF — this list
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                disabled={!!catalogPdfBusy}
+                onClick={() => handleCatalogPdf("full")}
+                className="cursor-pointer inline-flex items-center justify-center gap-2 h-11 px-4 rounded-lg text-sm font-medium border border-[#25D366] text-[#128C7E] bg-white hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Full catalog (all categories). Offline uses cache."
+              >
+                {catalogPdfBusy === "full" ? (
+                  <span className="animate-pulse">Loading…</span>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                    </svg>
+                    PDF — all products
+                  </>
+                )}
+              </button>
+            </div>
           </div>
+          {catalogPdfError && (
+            <div className="mt-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-red-700 text-sm">
+              {catalogPdfError}
+            </div>
+          )}
         </div>
 
         {error && (
@@ -886,16 +1117,30 @@ function ProductsContent() {
                       </div>
                     </div>
 
-                    {/* Unit of Measure – sirf us product ka API UOM */}
+                    {/* Unit of Measure – API UOM_OPTIONS + default UOM */}
                     <div className="mb-3">
                       <Dropdown
                         label="Unit of Measure"
                         name={`unit-${product.id}`}
-                        value={selectedUnits[product.id] ?? product.unitOfMeasure}
-                        onChange={(e) => setSelectedUnits(prev => ({ ...prev, [product.id]: e.target.value }))}
-                        options={[
-                          { value: product.unitOfMeasure, label: product.unitOfMeasure },
-                        ]}
+                        {...uomSelectModel(product, selectedUnits[product.id])}
+                        onChange={(e) =>
+                          setSelectedUnits((prev) => ({ ...prev, [product.id]: e.target.value }))
+                        }
+                      />
+                    </div>
+
+                    {/* Batch No – API BATCH_NUMBERS / BATCH_NOS */}
+                    <div className="mb-3">
+                      <Dropdown
+                        label="Batch No"
+                        name={`batch-${product.id}`}
+                        {...batchSelectModel(product, selectedBatches[product.id])}
+                        onChange={(e) =>
+                          setSelectedBatches((prev) => ({ ...prev, [product.id]: e.target.value }))
+                        }
+                        disabled={
+                          !Array.isArray(product.batchNumbers) || product.batchNumbers.length === 0
+                        }
                       />
                     </div>
 

@@ -1,15 +1,18 @@
 /**
  * Otwoo Stores API
  * Swagger: https://api.otwoostores.com/restful/api/documentation/#/
+ * Base URL: NEXT_PUBLIC_API_BASE_URL (and optional server-only API_BASE_URL) via getApiBaseUrl().
  */
 
-import { api } from "../lib/api";
+import { api, getApiBaseUrl } from "../lib/api";
 
-const API_BASE = "https://api.otwoostores.com/restful";
+function apiBase() {
+  return getApiBaseUrl();
+}
 
 /** Login – POST full URL use karte hain taake request hamesha API server pe jaye */
 export async function login(loginId, password) {
-  const res = await api.post(`${API_BASE}/models/login.php`, {
+  const res = await api.post(`${apiBase()}/models/login.php`, {
     login: loginId,
     password,
   });
@@ -27,7 +30,7 @@ export async function getCustomers(params = {}) {
 
 /** Customer categories for dropdown – GET customer.php?category_only=1 */
 export async function getCustomerCategories() {
-  const url = `${API_BASE}/models/customer.php?category_only=1`;
+  const url = `${apiBase()}/models/customer.php?category_only=1`;
   return api.get(url);
 }
 
@@ -39,7 +42,7 @@ export async function createCustomer(payload) {
 /** Party sale invoice dashboard – GET party_sale_inv_dashboard.php?party_code=... (token required) */
 export async function getPartySaleInvDashboard(partyCode, params = {}) {
   const q = new URLSearchParams({ party_code: partyCode, ...params });
-  const url = `${API_BASE}/models/party_sale_inv_dashboard.php?${q.toString()}`;
+  const url = `${apiBase()}/models/party_sale_inv_dashboard.php?${q.toString()}`;
   return api.get(url);
 }
 
@@ -50,15 +53,15 @@ export async function getProducts(params = {}) {
     if (v != null && v !== "") q.set(k, String(v));
   });
   const url = q.toString()
-    ? `${API_BASE}/models/product.php?${q.toString()}`
-    : `${API_BASE}/models/product.php`;
+    ? `${apiBase()}/models/product.php?${q.toString()}`
+    : `${apiBase()}/models/product.php`;
   return api.get(url);
 }
 
 /** Sale returns – GET sale_return.php. Params: party_code, from_date, to_date (YYYY-MM-DD). */
 export async function getSaleReturns(partyCode, params = {}) {
   const q = new URLSearchParams({ party_code: partyCode, ...params });
-  const url = `${API_BASE}/models/sale_return.php?${q.toString()}`;
+  const url = `${apiBase()}/models/sale_return.php?${q.toString()}`;
   return api.get(url);
 }
 
@@ -75,7 +78,9 @@ export async function createOrder(payload) {
 }
 
 // --- Sale Order (Cart) APIs - JWT protected, same base ---
-const SALE_ORDER_BASE = `${API_BASE}/models/sale_order.php`;
+function saleOrderBase() {
+  return `${apiBase()}/models/sale_order.php`;
+}
 
 /** Coerce to number if numeric, else keep as-is (Oracle ORA-01722 avoid) */
 function toNum(val) {
@@ -84,7 +89,7 @@ function toNum(val) {
   return Number.isNaN(n) ? val : n;
 }
 
-/** Add to cart – payload: customer_id, item_id, qty, unit_price, uom, comments; trns_id optional. */
+/** Add to cart – payload: customer_id, item_id, qty, unit_price, uom, comments, batch_no; trns_id optional. */
 export async function addToCart(customerId, itemId, qty, trnsId = null, options = {}) {
   const body = {
     customer_id: String(customerId ?? ""),
@@ -94,10 +99,12 @@ export async function addToCart(customerId, itemId, qty, trnsId = null, options 
   };
   const uom = String(options.uom ?? "").trim();
   const comments = String(options.comments ?? "").trim();
+  const batchNo = String(options.batch_no ?? options.batch_number ?? "").trim();
   if (uom) body.uom = uom;
   if (comments) body.comments = comments;
+  if (batchNo) body.batch_no = batchNo;
   if (trnsId != null && trnsId !== "") body.trns_id = (toNum(trnsId) ?? trnsId);
-  return api.post(`${SALE_ORDER_BASE}?action=add_to_cart`, body);
+  return api.post(`${saleOrderBase()}?action=add_to_cart`, body);
 }
 
 /** Update cart item qty/rate – PUT, Swagger: trns_id, tl_id?, item_id (string), qty, rate? */
@@ -109,12 +116,12 @@ export async function updateCartItem(trnsId, itemId, qty, options = {}) {
   };
   if (options.tl_id != null) body.tl_id = (toNum(options.tl_id) ?? options.tl_id);
   if (options.rate != null) body.rate = Number(options.rate);
-  return api.put(`${SALE_ORDER_BASE}?action=update_cart_item`, body);
+  return api.put(`${saleOrderBase()}?action=update_cart_item`, body);
 }
 
 /** Remove item from cart – DELETE with body (Swagger: trns_id, tl_id, item_id) */
 export async function removeCartItem(trnsId, itemId, options = {}) {
-  const url = `${SALE_ORDER_BASE}?action=remove_cart_item`;
+  const url = `${saleOrderBase()}?action=remove_cart_item`;
   const body = {
     trns_id: toNum(trnsId) ?? trnsId,
     item_id: String(itemId ?? ""),
@@ -125,13 +132,13 @@ export async function removeCartItem(trnsId, itemId, options = {}) {
 
 /** Order summary for cart screen – GET with trns_id */
 export async function getOrderSummary(trnsId) {
-  const url = `${SALE_ORDER_BASE}?action=order_summary&trns_id=${encodeURIComponent(trnsId)}`;
+  const url = `${saleOrderBase()}?action=order_summary&trns_id=${encodeURIComponent(trnsId)}`;
   return api.get(url);
 }
 
 /** Order review before submit – GET with trns_id */
 export async function getOrderReview(trnsId) {
-  const url = `${SALE_ORDER_BASE}?action=order_review&trns_id=${encodeURIComponent(trnsId)}`;
+  const url = `${saleOrderBase()}?action=order_review&trns_id=${encodeURIComponent(trnsId)}`;
   return api.get(url);
 }
 
@@ -156,7 +163,16 @@ export async function submitOrder(trnsId, options = {}) {
       body.pay_terms = match ? Number(match[0]) : raw;
     }
   }
-  return api.post(`${SALE_ORDER_BASE}?action=submit_order`, body);
+  /** Full app origin so fetch always stays same-origin (avoids CORS + stale bundles that skip /api/ routing). */
+  const submitPath =
+    typeof window !== "undefined" && window.location?.origin
+      ? `${window.location.origin}/api/sale-order?action=submit_order`
+      : `/api/sale-order?action=submit_order`;
+  const res = await api.post(submitPath, body);
+  if (res && typeof res === "object" && res.success === false) {
+    throw new Error(res.message || "Submit order failed.");
+  }
+  return res;
 }
 
 /**
@@ -165,7 +181,7 @@ export async function submitOrder(trnsId, options = {}) {
  */
 export async function deleteDraftOrder(trnsId) {
   const body = { trns_id: toNum(trnsId) ?? trnsId };
-  return api.delete(`${SALE_ORDER_BASE}?action=delete_draft_order`, body);
+  return api.delete(`${saleOrderBase()}?action=delete_draft_order`, body);
 }
 
 /** Existing orders list – GET action=existing_orders; optional from_date, to_date (YYYY-MM-DD) */
@@ -175,12 +191,14 @@ export async function getExistingOrders(params = {}) {
     const v = params[key];
     if (v != null && v !== "") q.set(key, String(v));
   });
-  const url = `${SALE_ORDER_BASE}?${q.toString()}`;
+  const url = `${saleOrderBase()}?${q.toString()}`;
   return api.get(url);
 }
 
 // --- Sales Visit API (Swagger: sales_visit.php) ---
-const SALES_VISIT_URL = `${API_BASE}/models/sales_visit.php`;
+function salesVisitUrl() {
+  return `${apiBase()}/models/sales_visit.php`;
+}
 
 /**
  * Record a sales visit – POST sales_visit.php
@@ -207,7 +225,7 @@ export async function createSalesVisit(payload) {
   if (payload.remarks != null && payload.remarks !== "") {
     body.remarks = String(payload.remarks);
   }
-  return api.post(SALES_VISIT_URL, body);
+  return api.post(salesVisitUrl(), body);
 }
 
 /**
@@ -218,6 +236,7 @@ export async function getSalesVisitHistory(customerId, partyCode) {
   const params = new URLSearchParams();
   if (customerId != null && customerId !== "") params.set("customer_id", String(customerId));
   if (partyCode != null && partyCode !== "") params.set("party_code", String(partyCode));
-  const url = params.toString() ? `${SALES_VISIT_URL}?${params.toString()}` : SALES_VISIT_URL;
+  const base = salesVisitUrl();
+  const url = params.toString() ? `${base}?${params.toString()}` : base;
   return api.get(url);
 }
