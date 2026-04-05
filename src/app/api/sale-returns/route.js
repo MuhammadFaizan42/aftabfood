@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-
-const OTWOO_BASE = "https://api.otwoostores.com/restful";
+import { getApiBaseUrl } from "@/lib/api";
 
 /**
  * Proxy for sale_returns API – browser se direct call pe CORS/ERR_FAILED aa sakta hai,
@@ -27,7 +26,8 @@ export async function GET(request) {
   if (fromDate) q.set("from_date", fromDate);
   if (toDate) q.set("to_date", toDate);
 
-  const url = `${OTWOO_BASE}/models/sale_return.php?${q.toString()}`;
+  const base = getApiBaseUrl().replace(/\/$/, "");
+  const url = `${base}/models/sale_return.php?${q.toString()}`;
 
   try {
     const res = await fetch(url, {

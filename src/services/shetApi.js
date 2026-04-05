@@ -23,8 +23,8 @@ export async function login(loginId, password) {
 export async function getCustomers(params = {}) {
   const searchParams = new URLSearchParams(params).toString();
   const url = searchParams
-    ? `${API_BASE}/models/customer.php?${searchParams}`
-    : `${API_BASE}/models/customer.php`;
+    ? `${apiBase()}/models/customer.php?${searchParams}`
+    : `${apiBase()}/models/customer.php`;
   return api.get(url);
 }
 
@@ -36,7 +36,7 @@ export async function getCustomerCategories() {
 
 /** Create customer – POST customer.php (token required). Body: name, postCode, town, contactPerson, mobile, category */
 export async function createCustomer(payload) {
-  return api.post(`${API_BASE}/models/customer.php`, payload);
+  return api.post(`${apiBase()}/models/customer.php`, payload);
 }
 
 /** Party sale invoice dashboard – GET party_sale_inv_dashboard.php?party_code=... (token required) */

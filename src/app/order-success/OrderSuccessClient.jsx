@@ -7,6 +7,8 @@ import { getCachedOrderDetail } from "@/lib/offline/bootstrapLoader";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { buildOrderDetailPdfBlob } from "@/lib/orderDetailPdf";
 import { shareOrDownloadPdf } from "@/lib/productCatalogPdf";
+import { normalizeOrderCustomer, displayCustomerField } from "@/lib/orderCustomerNormalize";
+import { getSaleOrderPartyCode } from "@/lib/api";
 
 function buildShareText(displayId, orderDetails) {
   let text = `Order ${displayId}\n`;
@@ -14,12 +16,13 @@ function buildShareText(displayId, orderDetails) {
     text += "Order placed successfully. Full details will be available after sync.";
     return text;
   }
-  const { customer, items, subtotal, tax, discount, grandTotal } = orderDetails;
-  const custName = customer?.CUSTOMER_NAME ?? customer?.customer_name ?? customer?.name ?? "—";
-  const custCode = customer?.SHORT_CODE ?? customer?.party_code ?? customer?.PARTY_CODE ?? "—";
-  const address = customer?.ADRES ?? customer?.address ?? customer?.ADDRESS ?? "—";
-  const contact = customer?.CONT_PERSON ?? customer?.contactPerson ?? "—";
-  const phone = customer?.CONT_NUM ?? customer?.contactNum ?? customer?.mobile ?? "—";
+  const { customer, items, subtotal, tax, discount, grandTotal, _orderRoot } = orderDetails;
+  const c = normalizeOrderCustomer(customer || {}, _orderRoot || {});
+  const custName = displayCustomerField(c.CUSTOMER_NAME);
+  const custCode = displayCustomerField(c.SHORT_CODE);
+  const address = displayCustomerField(c.ADRES);
+  const contact = displayCustomerField(c.CONT_PERSON);
+  const phone = displayCustomerField(c.CONT_NUM);
 
   text += "\n--- CUSTOMER ---\n";
   text += `Name: ${custName}\n`;
@@ -47,14 +50,12 @@ function mapOrderDetails(res) {
   const d = res?.data ?? res;
   if (!d || typeof d !== "object") return null;
   const rawCustomer = d.customer ?? d.customer_info ?? d.party ?? {};
-  const customer = {
-    ...rawCustomer,
-    CUSTOMER_NAME: rawCustomer.CUSTOMER_NAME ?? rawCustomer.customer_name ?? rawCustomer.name ?? d.party_name ?? d.customer_name,
-    SHORT_CODE: rawCustomer.SHORT_CODE ?? rawCustomer.party_code ?? rawCustomer.PARTY_CODE ?? rawCustomer.customer_id,
-    ADRES: rawCustomer.ADRES ?? rawCustomer.address ?? rawCustomer.ADDRESS ?? [rawCustomer.ST, rawCustomer.ADRES, rawCustomer.DIVISION, rawCustomer.PROVINCES].filter(Boolean).join(", "),
-    CONT_PERSON: rawCustomer.CONT_PERSON ?? rawCustomer.contactPerson,
-    CONT_NUM: rawCustomer.CONT_NUM ?? rawCustomer.contactNum ?? rawCustomer.mobile,
-  };
+  let customer = normalizeOrderCustomer(rawCustomer, d);
+  const partySession =
+    typeof window !== "undefined" ? getSaleOrderPartyCode() : null;
+  if (!String(customer.SHORT_CODE || "").trim() && partySession) {
+    customer = { ...customer, SHORT_CODE: String(partySession).trim() };
+  }
   const rawItems = d.items ?? d.lines ?? d.order_items ?? (Array.isArray(d) ? d : []);
   const items = (Array.isArray(rawItems) ? rawItems : []).map((r) => ({
     name: r.product_name ?? r.PRODUCT_NAME ?? r.name ?? "—",
@@ -85,6 +86,7 @@ function mapOrderDetails(res) {
     deliveryDate,
     payTerms,
     remarks,
+    _orderRoot: d,
   };
 }
 
@@ -213,6 +215,7 @@ export default function OrderSuccessClient() {
         saleOrderLabel: displayId,
         orderDate: orderDetails.orderDate,
         customer: orderDetails.customer,
+        orderRoot: orderDetails._orderRoot,
         items: orderDetails.items,
         subtotal: orderDetails.subtotal,
         tax: orderDetails.tax,

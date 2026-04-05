@@ -1,4 +1,5 @@
 import { loadImageForPdf, fitImageToBox } from "@/lib/pdf/loadImageForPdf";
+import { normalizeOrderCustomer, displayCustomerField } from "@/lib/orderCustomerNormalize";
 
 /**
  * Sales order PDF for sharing with customer: header, customer block, line items with images, totals.
@@ -6,6 +7,7 @@ import { loadImageForPdf, fitImageToBox } from "@/lib/pdf/loadImageForPdf";
  *   saleOrderLabel?: string;
  *   orderDate?: string;
  *   customer?: Record<string, unknown>;
+ *   orderRoot?: Record<string, unknown>;
  *   items?: Array<{ name?: string; quantity?: number; unitPrice?: number; total?: number; sku?: string; batch?: string; uom?: string; image?: string }>;
  *   subtotal?: number;
  *   tax?: number;
@@ -21,6 +23,7 @@ export async function buildOrderDetailPdfBlob(payload) {
     saleOrderLabel = "—",
     orderDate = "",
     customer = {},
+    orderRoot = {},
     items = [],
     subtotal = 0,
     tax = 0,
@@ -38,17 +41,16 @@ export async function buildOrderDetailPdfBlob(payload) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   let y = margin;
 
-  const custName =
-    customer.CUSTOMER_NAME ?? customer.customer_name ?? customer.name ?? "—";
-  const custCode =
-    customer.SHORT_CODE ??
-    customer.party_code ??
-    customer.PARTY_CODE ??
-    customer.customer_id ??
-    "—";
-  const address = customer.ADRES ?? customer.address ?? customer.ADDRESS ?? "—";
-  const contact = customer.CONT_PERSON ?? customer.contactPerson ?? "—";
-  const phone = customer.CONT_NUM ?? customer.contactNum ?? customer.mobile ?? "—";
+  const root = orderRoot && typeof orderRoot === "object" ? orderRoot : {};
+  const c = normalizeOrderCustomer(
+    customer && typeof customer === "object" ? customer : {},
+    root,
+  );
+  const custName = displayCustomerField(c.CUSTOMER_NAME);
+  const custCode = displayCustomerField(c.SHORT_CODE);
+  const address = displayCustomerField(c.ADRES);
+  const contact = displayCustomerField(c.CONT_PERSON);
+  const phone = displayCustomerField(c.CONT_NUM);
 
   function footerAllPages() {
     const total = doc.getNumberOfPages();
