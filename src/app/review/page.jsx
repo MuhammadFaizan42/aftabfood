@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
-import { getOrderReview, submitOrder, getPartySaleInvDashboard } from "@/services/shetApi";
+import { getOrderReview, submitOrder, getPartySaleInvDashboard, addToCart } from "@/services/shetApi";
 import { getCartTrnsId, setCartTrnsId, clearCartTrnsId, getSaleOrderPartyCode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getOfflineCart, clearOfflineCart } from "@/lib/offline/offlineCart";
-import { getCachedCustomerDashboard, getCachedOrderDetail, cacheOrderDetail, saveOfflineOrderToExistingOrders, getExistingOrderRow, getAllProductsSnapshot, updateOfflineOrderInStores, generateOfflineOrderId } from "@/lib/offline/bootstrapLoader";
+import { getCachedCustomerDashboard, getCachedOrderDetail, cacheOrderDetail, saveOfflineOrderToExistingOrders, getExistingOrderRow, getAllProductsSnapshot, updateOfflineOrderInStores, generateOfflineOrderId, deleteOfflineOrder } from "@/lib/offline/bootstrapLoader";
 import {
   DEFAULT_IMG,
   enrichOrderLinesWithImages,
@@ -16,12 +16,11 @@ import {
   resolveProductImageUrl,
 } from "@/lib/productImage";
 
-async function finalizeReviewOrderItems(items) {
+async function finalizeReviewOrderItems(items, hydrateFromApi = true) {
   if (!items?.length) return items;
   const products = await getAllProductsSnapshot();
-  const online = typeof navigator !== "undefined" && navigator.onLine;
   try {
-    return await enrichOrderLinesWithImages(items, products, { hydrateFromApi: online });
+    return await enrichOrderLinesWithImages(items, products, { hydrateFromApi });
   } catch {
     return items;
   }
@@ -89,6 +88,9 @@ function mapReviewData(res) {
       quantity: Number(r.qty ?? r.quantity ?? 0) || 0,
       total: Number(r.line_total ?? r.total ?? 0) || 0,
       image: img || DEFAULT_IMG,
+      uom: String(r.uom ?? r.UOM ?? "").trim(),
+      batch_no: String(r.batch_no ?? r.BATCH_NO ?? r.batch ?? "").trim(),
+      comments: String(r.comments ?? r.COMMENTS ?? "").trim(),
     };
   });
   const subtotal = Number(d.subtotal ?? d.sub_total ?? 0) || items.reduce((s, r) => s + r.total, 0);
@@ -129,7 +131,6 @@ function OrderReviewContent() {
     setError(null);
     setCustomerEnrich(null);
     const id = getCartTrnsId();
-    const online = typeof navigator !== "undefined" && navigator.onLine;
     let hasOfflineCartItems = false;
     try {
       const oc = await getOfflineCart();
@@ -140,7 +141,7 @@ function OrderReviewContent() {
     const isOfflineTrnsId = Boolean(id && String(id).startsWith("offline_"));
 
     if (isViewOnly && id) {
-      if (online) {
+      if (isOnline) {
         setTrnsId(id);
         setIsOfflineOrder(false);
         try {
@@ -150,7 +151,7 @@ function OrderReviewContent() {
           } catch { /* ignore */ }
           const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData(res);
           setCustomer(c);
-          setOrderItems(await finalizeReviewOrderItems(items));
+          setOrderItems(await finalizeReviewOrderItems(items, isOnline));
           setSubtotal(st);
           setTax(t);
           setDiscount(d);
@@ -177,7 +178,7 @@ function OrderReviewContent() {
               setIsCachedServerOrder(!isOfflineId);
               const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: cached });
               setCustomer(c);
-              setOrderItems(await finalizeReviewOrderItems(items));
+              setOrderItems(await finalizeReviewOrderItems(items, isOnline));
               setSubtotal(st);
               setTax(t);
               setDiscount(d);
@@ -201,7 +202,7 @@ function OrderReviewContent() {
           if (cached) {
             const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: cached });
             setCustomer(c);
-            setOrderItems(await finalizeReviewOrderItems(items));
+            setOrderItems(await finalizeReviewOrderItems(items, isOnline));
             setSubtotal(st);
             setTax(t);
             setDiscount(d);
@@ -228,7 +229,7 @@ function OrderReviewContent() {
       return;
     }
 
-    if (online && id) {
+    if (isOnline && id) {
       setIsCachedServerOrder(false);
       setTrnsId(id);
       setIsOfflineOrder(false);
@@ -239,7 +240,7 @@ function OrderReviewContent() {
         } catch { /* ignore */ }
         const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData(res);
         setCustomer(c);
-        setOrderItems(await finalizeReviewOrderItems(items));
+        setOrderItems(await finalizeReviewOrderItems(items, isOnline));
         setSubtotal(st);
         setTax(t);
         setDiscount(d);
@@ -265,7 +266,7 @@ function OrderReviewContent() {
           setIsCachedServerOrder(!isOfflineId);
           const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: cached });
           setCustomer(c);
-          setOrderItems(await finalizeReviewOrderItems(items));
+          setOrderItems(await finalizeReviewOrderItems(items, isOnline));
           setSubtotal(st);
           setTax(t);
           setDiscount(d);
@@ -288,7 +289,7 @@ function OrderReviewContent() {
     } else {
       // Stale server trns_id in storage must not hide an offline cart: only use cached-by-id when
       // there is no pending offline cart, or we are resuming an offline_* draft.
-      if (!online && id && (!hasOfflineCartItems || isOfflineTrnsId)) {
+      if (!isOnline && id && (!hasOfflineCartItems || isOfflineTrnsId)) {
         const cached = await getCachedOrderDetail(id);
         if (cached) {
           setTrnsId(id);
@@ -297,7 +298,7 @@ function OrderReviewContent() {
           setIsCachedServerOrder(!isOfflineId);
           const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: cached });
           setCustomer(c);
-          setOrderItems(await finalizeReviewOrderItems(items));
+          setOrderItems(await finalizeReviewOrderItems(items, isOnline));
           setSubtotal(st);
           setTax(t);
           setDiscount(d);
@@ -337,7 +338,7 @@ function OrderReviewContent() {
             setIsOfflineOrder(true);
             const { customer: c, items: cachedItems, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: alreadyCached });
             setCustomer(c);
-            setOrderItems(await finalizeReviewOrderItems(cachedItems));
+            setOrderItems(await finalizeReviewOrderItems(cachedItems, isOnline));
             setSubtotal(st);
             setTax(t);
             setDiscount(d);
@@ -379,10 +380,13 @@ function OrderReviewContent() {
               quantity: Number(it.qty) || 0,
               total,
               image: img,
+              uom: String(it.uom ?? it.UOM ?? "").trim(),
+              batch_no: String(it.batch_no ?? it.BATCH_NO ?? "").trim(),
+              comments: String(it.comments ?? "").trim(),
             };
           });
           const st = items.reduce((s, r) => s + r.total, 0);
-          const displayItems = await finalizeReviewOrderItems(items);
+          const displayItems = await finalizeReviewOrderItems(items, isOnline);
           setOrderItems(displayItems);
           setSubtotal(st);
           setTax(0);
@@ -438,10 +442,13 @@ function OrderReviewContent() {
             quantity: Number(it.qty) || 0,
             total,
             image: img,
+            uom: String(it.uom ?? it.UOM ?? "").trim(),
+            batch_no: String(it.batch_no ?? it.BATCH_NO ?? "").trim(),
+            comments: String(it.comments ?? "").trim(),
           };
         });
         const st = items.reduce((s, r) => s + r.total, 0);
-        const displayItems = await finalizeReviewOrderItems(items);
+        const displayItems = await finalizeReviewOrderItems(items, isOnline);
         setOrderItems(displayItems);
         setSubtotal(st);
         setTax(0);
@@ -765,9 +772,14 @@ function OrderReviewContent() {
                       Connect online to submit this order.
                     </p>
                   )}
-                  {isOfflineOrder && !hasBackendTrnsId && (
+                  {isOfflineOrder && !hasBackendTrnsId && !isOnline && (
                     <p className="text-sm text-amber-600 mb-2">
                       Sync when online to submit this order. Order is saved locally.
+                    </p>
+                  )}
+                  {isOfflineOrder && !hasBackendTrnsId && isOnline && (
+                    <p className="text-sm text-blue-700 mb-2">
+                      This order was saved on your device. Submit will send it to the server now.
                     </p>
                   )}
                   {isOfflineOrder && hasBackendTrnsId && (
@@ -780,7 +792,7 @@ function OrderReviewContent() {
                     disabled={
                       submitting ||
                       (isCachedServerOrder && !isOnline) ||
-                      (isOfflineOrder && !hasBackendTrnsId)
+                      (isOfflineOrder && !hasBackendTrnsId && !isOnline)
                     }
                     className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors"
                   >
