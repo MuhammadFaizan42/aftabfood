@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import { getOrderReview, getExistingOrders } from "@/services/shetApi";
@@ -8,10 +8,16 @@ import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { buildOrderDetailPdfBlob } from "@/lib/orderDetailPdf";
 import { shareOrDownloadPdf } from "@/lib/productCatalogPdf";
 import { normalizeOrderCustomer, displayCustomerField } from "@/lib/orderCustomerNormalize";
+import { enrichOrderDetailsWithCustomerMaster } from "@/lib/orderCustomerMaster";
 import { getSaleOrderPartyCode } from "@/lib/api";
+import {
+  formatSaleOrderDisplay,
+  isNonSoOrderIdParam,
+  pickSaleOrderRawLabel,
+} from "@/lib/saleOrderLabel";
 
 function buildShareText(displayId, orderDetails) {
-  let text = `Order ${displayId}\n`;
+  let text = `Sale order ${displayId}\n`;
   if (!orderDetails) {
     text += "Order placed successfully. Full details will be available after sync.";
     return text;
@@ -74,7 +80,8 @@ function mapOrderDetails(res) {
   const orderDate = d.order_date ?? d.ORDER_DATE ?? d.doc_date ?? d.DOC_DATE ?? d.created_at ?? "";
   const deliveryDate = d.delivery_date ?? d.DELIVERY_DATE ?? d.DEL_DATE ?? "";
   const payTerms = d.pay_terms ?? d.PAY_TERMS ?? d.payment_terms ?? "";
-  const remarks = d.remarks ?? d.REMARKS ?? d.comments ?? d.COMMENTS ?? "";
+  const remarks =
+    d.rms ?? d.RMS ?? d.remarks ?? d.REMARKS ?? d.comments ?? d.COMMENTS ?? "";
   return {
     customer,
     items,
@@ -104,35 +111,30 @@ export default function OrderSuccessClient() {
   const [displayOrderNumber, setDisplayOrderNumber] = useState(null);
   const [orderNumberResolved, setOrderNumberResolved] = useState(false);
 
-  const loadOrderNumberFromExisting = useCallback(
-    async (baseOrderId) => {
-      try {
-        const today = new Date();
-        const day = today.toISOString().slice(0, 10);
-        const res = await getExistingOrders({ from_date: day, to_date: day });
-        const raw =
-          res?.data?.orders ??
-          res?.data?.list ??
-          res?.data?.items ??
-          (Array.isArray(res?.data) ? res.data : []);
-        const match = (raw || []).find(
-          (r) =>
-            String(r.trns_id ?? r.TRNS_ID ?? "").trim() ===
-            String(baseOrderId).trim()
-        );
-        if (match) {
-          const soNum =
-            match.order_number ?? match.SO_NUM ?? match.order_id ?? match.ORDER_ID;
-          if (soNum && String(soNum).trim()) {
-            setDisplayOrderNumber(String(soNum).trim());
-          }
-        }
-      } catch {
-        // ignore – fall back to trns_id
+  const loadOrderNumberFromExisting = useCallback(async (baseOrderId) => {
+    try {
+      const to = new Date();
+      const from = new Date();
+      from.setFullYear(from.getFullYear() - 1);
+      const from_date = from.toISOString().slice(0, 10);
+      const to_date = to.toISOString().slice(0, 10);
+      const res = await getExistingOrders({ from_date, to_date });
+      const raw =
+        res?.data?.orders ??
+        res?.data?.list ??
+        res?.data?.items ??
+        (Array.isArray(res?.data) ? res.data : []);
+      const match = (raw || []).find(
+        (r) => String(r.trns_id ?? r.TRNS_ID ?? "").trim() === String(baseOrderId).trim(),
+      );
+      if (match) {
+        const label = pickSaleOrderRawLabel(match);
+        if (label) setDisplayOrderNumber(label);
       }
-    },
-    []
-  );
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const loadOrderDetails = useCallback(async () => {
     if (!orderId || orderId.startsWith("ORD-")) {
@@ -144,30 +146,34 @@ export default function OrderSuccessClient() {
     try {
       if (isOnline && !isOfflineId) {
         const res = await getOrderReview(orderId);
-        setOrderDetails(mapOrderDetails(res));
+        let mapped = mapOrderDetails(res);
+        if (mapped) mapped = await enrichOrderDetailsWithCustomerMaster(mapped, true);
+        setOrderDetails(mapped);
         const d = res?.data ?? res;
-        const soNum = d?.order_number ?? d?.SO_NUM ?? d?.order_id;
-        if (soNum && String(soNum).trim() && !String(soNum).match(/^\d+$/)) {
-          setDisplayOrderNumber(String(soNum).trim());
-        } else if (soNum) {
-          setDisplayOrderNumber(String(soNum));
+        const label = pickSaleOrderRawLabel(d);
+        if (label) {
+          setDisplayOrderNumber(label);
         } else {
           setDisplayOrderNumber(null);
           await loadOrderNumberFromExisting(orderId);
         }
       } else {
         const cached = await getCachedOrderDetail(orderId);
-        setOrderDetails(mapOrderDetails({ success: true, data: cached }));
-        const soNum = cached?.order_number ?? cached?.SO_NUM ?? cached?.order_id;
-        if (soNum && String(soNum).trim()) setDisplayOrderNumber(String(soNum).trim());
+        let mapped = mapOrderDetails({ success: true, data: cached });
+        if (mapped) mapped = await enrichOrderDetailsWithCustomerMaster(mapped, isOnline);
+        setOrderDetails(mapped);
+        const cl = pickSaleOrderRawLabel(cached);
+        if (cl) setDisplayOrderNumber(cl);
         else setDisplayOrderNumber(null);
       }
     } catch {
       try {
         const cached = await getCachedOrderDetail(orderId);
-        setOrderDetails(mapOrderDetails({ success: true, data: cached }));
-        const soNum = cached?.order_number ?? cached?.SO_NUM ?? cached?.order_id;
-        if (soNum && String(soNum).trim()) setDisplayOrderNumber(String(soNum).trim());
+        let mapped = mapOrderDetails({ success: true, data: cached });
+        if (mapped) mapped = await enrichOrderDetailsWithCustomerMaster(mapped, isOnline);
+        setOrderDetails(mapped);
+        const cl = pickSaleOrderRawLabel(cached);
+        if (cl) setDisplayOrderNumber(cl);
         else setDisplayOrderNumber(null);
       } catch {
         setOrderDetails(null);
@@ -184,7 +190,17 @@ export default function OrderSuccessClient() {
 
   const isNumericTrnsId = /^\d+$/.test(String(orderId).trim());
   const showOrderNumberPlaceholder = !orderNumberResolved && isNumericTrnsId;
-  const displayId = displayOrderNumber ?? orderId;
+  const displayId = useMemo(() => {
+    if (isNonSoOrderIdParam(orderId)) {
+      return displayOrderNumber ?? orderId;
+    }
+    const raw = displayOrderNumber ?? orderId;
+    const trns = String(orderId).trim();
+    return formatSaleOrderDisplay(raw, {
+      orderDate: orderDetails?.orderDate,
+      trnsFallback: /^\d+$/.test(trns) ? trns : undefined,
+    });
+  }, [orderId, displayOrderNumber, orderDetails?.orderDate]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(displayId);
@@ -199,7 +215,7 @@ export default function OrderSuccessClient() {
   };
 
   const handleShareEmail = () => {
-    const subject = `Order ${displayId} - Order Details`;
+    const subject = `Sale order ${displayId} — details`;
     window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(shareText)}`;
   };
 
@@ -258,7 +274,7 @@ export default function OrderSuccessClient() {
                   Loading order number…
                 </span>
               ) : (
-                <span className="text-sm text-gray-600 font-mono">Order {displayId}</span>
+                <span className="text-sm text-gray-600 font-mono">{displayId}</span>
               )}
             </div>
             <button

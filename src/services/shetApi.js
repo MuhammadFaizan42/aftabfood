@@ -142,11 +142,17 @@ export async function getOrderReview(trnsId) {
   return api.get(url);
 }
 
-/** Submit order – trns_id + optional delivery_date, pay_terms, discount, remarks */
+/** Max length for SALE_ORDER_SO.RMS (API docs). */
+const SUBMIT_ORDER_RMS_MAX = 150;
+
+/** Submit order – trns_id + optional delivery_date, pay_terms, discount; user notes via remarks → body.rms */
 export async function submitOrder(trnsId, options = {}) {
   const body = { trns_id: toNum(trnsId) ?? trnsId };
   if (options.delivery_date) body.delivery_date = options.delivery_date;
-  if (options.remarks) body.remarks = options.remarks;
+  const userNote = options.rms ?? options.remarks;
+  if (userNote != null && String(userNote).trim() !== "") {
+    body.rms = String(userNote).trim().slice(0, SUBMIT_ORDER_RMS_MAX);
+  }
   if (options.discount != null && options.discount !== "") {
     body.discount = toNum(options.discount) ?? options.discount;
   }

@@ -724,6 +724,7 @@ function OrderReviewContent() {
                 <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Remarks (optional)</label>
                 <textarea
                   rows={2}
+                  maxLength={150}
                   placeholder="Notes..."
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}

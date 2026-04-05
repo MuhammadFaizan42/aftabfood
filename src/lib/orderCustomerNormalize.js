@@ -52,10 +52,14 @@ export function normalizeOrderCustomer(rawCustomer = {}, d = {}) {
     r.address,
     r.DIVISION,
     r.PROVINCES,
+    r.TEHSIL,
+    r.AREA_DIS,
     r.TOWN,
     r.CITY,
     r.POSTCODE,
     r.POST_CODE,
+    r.post_code,
+    r.postCode,
     r.ZIP,
   ]
     .map((x) => (x != null ? String(x).trim() : ""))
@@ -70,11 +74,17 @@ export function normalizeOrderCustomer(rawCustomer = {}, d = {}) {
     r.delivery_address,
     r.DELIVERY_ADDRESS,
     r.FULL_ADDRESS,
+    r.CUST_ADDRESS,
+    r.DEL_ADDRESS,
+    r.BILL_TO_ADDRESS,
+    r.party_address,
     r.ADDR_LINE1 && [r.ADDR_LINE1, r.ADDR_LINE2, r.ADDR_LINE3].filter(Boolean).join(", "),
     d.ADRES,
     d.address,
     d.delivery_address,
     d.DELIVERY_ADDRESS,
+    d.party_address,
+    d.ship_to_address,
   );
 
   const contact = firstNonEmpty(
@@ -85,13 +95,17 @@ export function normalizeOrderCustomer(rawCustomer = {}, d = {}) {
     r.PIC_NAME,
     r.contact_name,
     r.CONT_NAME,
+    r.cont_person,
+    r.contact_person,
     d.CONT_PERSON,
     d.CONTACT_PERSON,
+    d.cont_person,
   );
 
   const phone = firstNonEmpty(
     r.CONT_NUM,
     r.contactNum,
+    r.cont_num,
     r.MOBILE,
     r.PHONE,
     r.TEL,
@@ -101,9 +115,12 @@ export function normalizeOrderCustomer(rawCustomer = {}, d = {}) {
     r.CELL,
     r.mobile,
     r.PHONE_NO,
+    r.tel,
     d.CONT_NUM,
     d.MOBILE,
     d.PHONE,
+    d.cont_num,
+    d.mobile,
   );
 
   return {

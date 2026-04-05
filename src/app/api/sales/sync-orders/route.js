@@ -4,7 +4,7 @@ import { getApiBaseUrl } from "@/lib/api";
 /**
  * Batch sync offline orders
  * POST /api/sales/sync-orders
- * Body: { orders: [{ uuid, customer_id, items: [{ item_id, qty, unit_price, uom?, comments? }], delivery_date?, pay_terms?, discount?, remarks? }] }
+ * Body: { orders: [{ uuid, customer_id, items: [...], delivery_date?, pay_terms?, discount?, remarks? }] } — remarks → submit body.rms (RMS column)
  */
 export async function POST(request) {
   const auth = request.headers.get("authorization");
@@ -74,12 +74,16 @@ export async function POST(request) {
         trnsId = addData?.data?.trns_id ?? addData?.trns_id ?? trnsId;
       }
 
+      const rms =
+        opts.remarks != null && String(opts.remarks).trim() !== ""
+          ? String(opts.remarks).trim().slice(0, 150)
+          : null;
       const submitBody = {
         trns_id: trnsId,
         ...(opts.delivery_date && { delivery_date: opts.delivery_date }),
         ...(opts.pay_terms != null && opts.pay_terms !== "" && { pay_terms: opts.pay_terms }),
         ...(opts.discount != null && opts.discount !== "" && { discount: Number(opts.discount) }),
-        ...(opts.remarks && { remarks: opts.remarks }),
+        ...(rms && { rms }),
       };
 
       const submitRes = await fetch(`${saleOrderUrl}?action=submit_order`, {
