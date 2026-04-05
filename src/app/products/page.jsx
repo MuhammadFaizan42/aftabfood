@@ -17,6 +17,47 @@ import { addToOfflineCart, removeFromOfflineCart, getOfflineCart, updateOfflineC
 
 const DEFAULT_PRODUCT_IMAGE = "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop";
 
+/** Normalize API batch list: arrays, PHP object-maps, JSON strings, or comma-separated BATCH_NOS. */
+function coerceProductBatchTokens(val) {
+  if (val == null) return [];
+  if (Array.isArray(val)) {
+    return val.map((x) => String(x ?? "").trim()).filter(Boolean);
+  }
+  if (typeof val === "object") {
+    return Object.values(val)
+      .map((x) => String(x ?? "").trim())
+      .filter(Boolean);
+  }
+  if (typeof val === "string") {
+    const t = val.trim();
+    if (!t) return [];
+    if (t.startsWith("[")) {
+      try {
+        return coerceProductBatchTokens(JSON.parse(t));
+      } catch {
+        /* fall through */
+      }
+    }
+    return t
+      .split(/[,;]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function mergeBatchListsUnique(primary, secondary) {
+  const out = [];
+  const add = (arr) => {
+    for (const x of arr) {
+      if (x && !out.includes(x)) out.push(x);
+    }
+  };
+  add(primary);
+  add(secondary);
+  return out;
+}
+
 function mapApiProduct(p) {
   // IDs / basic fields as per your API shape
   const id =
@@ -55,24 +96,9 @@ function mapApiProduct(p) {
     uomOptions = [single];
   }
 
-  const rawBatchNums = p.BATCH_NUMBERS ?? p.batch_numbers;
-  let batchNumbers = [];
-  if (Array.isArray(rawBatchNums) && rawBatchNums.length) {
-    batchNumbers = [...new Set(rawBatchNums.map((x) => String(x ?? "").trim()).filter(Boolean))];
-  }
-  if (!batchNumbers.length) {
-    const batchNos = p.BATCH_NOS ?? p.batch_nos ?? "";
-    if (batchNos && String(batchNos).trim()) {
-      batchNumbers = [
-        ...new Set(
-          String(batchNos)
-            .split(/[,;]/)
-            .map((s) => s.trim())
-            .filter(Boolean),
-        ),
-      ];
-    }
-  }
+  const fromNumbers = coerceProductBatchTokens(p.BATCH_NUMBERS ?? p.batch_numbers);
+  const fromNosString = coerceProductBatchTokens(p.BATCH_NOS ?? p.batch_nos ?? "");
+  const batchNumbers = mergeBatchListsUnique(fromNumbers, fromNosString);
   const defaultBatch = batchNumbers[0] ?? "";
 
   const stockVal = p.STOCK ?? p.QTY ?? p.stock ?? 0;

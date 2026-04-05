@@ -78,8 +78,8 @@ export default function Dropdown({
         {isOpen && (
           <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
             <ul className="max-h-60 overflow-auto">
-              {options.map((option) => (
-                <li key={option.value}>
+              {options.map((option, idx) => (
+                <li key={`${name ?? "opt"}-${idx}-${String(option.value)}`}>
                   <button
                     type="button"
                     onClick={() => handleSelect(option.value)}
