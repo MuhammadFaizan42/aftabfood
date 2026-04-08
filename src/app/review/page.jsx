@@ -755,7 +755,7 @@ function OrderReviewContent() {
                         </div>
                         <div>
                           <p className="font-semibold text-gray-900">{row.name}</p>
-                          <p className="text-xs text-gray-500">SKU: {row.sku}</p>
+                          <p className="text-xs text-gray-500">UOM: {row.uom || "—"}</p>
                         </div>
                       </div>
                     ),

@@ -70,6 +70,7 @@ function mapOrderSummary(res) {
     const tlId = r.tl_id ?? r.TL_ID ?? r.line_id ?? r.LINE_ID ?? null;
     const name = r.product_name ?? r.PRODUCT_NAME ?? r.name ?? "—";
     const sku = r.sku ?? r.SKU ?? r.PRODUCT_ID ?? r.CODE ?? r.ITEM_CODE ?? (itemIdForApi || "—");
+    const uom = String(r.uom ?? r.UOM ?? r.unit_of_measure ?? r.UNIT_OF_MEASURE ?? "").trim();
     const qty = Number(r.qty ?? r.quantity ?? r.QTY ?? 0) || 0;
     const unitPrice = deriveUnitPriceFromSummaryLine(r);
     const lineTotal = Number(r.line_total ?? r.total ?? r.LC_AMT ?? unitPrice * qty) || 0;
@@ -83,6 +84,7 @@ function mapOrderSummary(res) {
       tlId: tlId != null && tlId !== "" ? tlId : null,
       name,
       sku,
+      uom,
       quantity: qty,
       price: unitPrice,
       lineTotal,
@@ -137,6 +139,7 @@ function mapOfflineCartToRows(cart, products = []) {
       tlId: null,
       name: it.product_name ?? p?.PRODUCT_NAME ?? p?.name ?? "—",
       sku: it.sku ?? it.item_id ?? "—",
+      uom: String(it.uom ?? p?.UOM ?? p?.uom ?? "").trim(),
       quantity: Number(it.qty) || 0,
       price: Number(it.unit_price) || 0,
       lineTotal: lt,
@@ -691,7 +694,7 @@ export default function Cart() {
                 </span>
               )}
             </div>
-            <div className="text-[11px] sm:text-xs text-gray-500 truncate">SKU: {row.sku}</div>
+            <div className="text-[11px] sm:text-xs text-gray-500 truncate">UOM: {row.uom || "—"}</div>
           </div>
         </div>
       ),
