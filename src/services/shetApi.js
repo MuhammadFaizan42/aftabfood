@@ -89,7 +89,7 @@ function toNum(val) {
   return Number.isNaN(n) ? val : n;
 }
 
-/** Add to cart – payload: customer_id, item_id, qty, unit_price, uom, comments, batch_no; trns_id optional. */
+/** Add to cart – payload: customer_id, item_id, qty, unit_price, uom, comments, batch_no, exp_date; trns_id optional. */
 export async function addToCart(customerId, itemId, qty, trnsId = null, options = {}) {
   const body = {
     customer_id: String(customerId ?? ""),
@@ -100,9 +100,11 @@ export async function addToCart(customerId, itemId, qty, trnsId = null, options 
   const uom = String(options.uom ?? "").trim();
   const comments = String(options.comments ?? "").trim();
   const batchNo = String(options.batch_no ?? options.batch_number ?? "").trim();
+  const expDate = String(options.exp_date ?? options.expiry_date ?? options.EXP_DATE ?? "").trim();
   if (uom) body.uom = uom;
   if (comments) body.comments = comments;
   if (batchNo) body.batch_no = batchNo;
+  if (expDate) body.exp_date = expDate;
   if (trnsId != null && trnsId !== "") body.trns_id = (toNum(trnsId) ?? trnsId);
   return api.post(`${saleOrderBase()}?action=add_to_cart`, body);
 }

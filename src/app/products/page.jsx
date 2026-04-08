@@ -58,6 +58,33 @@ function mergeBatchListsUnique(primary, secondary) {
   return out;
 }
 
+/** BATCH_EXPIRY: [{ batch_no, exp_date }] from product API; also backfill from BATCH_NOS + BATCH_EXP_DATES when no array. */
+function normalizeBatchExpiryList(p, batchNosTokens) {
+  const raw = p.BATCH_EXPIRY ?? p.batch_expiry;
+  const out = [];
+  if (Array.isArray(raw)) {
+    for (const row of raw) {
+      if (!row || typeof row !== "object") continue;
+      const batch_no = String(row.batch_no ?? row.BATCH_NO ?? "").trim();
+      const exp_date = String(row.exp_date ?? row.EXP_DATE ?? row.exp_dt ?? "").trim();
+      if (batch_no) out.push({ batch_no, exp_date });
+    }
+  }
+  if (!out.length && Array.isArray(batchNosTokens) && batchNosTokens.length) {
+    const expStr = p.BATCH_EXP_DATES ?? p.batch_exp_dates ?? "";
+    const expParts =
+      typeof expStr === "string" && expStr.trim()
+        ? expStr.split(/[,;]/).map((s) => s.trim()).filter(Boolean)
+        : [];
+    for (let i = 0; i < batchNosTokens.length; i++) {
+      const batch_no = String(batchNosTokens[i] ?? "").trim();
+      if (!batch_no) continue;
+      out.push({ batch_no, exp_date: expParts[i] ?? expParts[0] ?? "" });
+    }
+  }
+  return out;
+}
+
 function mapApiProduct(p) {
   // IDs / basic fields as per your API shape
   const id =
@@ -98,8 +125,13 @@ function mapApiProduct(p) {
 
   const fromNumbers = coerceProductBatchTokens(p.BATCH_NUMBERS ?? p.batch_numbers);
   const fromNosString = coerceProductBatchTokens(p.BATCH_NOS ?? p.batch_nos ?? "");
-  const batchNumbers = mergeBatchListsUnique(fromNumbers, fromNosString);
-  const defaultBatch = batchNumbers[0] ?? "";
+  const batchExpiryList = normalizeBatchExpiryList(p, fromNosString);
+  const fromExpiryBatches = batchExpiryList.map((x) => x.batch_no);
+  const batchNumbers = mergeBatchListsUnique(
+    mergeBatchListsUnique(fromExpiryBatches, fromNumbers),
+    fromNosString
+  );
+  const defaultBatch = batchExpiryList[0]?.batch_no ?? batchNumbers[0] ?? "";
 
   const stockVal = p.STOCK ?? p.QTY ?? p.stock ?? 0;
   const stock = Number(stockVal) || 0;
@@ -130,6 +162,7 @@ function mapApiProduct(p) {
     unitOfMeasure: unitMeasure,
     uomOptions,
     batchNumbers,
+    batchExpiryList,
     defaultBatch,
     image: img && img.trim() ? img.trim() : DEFAULT_PRODUCT_IMAGE,
     sku,
@@ -138,21 +171,6 @@ function mapApiProduct(p) {
     stock,
     _raw: p,
   };
-}
-
-/** Batch line for PDF catalog (default first, then other batch numbers). */
-function batchesForPdfCatalog(p) {
-  const nums = Array.isArray(p.batchNumbers)
-    ? [...new Set(p.batchNumbers.map((x) => String(x ?? "").trim()).filter(Boolean))]
-    : [];
-  const def = p.defaultBatch && String(p.defaultBatch).trim();
-  const ordered = [];
-  if (def) ordered.push(def);
-  for (const n of nums) {
-    if (!ordered.includes(n)) ordered.push(n);
-  }
-  if (!ordered.length) return "—";
-  return ordered.join(", ");
 }
 
 /** Dropdown value + options from API UOM_OPTIONS (fallback single UOM). */
@@ -169,8 +187,29 @@ function uomSelectModel(product, selectedForProduct) {
   return { options: opts, value };
 }
 
-/** Dropdown for BATCH_NUMBERS / BATCH_NOS (same pattern as UOM). */
+/** Composite value for expiry rows: "batch_no|exp_date" (exp may be empty). */
+function batchExpiryOptionValue(row) {
+  return `${row.batch_no}|${row.exp_date || ""}`;
+}
+
+/** Dropdown for BATCH_EXPIRY (label: batch + exp) or legacy BATCH_NOS list. */
 function batchSelectModel(product, selectedForProduct) {
+  const expiryRows = Array.isArray(product.batchExpiryList) ? product.batchExpiryList : [];
+  if (expiryRows.length) {
+    const opts = expiryRows.map((row) => ({
+      value: batchExpiryOptionValue(row),
+      label: row.exp_date ? `${row.batch_no} · Exp: ${row.exp_date}` : row.batch_no,
+    }));
+    const firstVal = opts[0].value;
+    const raw = selectedForProduct != null && selectedForProduct !== "" ? String(selectedForProduct) : firstVal;
+    if (opts.some((o) => o.value === raw)) {
+      return { options: opts, value: raw };
+    }
+    const prefix = raw.split("|")[0];
+    const byBatch = opts.find((o) => o.value.split("|")[0] === prefix);
+    return { options: opts, value: byBatch ? byBatch.value : firstVal };
+  }
+
   const list =
     Array.isArray(product.batchNumbers) && product.batchNumbers.length
       ? product.batchNumbers
@@ -437,7 +476,13 @@ function ProductsContent() {
     }), {});
     const u = products.reduce((acc, p) => ({ ...acc, [p.id]: selectedUnits[p.id] ?? p.unitOfMeasure }), {});
     const batchDefaults = products.reduce((acc, p) => {
-      const first = p.defaultBatch ?? (Array.isArray(p.batchNumbers) && p.batchNumbers[0] ? p.batchNumbers[0] : "");
+      let first = "";
+      if (Array.isArray(p.batchExpiryList) && p.batchExpiryList.length) {
+        first = batchExpiryOptionValue(p.batchExpiryList[0]);
+      } else {
+        first =
+          p.defaultBatch ?? (Array.isArray(p.batchNumbers) && p.batchNumbers[0] ? p.batchNumbers[0] : "");
+      }
       return { ...acc, [p.id]: selectedBatches[p.id] ?? first ?? "" };
     }, {});
     const c = products.reduce((acc, p) => ({ ...acc, [p.id]: productComments[p.id] ?? "" }), {});
@@ -482,8 +527,6 @@ function ProductsContent() {
           sku: String(p.sku ?? "—"),
           uom: p.unitOfMeasure || "—",
           price: p.price || "—",
-          stock: p.stock != null ? String(p.stock) : "—",
-          batch: batchesForPdfCatalog(p),
         }));
 
         if (!catalogItems.length) {
@@ -556,17 +599,50 @@ function ProductsContent() {
     const productId = product.id;
     const currentPriceStr = editablePrices[productId] ?? product.price;
     const batchList = Array.isArray(product.batchNumbers) ? product.batchNumbers : [];
-    const batchDefault = product.defaultBatch ?? batchList[0] ?? "";
-    const rawBatch = selectedBatches[productId] ?? batchDefault;
-    const batch_no =
-      batchList.length && !batchList.includes(rawBatch)
-        ? batchDefault
-        : rawBatch;
+    const expiryRows = Array.isArray(product.batchExpiryList) ? product.batchExpiryList : [];
+
+    let batch_no = "";
+    let exp_date = "";
+
+    if (expiryRows.length) {
+      const batchDefault = batchExpiryOptionValue(expiryRows[0]);
+      const rawBatch = selectedBatches[productId] ?? batchDefault;
+      const sel = String(rawBatch);
+      const row =
+        expiryRows.find((r) => batchExpiryOptionValue(r) === sel) ??
+        expiryRows.find((r) => r.batch_no === sel.split("|")[0]);
+      if (row) {
+        batch_no = row.batch_no;
+        exp_date = row.exp_date || "";
+      } else {
+        const pipe = sel.indexOf("|");
+        if (pipe >= 0) {
+          batch_no = sel.slice(0, pipe).trim();
+          exp_date = sel.slice(pipe + 1).trim();
+        }
+      }
+      if (!batch_no && expiryRows[0]) {
+        batch_no = expiryRows[0].batch_no;
+        exp_date = expiryRows[0].exp_date || "";
+      }
+    } else {
+      const batchDefault = product.defaultBatch ?? batchList[0] ?? "";
+      const rawBatch = selectedBatches[productId] ?? batchDefault;
+      const resolved =
+        batchList.length && !batchList.includes(rawBatch) ? batchDefault : rawBatch;
+      batch_no = String(resolved ?? "").trim();
+      const expRaw = product._raw?.BATCH_EXP_DATES ?? product._raw?.batch_exp_dates;
+      if (batch_no && expRaw != null && String(expRaw).trim()) {
+        exp_date = String(expRaw).trim();
+      }
+    }
+
     return {
       unit_price: parseUnitPrice(currentPriceStr, product.itemRate ?? 0),
       uom: selectedUnits[productId] ?? product.unitOfMeasure ?? "",
       comments: productComments[productId] ?? "",
-      batch_no: String(batch_no ?? "").trim(),
+      batch_no,
+      exp_date,
     };
   };
 
@@ -588,6 +664,7 @@ function ProductsContent() {
       uom: opts.uom,
       comments: opts.comments,
       batch_no: opts.batch_no,
+      exp_date: opts.exp_date,
       product_name: product.name,
       sku: product.sku,
       image_url: product.image ?? "",
@@ -663,6 +740,7 @@ function ProductsContent() {
               uom: opts.uom,
               comments: opts.comments,
               batch_no: opts.batch_no,
+              exp_date: opts.exp_date,
             });
           } else {
             await addToOfflineCart(partyCode || null, {
@@ -674,6 +752,7 @@ function ProductsContent() {
               uom: opts.uom,
               comments: opts.comments,
               batch_no: opts.batch_no,
+              exp_date: opts.exp_date,
               product_name: product.name,
               sku: product.sku,
               image_url: product.image ?? "",
@@ -735,6 +814,7 @@ function ProductsContent() {
                 uom: opts.uom,
                 comments: opts.comments,
                 batch_no: opts.batch_no,
+                exp_date: opts.exp_date,
               });
             } else {
               await addToOfflineCart(partyCode || null, {
@@ -746,6 +826,7 @@ function ProductsContent() {
                 uom: opts.uom,
                 comments: opts.comments,
                 batch_no: opts.batch_no,
+                exp_date: opts.exp_date,
                 product_name: product.name,
                 sku: product.sku,
                 image_url: product.image ?? "",
@@ -1147,6 +1228,7 @@ function ProductsContent() {
                     <div className="mb-3">
                       <Dropdown
                         label="Unit of Measure"
+                        labelClassName="block text-sm font-medium text-gray-700 mb-1"
                         name={`unit-${product.id}`}
                         {...uomSelectModel(product, selectedUnits[product.id])}
                         onChange={(e) =>
@@ -1155,17 +1237,21 @@ function ProductsContent() {
                       />
                     </div>
 
-                    {/* Batch No – API BATCH_NUMBERS / BATCH_NOS */}
+                    {/* Batch No – BATCH_EXPIRY (batch + exp) or BATCH_NOS */}
                     <div className="mb-3">
                       <Dropdown
                         label="Batch No"
+                        labelClassName="block text-sm font-medium text-gray-700 mb-1"
                         name={`batch-${product.id}`}
                         {...batchSelectModel(product, selectedBatches[product.id])}
                         onChange={(e) =>
                           setSelectedBatches((prev) => ({ ...prev, [product.id]: e.target.value }))
                         }
                         disabled={
-                          !Array.isArray(product.batchNumbers) || product.batchNumbers.length === 0
+                          !(
+                            (Array.isArray(product.batchExpiryList) && product.batchExpiryList.length > 0) ||
+                            (Array.isArray(product.batchNumbers) && product.batchNumbers.length > 0)
+                          )
                         }
                       />
                     </div>

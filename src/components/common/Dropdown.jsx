@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from "react";
 
 export default function Dropdown({
   label,
+  labelClassName,
   name,
   value,
   onChange,
@@ -39,7 +40,11 @@ export default function Dropdown({
   return (
     <div className={className} ref={dropdownRef}>
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label
+          className={
+            labelClassName ?? "block text-sm font-medium text-gray-700 mb-2"
+          }
+        >
           {label} {required && <span className="text-red-500">*</span>}
         </label>
       )}

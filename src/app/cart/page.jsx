@@ -3,8 +3,8 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
-import { getOrderSummary, updateCartItem, removeCartItem } from "@/services/shetApi";
-import { getCartTrnsId, getSaleOrderPartyCode } from "@/lib/api";
+import { getOrderSummary, updateCartItem, removeCartItem, addToCart } from "@/services/shetApi";
+import { getCartTrnsId, getSaleOrderPartyCode, setCartTrnsId, clearCartTrnsId } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getOfflineCart, getOfflineCartSync, updateOfflineCartItem, removeFromOfflineCart } from "@/lib/offline/offlineCart";
 import {
@@ -15,6 +15,7 @@ import {
   hydrateOfflineCartFromOfflineOrder,
   syncOfflineCartWithMergedOrderItems,
   syncOfflineCartWithOrderItems,
+  deleteOfflineOrder,
 } from "@/lib/offline/bootstrapLoader";
 import {
   DEFAULT_IMG,
@@ -26,15 +27,14 @@ import {
   resolveProductImageUrl,
 } from "@/lib/productImage";
 
-async function finalizeCartRows(rows, preloadedProducts = null) {
+async function finalizeCartRows(rows, preloadedProducts = null, hydrateFromApi = true) {
   if (!rows?.length) return rows;
   let products = preloadedProducts;
   if (products == null) {
     products = await getAllProductsSnapshot();
   }
-  const online = typeof navigator !== "undefined" && navigator.onLine;
   try {
-    return await enrichOrderLinesWithImages(rows, products, { hydrateFromApi: online });
+    return await enrichOrderLinesWithImages(rows, products, { hydrateFromApi });
   } catch {
     return rows;
   }
@@ -45,6 +45,14 @@ function formatPrice(val) {
   const n = Number(val);
   if (Number.isNaN(n)) return String(val);
   return `£${n.toFixed(2)}`;
+}
+
+function deriveUnitPriceFromSummaryLine(r) {
+  const qty = Number(r.qty ?? r.quantity ?? r.QTY ?? 0) || 0;
+  const total = Number(r.line_total ?? r.total ?? r.LC_AMT ?? 0) || 0;
+  let up = Number(r.unit_price ?? r.UNIT_PRICE ?? r.price ?? r.ITEM_RATE ?? 0) || 0;
+  if (up <= 0 && qty > 0 && total > 0) up = total / qty;
+  return up;
 }
 
 /** Normalize order_summary API response to rows + totals */
@@ -63,7 +71,7 @@ function mapOrderSummary(res) {
     const name = r.product_name ?? r.PRODUCT_NAME ?? r.name ?? "—";
     const sku = r.sku ?? r.SKU ?? r.PRODUCT_ID ?? r.CODE ?? r.ITEM_CODE ?? (itemIdForApi || "—");
     const qty = Number(r.qty ?? r.quantity ?? r.QTY ?? 0) || 0;
-    const unitPrice = Number(r.unit_price ?? r.UNIT_PRICE ?? r.price ?? r.ITEM_RATE ?? 0) || 0;
+    const unitPrice = deriveUnitPriceFromSummaryLine(r);
     const lineTotal = Number(r.line_total ?? r.total ?? r.LC_AMT ?? unitPrice * qty) || 0;
     const rawImg = pickImageFromOrderLine(r);
     const img = rawImg ? resolveProductImageUrl(rawImg) : "";
@@ -138,6 +146,39 @@ function mapOfflineCartToRows(cart, products = []) {
   return { rows, subtotal, tax: 0, discount: 0, grandTotal: subtotal };
 }
 
+async function convertOfflineCartToServerDraft(cart, customerId) {
+  const cid = String(customerId || "").trim();
+  if (!cid) throw new Error("Customer (party) is missing for server sync.");
+  if (!cart?.items?.length) throw new Error("Offline cart is empty.");
+  let serverTrns = null;
+  for (const it of cart.items) {
+    const itemId = it.item_id ?? it.product_id ?? it.sku ?? it.id;
+    if (!itemId) continue;
+    const qty = Number(it.qty ?? it.quantity ?? 0) || 0;
+    let unit_price = Number(it.unit_price ?? it.unitPrice ?? 0) || 0;
+    if (unit_price <= 0 && qty > 0) {
+      const lt = Number(it.line_total ?? it.lineTotal ?? 0) || 0;
+      if (lt > 0) unit_price = lt / qty;
+    }
+    const res = await addToCart(cid, String(itemId), qty, serverTrns, {
+      unit_price,
+      uom: it.uom ?? "",
+      comments: it.comments ?? "",
+      batch_no: it.batch_no ?? "",
+      exp_date: it.exp_date ?? it.expiry_date ?? "",
+    });
+    if (res && typeof res === "object" && res.success === false) {
+      throw new Error(res.message || "Add to cart failed.");
+    }
+    const next = res?.data?.trns_id ?? res?.trns_id;
+    if (next != null && next !== "") serverTrns = next;
+  }
+  if (serverTrns == null || serverTrns === "") {
+    throw new Error("Could not create a server draft from this offline cart.");
+  }
+  return serverTrns;
+}
+
 export default function Cart() {
   const isOnline = useOnlineStatus();
   const [hasMounted, setHasMounted] = useState(false);
@@ -196,6 +237,41 @@ export default function Cart() {
           } catch {
             /* ignore */
           }
+
+          // If we're online, auto-convert offline_* draft to a real server draft (TRNS_ID) so
+          // the user sees the normal flow and can edit/submit without "offline" confusion.
+          if (isOnline) {
+            try {
+              const serverTrns = await convertOfflineCartToServerDraft(cart, party);
+              setCartTrnsId(serverTrns);
+              try {
+                await deleteOfflineOrder(id);
+              } catch { /* ignore */ }
+              try {
+                // Clear session offline cart so UI follows server draft from now on
+                const { clearOfflineCart } = await import("@/lib/offline/offlineCart");
+                await clearOfflineCart();
+              } catch { /* ignore */ }
+              // Continue below as a normal server draft (reload summary)
+              const summaryRes = await getOrderSummary(serverTrns);
+              if (summaryRes?.success && summaryRes?.data) {
+                setTrnsId(serverTrns);
+                setIsOfflineCart(false);
+                setIsCachedOrderReadOnly(false);
+                const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary(summaryRes);
+                setCartItems(await finalizeCartRows(rows, null, true));
+                setSubtotal(st);
+                setTax(t);
+                setDiscount(d);
+                setGrandTotal(gt);
+                return;
+              }
+            } catch (e) {
+              // Keep offline view; show warning but don't block.
+              setError(e instanceof Error ? e.message : "Could not sync offline cart to server.");
+            }
+          }
+
           setTrnsId(id);
           setIsOfflineCart(true);
           setIsCachedOrderReadOnly(false);
@@ -203,7 +279,7 @@ export default function Cart() {
             success: true,
             data: merged,
           });
-          setCartItems(await finalizeCartRows(rows));
+          setCartItems(await finalizeCartRows(rows, null, isOnline));
           setSubtotal(st);
           setTax(t);
           setDiscount(d);
@@ -236,7 +312,7 @@ export default function Cart() {
           setIsOfflineCart(false);
           setIsCachedOrderReadOnly(false);
           const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary(summaryRes);
-          setCartItems(await finalizeCartRows(rows));
+          setCartItems(await finalizeCartRows(rows, null, isOnline));
           setSubtotal(st);
           setTax(t);
           setDiscount(d);
@@ -252,7 +328,7 @@ export default function Cart() {
             success: true,
             data: cachedAfterSummaryFail,
           });
-          setCartItems(await finalizeCartRows(rows));
+          setCartItems(await finalizeCartRows(rows, null, isOnline));
           setSubtotal(st);
           setTax(t);
           setDiscount(d);
@@ -593,30 +669,29 @@ export default function Cart() {
     {
       header: "Product",
       accessor: "product",
-      width: "280px",
-      minWidth: "280px",
+      width: "36%",
       render: (row) => (
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+        <div className="flex items-start gap-2 min-w-0">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
             <img
               src={row.image}
-              alt={row.name}
+              alt=""
               className="w-full h-full object-cover"
               onError={(e) => {
                 e.target.src = DEFAULT_IMG;
               }}
             />
           </div>
-          <div>
-            <div className="font-medium text-gray-900 flex items-center gap-2">
-              <span className="truncate">{row.name}</span>
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-gray-900 text-xs sm:text-sm leading-snug line-clamp-2 flex flex-wrap items-center gap-1">
+              <span>{row.name}</span>
               {(row.inStock === false || Number(row.stock ?? 1) <= 0) && (
-                <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
-                  Out of stock
+                <span className="inline-flex shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
+                  OOS
                 </span>
               )}
             </div>
-            <div className="text-sm text-gray-500">SKU: {row.sku}</div>
+            <div className="text-[11px] sm:text-xs text-gray-500 truncate">SKU: {row.sku}</div>
           </div>
         </div>
       ),
@@ -624,11 +699,10 @@ export default function Cart() {
     {
       header: "Price",
       accessor: "price",
-      width: "150px",
-      minWidth: "150px",
+      width: "16%",
       render: (row) => (
-        <div className="flex items-center border border-gray-300 rounded-lg bg-white px-2 h-8">
-          <span className="text-gray-500 text-sm mr-1">£</span>
+        <div className="flex items-center border border-gray-300 rounded-md bg-white px-1 h-7 sm:h-8 max-w-[5.5rem]">
+          <span className="text-gray-500 text-xs mr-0.5">£</span>
           <input
             type="text"
             inputMode="decimal"
@@ -645,7 +719,7 @@ export default function Cart() {
               if (e.key === "Enter") e.currentTarget.blur();
             }}
             disabled={isCachedOrderReadOnly}
-            className="w-full text-sm text-gray-900 font-medium bg-transparent border-none focus:outline-none disabled:text-gray-400"
+            className="w-full min-w-0 text-xs sm:text-sm text-gray-900 font-medium bg-transparent border-none focus:outline-none disabled:text-gray-400"
           />
         </div>
       ),
@@ -653,16 +727,16 @@ export default function Cart() {
     {
       header: "Quantity",
       accessor: "quantity",
-      width: "180px",
-      minWidth: "180px",
+      width: "22%",
       render: (row) => (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center gap-0.5 sm:gap-1">
           <button
+            type="button"
             onClick={() => updateQuantity(row.id, -1)}
             disabled={actionLoading === row.id || isCachedOrderReadOnly}
-            className="cursor-pointer w-8 h-8 rounded-lg border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="cursor-pointer w-7 h-7 sm:w-8 sm:h-8 rounded-md border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
             </svg>
           </button>
@@ -672,14 +746,15 @@ export default function Cart() {
             value={row.quantity}
             onChange={(e) => handleQuantityChange(row.id, e.target.value)}
             disabled={isCachedOrderReadOnly}
-            className="w-20 h-8 text-center border border-gray-300 rounded-lg bg-white text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+            className="w-10 sm:w-14 h-7 sm:h-8 text-center text-xs sm:text-sm border border-gray-300 rounded-md bg-white text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 px-0.5"
           />
           <button
+            type="button"
             onClick={() => updateQuantity(row.id, 1)}
             disabled={actionLoading === row.id || isCachedOrderReadOnly}
-            className="cursor-pointer w-8 h-8 rounded-lg border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="cursor-pointer w-7 h-7 sm:w-8 sm:h-8 rounded-md border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
           </button>
@@ -689,27 +764,29 @@ export default function Cart() {
     {
       header: "Total",
       accessor: "total",
-      width: "100px",
-      minWidth: "100px",
+      width: "16%",
       render: (row) => (
-        <div className="font-semibold text-gray-900">{formatPrice(row.lineTotal)}</div>
+        <div className="font-semibold text-gray-900 text-xs sm:text-sm tabular-nums">{formatPrice(row.lineTotal)}</div>
       ),
     },
     {
       header: "Action",
       accessor: "action",
-      width: "80px",
-      minWidth: "80px",
+      width: "10%",
       render: (row) => (
-        <button
-          onClick={() => removeItem(row.id)}
-          disabled={actionLoading === row.id || isCachedOrderReadOnly}
-          className="cursor-pointer text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => removeItem(row.id)}
+            disabled={actionLoading === row.id || isCachedOrderReadOnly}
+            className="cursor-pointer text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed p-1"
+            aria-label="Remove item"
+          >
+            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
       ),
     },
   ];
@@ -721,7 +798,7 @@ export default function Cart() {
   return (
     <div className="min-h-screen bg-[#F8F9FC]">
       <Header />
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8">
         <Link
           href={backToProductsHref}
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
@@ -761,7 +838,7 @@ export default function Cart() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-2">
-              <ReusableTable columns={columns} data={cartItems} showPagination={false} />
+              <ReusableTable columns={columns} data={cartItems} showPagination={false} variant="fluid" />
             </div>
             <div className="lg:col-span-1">
               <div className="bg-white rounded-lg shadow-sm p-6 sticky top-6">

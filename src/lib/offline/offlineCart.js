@@ -123,6 +123,7 @@ export async function addToOfflineCart(customerId, item) {
     if (item.uom != null && String(item.uom).trim()) existing.uom = String(item.uom).trim();
     if (item.comments != null) existing.comments = String(item.comments);
     if (item.batch_no != null && String(item.batch_no).trim()) existing.batch_no = String(item.batch_no).trim();
+    if (item.exp_date != null && String(item.exp_date).trim()) existing.exp_date = String(item.exp_date).trim();
   } else {
     cart.items.push({
       item_id: item.item_id ?? item.product_id,
@@ -133,6 +134,7 @@ export async function addToOfflineCart(customerId, item) {
       uom: item.uom || "",
       comments: item.comments || "",
       batch_no: item.batch_no ?? item.batch_number ?? "",
+      exp_date: item.exp_date ?? item.expiry_date ?? "",
       product_name: item.product_name,
       sku: item.sku,
       image_url: item.image_url ?? item.IMAGE_URL ?? "",
@@ -162,6 +164,7 @@ export async function updateOfflineCartItem(itemId, qty, options = {}) {
     if (options.uom !== undefined) cart.items[idx].uom = String(options.uom ?? "");
     if (options.comments !== undefined) cart.items[idx].comments = String(options.comments ?? "");
     if (options.batch_no !== undefined) cart.items[idx].batch_no = String(options.batch_no ?? "");
+    if (options.exp_date !== undefined) cart.items[idx].exp_date = String(options.exp_date ?? "");
   }
   await saveOfflineCart(cart);
   return cart;

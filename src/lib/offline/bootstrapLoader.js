@@ -442,6 +442,7 @@ export function mergeOfflineOrderDetailWithOfflineCart(cachedData, offlineCart) 
       uom: cit.uom ?? prev.uom ?? "",
       comments: cit.comments ?? prev.comments ?? "",
       batch_no: cit.batch_no ?? prev.batch_no ?? "",
+      exp_date: cit.exp_date ?? prev.exp_date ?? "",
     });
   }
   const mergedItems = [...byKey.values()].filter((it) => (Number(it.qty ?? it.quantity ?? 0) || 0) > 0);
@@ -485,6 +486,7 @@ export async function hydrateOfflineCartFromOfflineOrder(trnsId, cachedData) {
         uom: it.uom ?? "",
         comments: it.comments ?? "",
         batch_no: it.batch_no ?? "",
+        exp_date: it.exp_date ?? it.expiry_date ?? "",
         product_name: it.product_name ?? it.name ?? "—",
         sku: it.sku ?? id,
         image_url: img && String(img).trim() ? String(img).trim() : "",
@@ -514,6 +516,7 @@ export async function syncOfflineCartWithMergedOrderItems(customerId, mergedItem
         uom: it.uom ?? "",
         comments: it.comments ?? "",
         batch_no: it.batch_no ?? "",
+        exp_date: it.exp_date ?? it.expiry_date ?? "",
         product_name: it.product_name ?? it.name ?? "—",
         sku: it.sku ?? id,
         image_url: img && String(img).trim() ? String(img).trim() : "",
@@ -542,6 +545,7 @@ export async function syncOfflineCartWithOrderItems(customerId, items) {
     image: it.image ?? it.image_url ?? "",
     image_url: it.image ?? it.image_url ?? "",
     batch_no: it.batch_no ?? "",
+    exp_date: it.exp_date ?? it.expiry_date ?? "",
     id: it.id,
   }));
   await syncOfflineCartWithMergedOrderItems(customerId, mergedItems);
@@ -624,6 +628,9 @@ export async function getOfflineOrdersForSync() {
       uom: it.uom ?? "",
       comments: it.comments ?? "",
       ...(String(it.batch_no ?? "").trim() ? { batch_no: String(it.batch_no).trim() } : {}),
+      ...(String(it.exp_date ?? it.expiry_date ?? "").trim()
+        ? { exp_date: String(it.exp_date ?? it.expiry_date).trim() }
+        : {}),
     })).filter((it) => it.item_id && it.qty > 0);
     if (!customer_id || items.length === 0) continue;
     out.push({

@@ -1,10 +1,10 @@
 import { loadImageForPdf, fitImageToBox } from "@/lib/pdf/loadImageForPdf";
 
 /**
- * Product catalog PDF with images — 3 columns × 3 rows (9 items per A4 portrait page).
+ * Product catalog PDF with images — 4 columns × 3 rows (12 items per A4 portrait page).
  * Client-only; dynamic import of jsPDF keeps initial bundle smaller.
  *
- * @param {Array<{ image?: string; category?: string; name?: string; sku?: string; uom?: string; price?: string; stock?: number | string; batch?: string }>} items
+ * @param {Array<{ image?: string; category?: string; name?: string; sku?: string; uom?: string; price?: string }>} items
  * @param {{ title?: string; subtitle?: string }} options
  * @returns {Promise<Blob>}
  */
@@ -12,7 +12,7 @@ export async function buildProductCatalogPdfBlob(items, options = {}) {
   const { title = "Product catalog", subtitle = "" } = options;
   const { jsPDF } = await import("jspdf");
 
-  const GRID_COLS = 3;
+  const GRID_COLS = 4;
   const GRID_ROWS = 3;
   const PER_PAGE = GRID_COLS * GRID_ROWS;
   const MARGIN_X = 8;
@@ -80,14 +80,28 @@ export async function buildProductCatalogPdfBlob(items, options = {}) {
     const innerCellW = cellW - pad * 2;
     const innerTop = cellY + pad;
 
-    docRef.setDrawColor(229, 231, 235);
-    docRef.setLineWidth(0.25);
-    docRef.roundedRect(cellX, cellY, cellW, cellH, 1.2, 1.2, "S");
-
     const imgBoxW = innerCellW;
-    const imgBoxH = Math.min(40, cellH * 0.48);
+    const imgBoxH = Math.min(32, cellH * 0.44);
     const imgBoxX = cellX + pad;
     const imgBoxY = innerTop;
+
+    const textW = innerCellW - 1;
+    const textX = cellX + pad + 0.5;
+
+    docRef.setFont("helvetica", "bold");
+    docRef.setFontSize(7.5);
+    const nameLines = docRef.splitTextToSize(String(product.name ?? "—").slice(0, 100), textW);
+    const nameSlice = Array.isArray(nameLines) ? nameLines.slice(0, 2) : [String(nameLines)];
+
+    const textStartY = imgBoxY + imgBoxH + 2.2;
+    const uomBaseline = textStartY + 2.8 + nameSlice.length * 3.5 + 1 + 4 + 2.8;
+    const bottomPadAfterUom = 1.6;
+    const contentBottom = uomBaseline + bottomPadAfterUom;
+    const boxH = Math.min(cellH, contentBottom - cellY);
+
+    docRef.setDrawColor(229, 231, 235);
+    docRef.setLineWidth(0.25);
+    docRef.roundedRect(cellX, cellY, cellW, boxH, 1.2, 1.2, "S");
 
     if (imageData) {
       const { w: dw, h: dh } = fitImageToBox(imageData.w, imageData.h, imgBoxW, imgBoxH);
@@ -102,9 +116,7 @@ export async function buildProductCatalogPdfBlob(items, options = {}) {
       drawPlaceholder(docRef, imgBoxX, imgBoxY, imgBoxW, imgBoxH);
     }
 
-    let ty = imgBoxY + imgBoxH + 2.2;
-    const textW = innerCellW - 1;
-    const textX = cellX + pad + 0.5;
+    let ty = textStartY;
 
     docRef.setFont("helvetica", "normal");
     docRef.setFontSize(6);
@@ -116,8 +128,6 @@ export async function buildProductCatalogPdfBlob(items, options = {}) {
     docRef.setFont("helvetica", "bold");
     docRef.setFontSize(7.5);
     docRef.setTextColor(17, 24, 39);
-    const nameLines = docRef.splitTextToSize(String(product.name ?? "—").slice(0, 120), textW);
-    const nameSlice = Array.isArray(nameLines) ? nameLines.slice(0, 2) : [String(nameLines)];
     docRef.text(nameSlice, textX, ty);
     ty += nameSlice.length * 3.5 + 1;
 
@@ -130,17 +140,11 @@ export async function buildProductCatalogPdfBlob(items, options = {}) {
     docRef.setFont("helvetica", "normal");
     docRef.setFontSize(6.5);
     docRef.setTextColor(75, 85, 99);
-    const skuLine = `SKU: ${String(product.sku ?? "—").slice(0, 20)}`;
+    const skuLine = `SKU: ${String(product.sku ?? "—").slice(0, 18)}`;
     docRef.text(skuLine, textX, ty);
     ty += 2.8;
-    const uomStock = `${String(product.uom ?? "—").slice(0, 12)} · Stock: ${String(product.stock ?? "—").slice(0, 8)}`;
-    docRef.text(uomStock, textX, ty);
-    ty += 2.8;
-
-    const batchRaw = String(product.batch ?? "—").trim() || "—";
-    const batchLines = docRef.splitTextToSize(`Batch: ${batchRaw.slice(0, 80)}`, textW);
-    const batchSlice = Array.isArray(batchLines) ? batchLines.slice(0, 2) : [String(batchLines)];
-    docRef.text(batchSlice, textX, ty);
+    const uomLine = String(product.uom ?? "—").slice(0, 16);
+    docRef.text(uomLine, textX, ty);
     docRef.setTextColor(0, 0, 0);
   }
 

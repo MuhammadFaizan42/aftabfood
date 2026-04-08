@@ -1,5 +1,5 @@
 "use client";
-import React, { Suspense, useState, useEffect, useCallback } from "react";
+import React, { Suspense, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
@@ -15,6 +15,21 @@ import {
   pickImageFromOrderLine,
   resolveProductImageUrl,
 } from "@/lib/productImage";
+
+/** When API omits rate but sends line total + qty, derive rate so add_to_cart/submit are consistent. */
+function deriveUnitPriceFromLine(r) {
+  const qty = Number(r.qty ?? r.quantity ?? r.QTY ?? 0) || 0;
+  const total = Number(r.line_total ?? r.total ?? r.LC_AMT ?? 0) || 0;
+  let up = Number(r.unit_price ?? r.UNIT_PRICE ?? r.price ?? r.ITEM_RATE ?? 0) || 0;
+  if (up <= 0 && qty > 0 && total > 0) up = total / qty;
+  return up;
+}
+
+function formatSubmitOrderError(err) {
+  const msg = err instanceof Error ? err.message : String(err);
+  // Show raw backend error (trimmed) so user can share with DBA/ERP team.
+  return String(msg || "Failed to submit order.").slice(0, 900);
+}
 
 async function finalizeReviewOrderItems(items, hydrateFromApi = true) {
   if (!items?.length) return items;
@@ -84,12 +99,13 @@ function mapReviewData(res) {
       itemIdForApi: itemIdForApi || null,
       name: r.product_name ?? r.PRODUCT_NAME ?? r.name ?? "—",
       sku: String(sku || itemIdForApi || "—").trim() || "—",
-      unitPrice: Number(r.unit_price ?? r.UNIT_PRICE ?? r.ITEM_RATE ?? 0) || 0,
+      unitPrice: deriveUnitPriceFromLine(r),
       quantity: Number(r.qty ?? r.quantity ?? 0) || 0,
       total: Number(r.line_total ?? r.total ?? 0) || 0,
       image: img || DEFAULT_IMG,
       uom: String(r.uom ?? r.UOM ?? "").trim(),
       batch_no: String(r.batch_no ?? r.BATCH_NO ?? r.batch ?? "").trim(),
+      exp_date: String(r.exp_date ?? r.EXP_DATE ?? r.expiry_date ?? "").trim(),
       comments: String(r.comments ?? r.COMMENTS ?? "").trim(),
     };
   });
@@ -125,6 +141,7 @@ function OrderReviewContent() {
   const [isCachedServerOrder, setIsCachedServerOrder] = useState(false);
   const [hasBackendTrnsId, setHasBackendTrnsId] = useState(false);
   const [backendTrnsId, setBackendTrnsId] = useState(null);
+  const submitInFlightRef = useRef(false);
 
   const loadReview = useCallback(async () => {
     setLoading(true);
@@ -382,6 +399,7 @@ function OrderReviewContent() {
               image: img,
               uom: String(it.uom ?? it.UOM ?? "").trim(),
               batch_no: String(it.batch_no ?? it.BATCH_NO ?? "").trim(),
+              exp_date: String(it.exp_date ?? it.EXP_DATE ?? it.expiry_date ?? "").trim(),
               comments: String(it.comments ?? "").trim(),
             };
           });
@@ -444,6 +462,7 @@ function OrderReviewContent() {
             image: img,
             uom: String(it.uom ?? it.UOM ?? "").trim(),
             batch_no: String(it.batch_no ?? it.BATCH_NO ?? "").trim(),
+            exp_date: String(it.exp_date ?? it.EXP_DATE ?? it.expiry_date ?? "").trim(),
             comments: String(it.comments ?? "").trim(),
           };
         });
@@ -497,14 +516,23 @@ function OrderReviewContent() {
 
   const handleSubmitOrder = async () => {
     if (isViewOnly) return;
+    if (submitInFlightRef.current || submitting) return;
     if (isCachedServerOrder && !isOnline) {
       setError("Connect online to submit this order.");
       return;
     }
-    if (isOfflineOrder && !hasBackendTrnsId) {
-      setError("Sync when online to submit this order.");
+    if (isOfflineOrder && !hasBackendTrnsId && !isOnline) {
+      setError("Sync when online to submit this order. Order is saved locally.");
       return;
     }
+
+    const options = {};
+    if (deliveryDate) options.delivery_date = deliveryDate;
+    if (payTerms) options.pay_terms = payTerms;
+    if (discountVal !== "" && !Number.isNaN(Number(discountVal))) options.discount = Number(discountVal);
+    if (remarks) options.remarks = remarks;
+
+    submitInFlightRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -513,20 +541,86 @@ function OrderReviewContent() {
         router.push(`/order-success?order_id=${encodeURIComponent(backendTrnsId)}`);
         return;
       }
-      if (!trnsId) return;
-      const options = {};
-      if (deliveryDate) options.delivery_date = deliveryDate;
-      if (payTerms) options.pay_terms = payTerms;
-      if (discountVal !== "" && !Number.isNaN(Number(discountVal))) options.discount = Number(discountVal);
-      if (remarks) options.remarks = remarks;
 
+      if (isOfflineOrder && !hasBackendTrnsId && isOnline) {
+        const customerId = String(
+          getSaleOrderPartyCode() ||
+            customer?.SHORT_CODE ||
+            customer?.PARTY_CODE ||
+            customer?.party_code ||
+            customer?.customer_id ||
+            "",
+        ).trim();
+        if (!customerId) {
+          throw new Error(
+            "Customer (party) is missing. Open the cart from the customer or products page with a party selected.",
+          );
+        }
+        let serverTrns = null;
+        for (const row of orderItems) {
+          const itemId = row.itemIdForApi ?? row.id;
+          if (!itemId) continue;
+          let unitPrice = Number(row.unitPrice ?? 0) || 0;
+          const qty = Number(row.quantity ?? 0) || 0;
+          const lineTotal = Number(row.total ?? 0) || 0;
+          if (unitPrice <= 0 && qty > 0 && lineTotal > 0) unitPrice = lineTotal / qty;
+          const res = await addToCart(
+            customerId,
+            String(itemId),
+            qty,
+            serverTrns,
+            {
+              unit_price: unitPrice,
+              uom: row.uom ?? "",
+              comments: row.comments ?? "",
+              batch_no: row.batch_no ?? "",
+              exp_date: row.exp_date ?? row.expiry_date ?? "",
+            },
+          );
+          if (res && typeof res === "object" && res.success === false) {
+            throw new Error(res.message || "Add to cart failed.");
+          }
+          const next = res?.data?.trns_id ?? res?.trns_id;
+          if (next != null && next !== "") serverTrns = next;
+        }
+        if (serverTrns == null || serverTrns === "") {
+          throw new Error("Could not create a server draft for this order. Check line items and try again.");
+        }
+        const submitRes = await submitOrder(serverTrns, options);
+        if (submitRes && typeof submitRes === "object" && submitRes.success === false) {
+          throw new Error(submitRes.message || "Submit order failed.");
+        }
+        if (trnsId && String(trnsId).startsWith("offline_")) {
+          try {
+            await deleteOfflineOrder(trnsId);
+          } catch {
+            /* ignore */
+          }
+        }
+        try {
+          await clearOfflineCart();
+        } catch {
+          /* ignore */
+        }
+        clearCartTrnsId();
+        const orderId =
+          submitRes?.data?.order_number ??
+          submitRes?.data?.order_id ??
+          submitRes?.data?.trns_id ??
+          serverTrns;
+        router.push(`/order-success?order_id=${encodeURIComponent(orderId)}`);
+        return;
+      }
+
+      if (!trnsId) return;
       const res = await submitOrder(trnsId, options);
       clearCartTrnsId();
       const orderId = res?.data?.order_number ?? res?.data?.order_id ?? res?.data?.trns_id ?? trnsId;
       router.push(`/order-success?order_id=${encodeURIComponent(orderId)}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to submit order.");
+      setError(formatSubmitOrderError(err));
     } finally {
+      submitInFlightRef.current = false;
       setSubmitting(false);
     }
   };

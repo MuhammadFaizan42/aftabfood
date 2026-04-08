@@ -7,8 +7,11 @@ export default function ReusableTable({
   rowsPerPage = 5,
   totalAmount = null,
   totalLabel = "Total Amount",
-  showPagination = true
+  showPagination = true,
+  /** fluid: fit viewport width — no horizontal scroll (use % widths on columns) */
+  variant = "default",
 }) {
+  const isFluid = variant === "fluid";
   const [currentPage, setCurrentPage] = useState(1);
 
   const rows = Array.isArray(data) ? data : [];
@@ -25,20 +28,35 @@ export default function ReusableTable({
     ? rows.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
     : rows;
 
+  const tableMinWidthPx = columns.reduce((acc, col) => acc + (parseInt(String(col.minWidth || "").replace("px", ""), 10) || 120), 0);
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      {/* Table Container with Horizontal Scroll */}
-      <div className="overflow-x-auto table-scroll" style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
-        <div className="max-h-[600px] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}>
-          <table style={{ minWidth: columns.reduce((acc, col) => acc + (parseInt(col.minWidth) || 120), 0) + 'px', width: '100%', borderCollapse: 'collapse' }}>
+      <div
+        className={isFluid ? "overflow-x-hidden" : "overflow-x-auto table-scroll"}
+        style={isFluid ? undefined : { scrollbarWidth: "thin", scrollbarColor: "#94a3b8 #f1f5f9" }}
+      >
+        <div className="max-h-[600px] overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#94a3b8 #f1f5f9" }}>
+          <table
+            className={isFluid ? "w-full table-fixed" : ""}
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              ...(isFluid ? { tableLayout: "fixed" } : { minWidth: `${tableMinWidthPx}px` }),
+            }}
+          >
             {/* Table Header */}
             <thead className="bg-blue-50 border-b border-gray-200 sticky top-0 z-10">
               <tr>
                 {columns.map((col) => (
                   <th
                     key={col.accessor}
-                    className="text-sm font-semibold text-blue-700 whitespace-nowrap text-left px-4 py-4"
-                    style={{ minWidth: col.minWidth || '100px', width: col.width || 'auto' }}
+                    className={`text-sm font-semibold text-blue-700 text-left ${isFluid ? "px-1.5 sm:px-2 py-2.5 leading-tight" : "whitespace-nowrap px-4 py-4"}`}
+                    style={{
+                      minWidth: isFluid ? 0 : col.minWidth || "100px",
+                      width: col.width || "auto",
+                      maxWidth: col.maxWidth,
+                    }}
                   >
                     {col.header}
                   </th>
@@ -56,8 +74,12 @@ export default function ReusableTable({
                   {columns.map((col) => (
                     <td
                       key={col.accessor}
-                      className="text-sm px-4 py-4"
-                      style={{ minWidth: col.minWidth || '100px', width: col.width || 'auto' }}
+                      className={`text-sm align-middle ${isFluid ? "px-1.5 sm:px-2 py-2.5" : "px-4 py-4"}`}
+                      style={{
+                        minWidth: isFluid ? 0 : col.minWidth || "100px",
+                        width: col.width || "auto",
+                        maxWidth: col.maxWidth,
+                      }}
                     >
                       {col.render ? col.render(row) : row[col.accessor]}
                     </td>
