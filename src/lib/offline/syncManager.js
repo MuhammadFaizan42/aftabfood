@@ -3,7 +3,7 @@
  * Offline orders get backend_trns_id stored; queue orders are removed on success.
  */
 import { getPendingOrders, removeOrder } from "./orderQueue";
-import { getOfflineOrdersForSync, deleteOfflineOrder } from "./bootstrapLoader";
+import { getOfflineOrdersForSync, updateOfflineOrderWithBackendTrnsId } from "./bootstrapLoader";
 import { getAuthToken } from "../api";
 
 const SYNC_API = "/api/sales/sync-orders";
@@ -63,7 +63,8 @@ export async function syncPendingOrders() {
       }
       if (String(r.uuid).startsWith(offlinePrefix)) {
         try {
-          await deleteOfflineOrder(r.uuid);
+          const backendId = r.order_id ?? r.orderId ?? r.trns_id ?? r.TRNS_ID ?? "";
+          await updateOfflineOrderWithBackendTrnsId(r.uuid, backendId);
         } catch {
           /* IDB may fail in private mode — sync still succeeded on server */
         }
@@ -82,6 +83,57 @@ export async function syncPendingOrders() {
     failed = (await getPendingOrders()).length + (await getOfflineOrdersForSync()).length;
     notifySyncComplete({ synced: 0, failed, error: err?.message });
     return { synced: 0, failed };
+  } finally {
+    syncInProgress = false;
+  }
+}
+
+/**
+ * Manual sync for a single offline_* order (used by Existing Orders actions).
+ * Returns { synced, failed } just like syncPendingOrders().
+ */
+export async function syncOneOfflineOrder(offlineId) {
+  const id = String(offlineId ?? "").trim();
+  if (!id.startsWith("offline_")) return { synced: 0, failed: 0 };
+  if (syncInProgress) return { synced: 0, failed: 0 };
+  syncInProgress = true;
+  try {
+    const offlineForSync = await getOfflineOrdersForSync();
+    const target = offlineForSync.find((o) => String(o.uuid) === id);
+    if (!target) {
+      notifySyncComplete({ synced: 0, failed: 1, error: "Offline order not found for sync." });
+      return { synced: 0, failed: 1 };
+    }
+    const token = getAuthToken();
+    const res = await fetch(SYNC_API, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: JSON.stringify({ orders: [target] }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      notifySyncComplete({ synced: 0, failed: 1, error: data?.message || res.statusText });
+      return { synced: 0, failed: 1 };
+    }
+    const r = Array.isArray(data.results) ? data.results[0] : null;
+    if (!r?.success || !r?.uuid) {
+      notifySyncComplete({ synced: 0, failed: 1, error: r?.message || "Sync failed" });
+      return { synced: 0, failed: 1 };
+    }
+    try {
+      const backendId = r.order_id ?? r.orderId ?? r.trns_id ?? r.TRNS_ID ?? "";
+      await updateOfflineOrderWithBackendTrnsId(r.uuid, backendId);
+    } catch {
+      /* ignore */
+    }
+    notifySyncComplete({ synced: 1, failed: 0 });
+    return { synced: 1, failed: 0 };
+  } catch (err) {
+    notifySyncComplete({ synced: 0, failed: 1, error: err?.message });
+    return { synced: 0, failed: 1 };
   } finally {
     syncInProgress = false;
   }

@@ -1095,6 +1095,8 @@ function ProductsContent() {
                     <img
                       src={product.image || DEFAULT_PRODUCT_IMAGE}
                       alt={product.name}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover"
                       onError={(e) => {
                         e.target.onerror = null;

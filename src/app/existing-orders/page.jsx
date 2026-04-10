@@ -24,7 +24,7 @@ import {
   deleteOfflineOrder,
   getAllProductsSnapshot,
 } from "@/lib/offline/bootstrapLoader";
-import { onSyncComplete, syncPendingOrders } from "@/lib/offline/syncManager";
+import { onSyncComplete, syncOneOfflineOrder } from "@/lib/offline/syncManager";
 
 function formatOrderDate(val) {
   if (val == null || val === "") return "—";
@@ -409,6 +409,8 @@ function ExistingOrdersContent() {
   const [viewOrder, setViewOrder] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
+  const [syncRowLoading, setSyncRowLoading] = useState(null);
+  const [syncRowError, setSyncRowError] = useState(null);
   const [customerSearchInput, setCustomerSearchInput] = useState("");
   const [orderNumberSearchInput, setOrderNumberSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -416,7 +418,7 @@ function ExistingOrdersContent() {
   const loadOrders = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const online = typeof navigator !== "undefined" && navigator.onLine;
+    const online = Boolean(isOnline);
     try {
       if (online) {
         const res = await getExistingOrders({
@@ -501,8 +503,40 @@ function ExistingOrdersContent() {
         setOrders(sortOrdersNewestFirst(list));
       }
     } catch (err) {
+      // If API fails but we still have offline/cached data, show it instead of a blank screen.
       setError(err instanceof Error ? err.message : "Failed to load existing orders.");
-      setOrders([]);
+      try {
+        const cached = await getCachedExistingOrders(appliedFromDate, appliedToDate);
+        const offlineRows = await getOfflineOrdersFromStore();
+        const byId = new Map();
+        for (const o of cached) {
+          if (o?.id != null) byId.set(String(o.id), o);
+        }
+        for (const o of offlineRows) {
+          if (o?.id != null && !byId.has(String(o.id))) byId.set(String(o.id), o);
+        }
+        let list = mapRawToOrders([...byId.values()]);
+        list = list.filter((o) =>
+          inDateRange(
+            o._raw?.order_date ??
+              o._raw?.ORDER_DATE ??
+              o._raw?._orderDateStr ??
+              o._raw?.dated ??
+              o._raw?.DATED ??
+              o._raw?.created_at ??
+              o._raw?.date,
+            appliedFromDate,
+            appliedToDate,
+          ),
+        );
+        if (partyCodeParam) {
+          const pc = String(partyCodeParam).trim();
+          list = list.filter((o) => String(o.partyCode ?? "").trim() === pc);
+        }
+        setOrders(sortOrdersNewestFirst(list));
+      } catch {
+        setOrders([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -530,12 +564,33 @@ function ExistingOrdersContent() {
     return unsubscribe;
   }, [loadOrders]);
 
-  useEffect(() => {
-    if (!isOnline) return;
+  // Manual sync only (no auto-sync on reconnect).
+
+  const handleSyncOfflineRow = useCallback(async (row) => {
+    if (!row?.id) return;
+    if (!isOnline) {
+      setSyncRowError("Connect online to sync this offline order.");
+      return;
+    }
+    const id = String(row.id);
+    if (!id.startsWith("offline_")) return;
+    setSyncRowError(null);
+    setSyncRowLoading(id);
     setSyncing(true);
-    syncPendingOrders()
-      .finally(() => setSyncing(false));
-  }, [isOnline]);
+    try {
+      const res = await syncOneOfflineOrder(id);
+      if (res?.synced > 0) {
+        setSyncMessage("Order synced. SO number assigned.");
+        await loadOrders();
+        setTimeout(() => setSyncMessage(null), 4000);
+      } else {
+        setSyncRowError("Could not sync this order. Try again.");
+      }
+    } finally {
+      setSyncRowLoading(null);
+      setSyncing(false);
+    }
+  }, [isOnline, loadOrders]);
 
   const handleDuplicateOrder = useCallback(async (row) => {
     const orderId = row.id;
@@ -814,6 +869,8 @@ function ExistingOrdersContent() {
         const status = (row.status || "").toString().toLowerCase();
         const pendingOffline = isPendingOfflineLocalRow(row);
         const showDelete = status === "draft" || pendingOffline;
+        const showSync = pendingOffline;
+        const syncBusy = syncRowLoading === row.id;
         return (
           <div className="flex items-center gap-2">
             <button
@@ -851,6 +908,26 @@ function ExistingOrdersContent() {
                 </>
               )}
             </button>
+            {showSync && (
+              <button
+                type="button"
+                disabled={syncBusy || !isOnline}
+                className="cursor-pointer flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 border border-emerald-200 rounded px-3 py-1.5 hover:bg-emerald-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                onClick={() => handleSyncOfflineRow(row)}
+                title={isOnline ? "Sync offline order to backend" : "Go online to sync"}
+              >
+                {syncBusy ? (
+                  <span className="animate-pulse">Syncing...</span>
+                ) : (
+                  <>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v6h6M20 20v-6h-6M20 8a8 8 0 00-14.906-3.5M4 16a8 8 0 0014.906 3.5" />
+                    </svg>
+                    Sync
+                  </>
+                )}
+              </button>
+            )}
             {showDelete && (
               <button
                 type="button"
@@ -1252,6 +1329,8 @@ function ExistingOrdersContent() {
                                 <img
                                   src={it.image || DEFAULT_IMG}
                                   alt={it.itemName || it.itemId}
+                                  loading="lazy"
+                                  decoding="async"
                                   className="w-full h-full object-cover"
                                   onError={(e) => {
                                     e.target.src = DEFAULT_IMG;

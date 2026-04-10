@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getOrderSummary, updateCartItem, removeCartItem, addToCart } from "@/services/shetApi";
@@ -10,6 +11,9 @@ import { getOfflineCart, getOfflineCartSync, updateOfflineCartItem, removeFromOf
 import {
   getCachedOrderDetail,
   getAllProductsSnapshot,
+  getCachedCustomerDashboard,
+  generateOfflineOrderId,
+  saveOfflineOrderToExistingOrders,
   updateOfflineOrderInStores,
   mergeOfflineOrderDetailWithOfflineCart,
   hydrateOfflineCartFromOfflineOrder,
@@ -140,6 +144,9 @@ function mapOfflineCartToRows(cart, products = []) {
       name: it.product_name ?? p?.PRODUCT_NAME ?? p?.name ?? "—",
       sku: it.sku ?? it.item_id ?? "—",
       uom: String(it.uom ?? p?.UOM ?? p?.uom ?? "").trim(),
+      comments: String(it.comments ?? "").trim(),
+      batch_no: String(it.batch_no ?? it.BATCH_NO ?? "").trim(),
+      exp_date: String(it.exp_date ?? it.EXP_DATE ?? it.expiry_date ?? "").trim(),
       quantity: Number(it.qty) || 0,
       price: Number(it.unit_price) || 0,
       lineTotal: lt,
@@ -183,6 +190,7 @@ async function convertOfflineCartToServerDraft(cart, customerId) {
 }
 
 export default function Cart() {
+  const router = useRouter();
   const isOnline = useOnlineStatus();
   const [hasMounted, setHasMounted] = useState(false);
   const [trnsId, setTrnsId] = useState(null);
@@ -241,39 +249,7 @@ export default function Cart() {
             /* ignore */
           }
 
-          // If we're online, auto-convert offline_* draft to a real server draft (TRNS_ID) so
-          // the user sees the normal flow and can edit/submit without "offline" confusion.
-          if (isOnline) {
-            try {
-              const serverTrns = await convertOfflineCartToServerDraft(cart, party);
-              setCartTrnsId(serverTrns);
-              try {
-                await deleteOfflineOrder(id);
-              } catch { /* ignore */ }
-              try {
-                // Clear session offline cart so UI follows server draft from now on
-                const { clearOfflineCart } = await import("@/lib/offline/offlineCart");
-                await clearOfflineCart();
-              } catch { /* ignore */ }
-              // Continue below as a normal server draft (reload summary)
-              const summaryRes = await getOrderSummary(serverTrns);
-              if (summaryRes?.success && summaryRes?.data) {
-                setTrnsId(serverTrns);
-                setIsOfflineCart(false);
-                setIsCachedOrderReadOnly(false);
-                const { rows, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapOrderSummary(summaryRes);
-                setCartItems(await finalizeCartRows(rows, null, true));
-                setSubtotal(st);
-                setTax(t);
-                setDiscount(d);
-                setGrandTotal(gt);
-                return;
-              }
-            } catch (e) {
-              // Keep offline view; show warning but don't block.
-              setError(e instanceof Error ? e.message : "Could not sync offline cart to server.");
-            }
-          }
+          // Manual sync only: do not auto-convert offline orders on reconnect.
 
           setTrnsId(id);
           setIsOfflineCart(true);
@@ -416,6 +392,79 @@ export default function Cart() {
     document.addEventListener("visibilitychange", handler);
     return () => document.removeEventListener("visibilitychange", handler);
   }, [loadSummary]);
+
+  const handleContinueToReview = useCallback(async () => {
+    setError(null);
+    const online = Boolean(isOnline);
+    if (online) {
+      router.push("/review");
+      return;
+    }
+
+    // OFFLINE: ensure we have an offline_* order persisted so it shows in Existing Orders.
+    const existingId = getCartTrnsId();
+    if (existingId && String(existingId).startsWith("offline_")) {
+      router.push("/review");
+      return;
+    }
+    try {
+      const cart = await getOfflineCart();
+      if (!cart?.items?.length) {
+        router.push("/review");
+        return;
+      }
+      const orderId = generateOfflineOrderId();
+      setCartTrnsId(orderId);
+
+      const partyFallback = String(getSaleOrderPartyCode() ?? "").trim();
+      const customerIdForSave = String(cart.customer_id ?? partyFallback ?? "").trim();
+      const dash = cart.customer_id ? await getCachedCustomerDashboard(cart.customer_id) : null;
+      const cust = dash?.customer ?? {};
+      const customer = {
+        CUSTOMER_NAME: cust.CUSTOMER_NAME ?? cust.customer_name ?? "Offline order",
+        SHORT_CODE: customerIdForSave || "",
+        ADRES: [cust.ST, cust.ADRES, cust.DIVISION, cust.PROVINCES].filter(Boolean).join(", ") || "—",
+        pay_terms: cust.PAY_TERMS ?? cust.pay_terms ?? "—",
+      };
+
+      const itemsForSave = (Array.isArray(cartItems) ? cartItems : []).map((row) => ({
+        item_id: String(row.itemIdForApi ?? row.sku ?? row.id ?? ""),
+        product_id: String(row.itemIdForApi ?? row.sku ?? row.id ?? ""),
+        product_name: row.name ?? "—",
+        sku: row.sku ?? "",
+        qty: Number(row.quantity ?? 0) || 0,
+        unit_price: Number(row.price ?? 0) || 0,
+        line_total: Number(row.lineTotal ?? 0) || 0,
+        image: row.image ?? "",
+        image_url: row.image ?? "",
+        uom: row.uom ?? "",
+        comments: row.comments ?? "",
+        batch_no: row.batch_no ?? "",
+        exp_date: row.exp_date ?? "",
+      })).filter((it) => it.item_id && it.qty > 0);
+
+      const st = itemsForSave.reduce((s, it) => s + (Number(it.line_total) || (Number(it.unit_price) || 0) * (Number(it.qty) || 0)), 0);
+      await saveOfflineOrderToExistingOrders({
+        customer,
+        items: itemsForSave,
+        subtotal: st,
+        tax: 0,
+        discount: 0,
+        grandTotal: st,
+        customer_id: customerIdForSave || null,
+        delivery_date: "",
+        pay_terms: "",
+        discount_val: "",
+        remarks: "",
+        orderId,
+      });
+    } catch (e) {
+      // Still allow navigation; user can retry saving by opening Review offline.
+      setError(e instanceof Error ? e.message : "Could not save offline order.");
+    } finally {
+      router.push("/review");
+    }
+  }, [cartItems, isOnline, router]);
 
   useEffect(() => {
     return () => {
@@ -679,6 +728,8 @@ export default function Cart() {
             <img
               src={row.image}
               alt=""
+              loading="lazy"
+              decoding="async"
               className="w-full h-full object-cover"
               onError={(e) => {
                 e.target.src = DEFAULT_IMG;
@@ -866,11 +917,13 @@ export default function Cart() {
                     <span className="text-2xl font-bold text-gray-900">{formatPrice(grandTotal)}</span>
                   </div>
                 </div>
-                <Link href="/review" className="block">
-                  <button className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
-                    Continue to Review
-                  </button>
-                </Link>
+                <button
+                  type="button"
+                  onClick={handleContinueToReview}
+                  className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  Continue to Review
+                </button>
               </div>
             </div>
           </div>

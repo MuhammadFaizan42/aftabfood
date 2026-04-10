@@ -9,20 +9,16 @@ export function registerServiceWorker() {
       .register("/sw.js")
       .then((reg) => {
         syncAuthTokenToIDB();
+        // Manual sync only: do not auto-sync orders on reconnect.
+        // Background sync remains for the legacy queued orders store inside SW.
         if ("sync" in reg) registerSyncIfPending(reg);
-        if (navigator.onLine) runSyncWhenOnline();
       })
       .catch(() => {});
   });
-  window.addEventListener("online", () => runSyncWhenOnline());
+  // Manual sync only: do not auto-sync on online event.
 }
 
-async function runSyncWhenOnline() {
-  try {
-    const { syncPendingOrders } = await import("@/lib/offline/syncManager");
-    await syncPendingOrders();
-  } catch (_) {}
-}
+// NOTE: syncPendingOrders() is now triggered manually from UI (Existing Orders actions).
 
 /** Copy auth token to IndexedDB so the service worker can use it for background sync */
 async function syncAuthTokenToIDB() {

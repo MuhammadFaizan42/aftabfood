@@ -746,6 +746,8 @@ function OrderReviewContent() {
                           <img
                             src={row.image || DEFAULT_IMG}
                             alt=""
+                            loading="lazy"
+                            decoding="async"
                             className="w-full h-full object-cover"
                             onError={(e) => {
                               e.currentTarget.onerror = null;

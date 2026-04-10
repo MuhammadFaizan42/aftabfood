@@ -300,6 +300,13 @@ export async function saveOfflineOrderToExistingOrders(payload) {
     remarks,
     orderId: providedOrderId,
   } = payload;
+  const partyCode =
+    (customer_id != null && String(customer_id).trim() ? String(customer_id).trim() : null) ??
+    (customer?.SHORT_CODE != null && String(customer.SHORT_CODE).trim() ? String(customer.SHORT_CODE).trim() : null) ??
+    (customer?.PARTY_CODE != null && String(customer.PARTY_CODE).trim() ? String(customer.PARTY_CODE).trim() : null) ??
+    (customer?.party_code != null && String(customer.party_code).trim() ? String(customer.party_code).trim() : null) ??
+    (customer?.customer_id != null && String(customer.customer_id).trim() ? String(customer.customer_id).trim() : null) ??
+    null;
   const orderId = providedOrderId && String(providedOrderId).startsWith(OFFLINE_ORDER_ID_PREFIX)
     ? String(providedOrderId)
     : generateOfflineOrderId();
@@ -325,9 +332,9 @@ export async function saveOfflineOrderToExistingOrders(payload) {
     AMOUNT: grandTotal ?? 0,
     total: grandTotal ?? 0,
     grand_total: grandTotal ?? 0,
-    party_code: customer_id ?? null,
-    PARTY_CODE: customer_id ?? null,
-    customer_id: customer_id ?? null,
+    party_code: partyCode,
+    PARTY_CODE: partyCode,
+    customer_id: partyCode,
     can_edit: true,
   };
   await putOne("existingOrders", existingOrderRow);

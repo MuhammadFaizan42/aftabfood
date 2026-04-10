@@ -7,6 +7,7 @@ import { getApiBaseUrl } from "@/lib/api";
  * Body: { orders: [{ uuid, customer_id, items: [...], delivery_date?, pay_terms?, discount?, remarks? }] } — remarks → submit body.rms (RMS column)
  */
 export async function POST(request) {
+  const saleOrderUrl = `${getApiBaseUrl()}/models/sale_order.php`;
   const auth = request.headers.get("authorization");
   if (!auth) {
     return NextResponse.json({ success: false, message: "Authorization required" }, { status: 401 });
@@ -59,6 +60,8 @@ export async function POST(request) {
           unit_price: Number(it.unit_price ?? 0) || 0,
           uom: it.uom || "",
           comments: it.comments || "",
+          batch_no: it.batch_no || "",
+          exp_date: it.exp_date || it.expiry_date || "",
         };
         if (trnsId != null) addBody.trns_id = trnsId;
 
