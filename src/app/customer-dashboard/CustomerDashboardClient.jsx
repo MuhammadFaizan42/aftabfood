@@ -44,6 +44,20 @@ function formatPrice(val) {
   })}`;
 }
 
+/** Align with existing-orders: which statuses may open /cart for editing. */
+function recentOrderCanEdit(statusDisplay, raw = {}) {
+  const s = String(statusDisplay || "").trim().toLowerCase();
+  return (
+    s === "draft" ||
+    s === "offline" ||
+    s === "submitted" ||
+    raw.can_edit === true ||
+    raw.can_edit === "Y" ||
+    raw.CAN_EDIT === "Y" ||
+    raw.CAN_EDIT === true
+  );
+}
+
 function CustomerDashboardClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -67,6 +81,8 @@ function CustomerDashboardClient() {
   const [visitSubmitError, setVisitSubmitError] = useState(null);
   const [recentVisits, setRecentVisits] = useState([]);
   const [showCachedBanner, setShowCachedBanner] = useState(false);
+  /** Short server/API error when we fall back to IDB cache while browser still reports online. */
+  const [cachedBannerDetail, setCachedBannerDetail] = useState(null);
   const [duplicateLoading, setDuplicateLoading] = useState(null);
   const [duplicateError, setDuplicateError] = useState(null);
   const [viewLoading, setViewLoading] = useState(null);
@@ -125,6 +141,30 @@ function CustomerDashboardClient() {
         );
         setDuplicateLoading(null);
       }
+    },
+    [partyCode, router],
+  );
+
+  const handleEditOrder = React.useCallback(
+    (row) => {
+      const pc = row.partyCode ?? partyCode;
+      if (!pc) {
+        setDuplicateError("Customer not found for this order.");
+        return;
+      }
+      if (row.id == null || row.id === "") {
+        setDuplicateError("This order has no transaction ID to edit.");
+        return;
+      }
+      setDuplicateError(null);
+      setSaleOrderPartyCode(pc);
+      const raw = row._raw ?? {};
+      const trnsIdForNav =
+        raw.backend_trns_id ??
+        raw.BACKEND_TRNS_ID ??
+        row.id;
+      setCartTrnsId(trnsIdForNav);
+      router.push("/cart");
     },
     [partyCode, router],
   );
@@ -194,6 +234,7 @@ function CustomerDashboardClient() {
 
     if (!online) {
       setShowCachedBanner(false);
+      setCachedBannerDetail(null);
       if (!cached) {
         let customerLabel = partyCode;
         try {
@@ -225,6 +266,9 @@ function CustomerDashboardClient() {
         if (cached) {
           setData(cached);
           setShowCachedBanner(true);
+          setCachedBannerDetail(
+            apiErr instanceof Error ? apiErr.message : String(apiErr || "").slice(0, 160)
+          );
         } else {
           setError(apiErr instanceof Error ? apiErr.message : "Could not reach server. Open this page once when online to cache for offline.");
           setData(null);
@@ -236,6 +280,7 @@ function CustomerDashboardClient() {
         if (cached) {
           setData(cached);
           setShowCachedBanner(true);
+          setCachedBannerDetail(String(res?.message || "Unexpected response from server.").slice(0, 160));
         } else {
           setError(res?.message || "Failed to load dashboard.");
           setData(null);
@@ -245,6 +290,7 @@ function CustomerDashboardClient() {
       }
       setData(res.data);
       setShowCachedBanner(false);
+      setCachedBannerDetail(null);
       try {
         await cacheCustomerDashboard(partyCode, res.data);
       } catch {
@@ -255,6 +301,7 @@ function CustomerDashboardClient() {
       if (cached) {
         setData(cached);
         setShowCachedBanner(true);
+        setCachedBannerDetail(err instanceof Error ? err.message.slice(0, 160) : String(err || "").slice(0, 160));
       } else {
         setData(null);
       }
@@ -397,6 +444,8 @@ function CustomerDashboardClient() {
   const recentOrders = recentOrdersRaw.map((o) => {
     const trns =
       o.TRNS_ID ?? o.trns_id ?? o.TRNSID ?? o.transaction_id ?? o.id ?? null;
+    const statusVal =
+      o.STATUS_RAW ?? o.STATUS ?? o.status ?? o.order_status ?? "—";
     return {
       id:
         trns != null && trns !== ""
@@ -427,7 +476,9 @@ function CustomerDashboardClient() {
       amount: formatAmount(
         o.ORDER_AMOUNT ?? o.INVOICE_AMT ?? o.LC_AMT ?? o.amount,
       ),
-      status: o.STATUS_RAW ?? o.STATUS ?? o.status ?? o.order_status ?? "—",
+      status: statusVal,
+      canEdit: recentOrderCanEdit(statusVal, o),
+      _raw: o,
     };
   });
 
@@ -532,10 +583,24 @@ function CustomerDashboardClient() {
       <main className="max-w-7xl mx-auto px-6 py-8">
         {showCachedBanner && (
           <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800 text-sm flex items-center justify-between gap-3">
-            <span>
-              {isOnline
-                ? "Showing cached data — latest server response is unavailable. Please retry in a moment."
-                : "Showing cached data — you are offline. Connect to the internet to refresh."}
+            <span className="min-w-0">
+              {isOnline ? (
+                <>
+                  <span className="block font-medium text-amber-900">
+                    Device is online, but the dashboard API did not respond.
+                  </span>
+                  <span className="block mt-1 text-amber-800/95">
+                    Showing data saved on this device. Use Retry when the server is reachable again.
+                  </span>
+                  {cachedBannerDetail ? (
+                    <span className="block mt-1.5 text-xs text-amber-700/90 break-words" title={cachedBannerDetail}>
+                      {cachedBannerDetail}
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                "Showing cached data — you are offline. Connect to the internet to refresh."
+              )}
             </span>
             <button
               type="button"
@@ -1084,6 +1149,7 @@ function CustomerDashboardClient() {
                   type="button"
                   onClick={() => setDuplicateError(null)}
                   className="text-amber-700 hover:text-amber-900 font-medium shrink-0"
+                  aria-label="Dismiss message"
                 >
                   ×
                 </button>
@@ -1146,8 +1212,8 @@ function CustomerDashboardClient() {
                 {
                   header: "Action",
                   accessor: "action",
-                  width: "220px",
-                  minWidth: "220px",
+                  width: "300px",
+                  minWidth: "280px",
                   render: (row) => {
                     const duplicateBusy =
                       duplicateLoading != null &&
@@ -1157,7 +1223,7 @@ function CustomerDashboardClient() {
                       String(viewLoading) === String(row.id);
                     const disabled = !row.id;
                     return (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
                           disabled={disabled || viewBusy}
@@ -1185,6 +1251,31 @@ function CustomerDashboardClient() {
                           </svg>
                           {viewBusy ? "…" : "View"}
                         </button>
+                        {row.canEdit && (
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => handleEditOrder(row)}
+                            title="Edit order in cart"
+                            className="cursor-pointer inline-flex items-center gap-1 text-xs text-amber-800 hover:text-amber-950 border border-amber-300 rounded px-3 py-1.5 hover:bg-amber-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <svg
+                              className="w-3.5 h-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                              aria-hidden
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                              />
+                            </svg>
+                            Edit
+                          </button>
+                        )}
                         <button
                           type="button"
                           disabled={disabled || duplicateBusy}

@@ -315,6 +315,7 @@ function mapApiOrders(res) {
     const canEdit =
       status?.toLowerCase() === "draft" ||
       status?.toLowerCase() === "offline" ||
+      status?.toLowerCase() === "submitted" ||
       r.can_edit === true ||
       r.can_edit === "Y";
     const id =
@@ -359,6 +360,7 @@ function mapRawToOrders(rawList) {
     const canEdit =
       status?.toLowerCase() === "draft" ||
       status?.toLowerCase() === "offline" ||
+      status?.toLowerCase() === "submitted" ||
       r.can_edit === true ||
       r.can_edit === "Y";
     const id = r.trns_id ?? r.TRNS_ID ?? r.id ?? r.pk_id ?? orderId ?? i;

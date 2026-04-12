@@ -328,6 +328,8 @@ function ProductsContent() {
   const [cartApiError, setCartApiError] = useState(null);
   const [catalogPdfBusy, setCatalogPdfBusy] = useState(null);
   const [catalogPdfError, setCatalogPdfError] = useState(null);
+  /** PDF catalog: include unit prices (uses on-screen / edited prices) vs omit for sharing. */
+  const [catalogPdfIncludePrice, setCatalogPdfIncludePrice] = useState(false);
   const [partyCode, setPartyCode] = useState(null);
   const [expandedProducts, setExpandedProducts] = useState({});
 
@@ -495,6 +497,17 @@ function ProductsContent() {
 
   const filteredProducts = products;
 
+  const catalogPriceLabelForProduct = useCallback(
+    (p) => {
+      const raw = editablePrices[p.id] ?? p.price ?? "";
+      const n = Number(String(raw).replace(/[^\d.-]/g, ""));
+      if (Number.isFinite(n)) return `£${n.toFixed(2)}`;
+      const s = String(raw).trim();
+      return s || "—";
+    },
+    [editablePrices],
+  );
+
   const handleCatalogPdf = useCallback(
     async (mode) => {
       setCatalogPdfError(null);
@@ -503,6 +516,7 @@ function ProductsContent() {
         let list;
         let title;
         const subtitleParts = [`Party: ${partyCode ?? "—"}`];
+        if (catalogPdfIncludePrice) subtitleParts.push("Prices shown on list");
 
         if (mode === "full") {
           const raw = isOnline
@@ -520,14 +534,21 @@ function ProductsContent() {
           if (searchQuery) subtitleParts.push(`Search: ${searchQuery}`);
         }
 
-        const catalogItems = list.map((p) => ({
-          image: p.image,
-          category: (p.category && String(p.category).trim()) || "—",
-          name: p.name || "—",
-          sku: String(p.sku ?? "—"),
-          uom: p.unitOfMeasure || "—",
-          price: p.price || "—",
-        }));
+        const catalogItems = list.map((p) => {
+          const base = {
+            image: p.image,
+            category: (p.category && String(p.category).trim()) || "—",
+            name: p.name || "—",
+            sku: String(p.sku ?? "—"),
+            uom: p.unitOfMeasure || "—",
+            inStock: !!p.inStock,
+            stock: p.stock ?? 0,
+          };
+          if (catalogPdfIncludePrice) {
+            return { ...base, price: catalogPriceLabelForProduct(p) };
+          }
+          return base;
+        });
 
         if (!catalogItems.length) {
           setCatalogPdfError("No products to put in the PDF.");
@@ -543,6 +564,7 @@ function ProductsContent() {
         const blob = await buildProductCatalogPdfBlob(catalogItems, {
           title,
           subtitle: subtitleParts.join(" · "),
+          showPrice: catalogPdfIncludePrice,
         });
 
         const safeParty = String(partyCode || "catalog").replace(/[^a-zA-Z0-9-_]/g, "_").slice(0, 28);
@@ -552,9 +574,10 @@ function ProductsContent() {
             : activeCategory === "All Items"
               ? "current"
               : activeCategory.replace(/[^a-zA-Z0-9-_]/g, "_").slice(0, 24);
-        const filename = `Majestic_${safeParty}_${scope}_${new Date().toISOString().slice(0, 10)}.pdf`;
+        const priceTag = catalogPdfIncludePrice ? "with_price" : "no_price";
+        const filename = `Majestic_${safeParty}_${scope}_${priceTag}_${new Date().toISOString().slice(0, 10)}.pdf`;
 
-        const hint = `Product catalog (with images) — ${catalogItems.length} items. PDF attached or saved as ${filename}.`;
+        const hint = `Product catalog${catalogPdfIncludePrice ? " with prices" : ""} (${catalogItems.length} items). PDF: ${filename}.`;
         await shareOrDownloadPdf(blob, filename, hint);
       } catch (e) {
         console.error(e);
@@ -563,7 +586,15 @@ function ProductsContent() {
         setCatalogPdfBusy(null);
       }
     },
-    [isOnline, partyCode, products, activeCategory, searchQuery],
+    [
+      isOnline,
+      partyCode,
+      products,
+      activeCategory,
+      searchQuery,
+      catalogPdfIncludePrice,
+      catalogPriceLabelForProduct,
+    ],
   );
 
   const handleQuantityChange = (productId, delta) => {
@@ -988,7 +1019,35 @@ function ProductsContent() {
                 />
               </svg>
             </div>
-            <div className="flex flex-wrap gap-2 shrink-0">
+            <div className="flex flex-col gap-3 shrink-0 w-full lg:w-auto">
+              <div
+                className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-700"
+                role="group"
+                aria-label="Catalog PDF price option"
+              >
+                <span className="font-medium text-gray-600 whitespace-nowrap">Catalog PDF</span>
+                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="radio"
+                    name="catalog_pdf_price"
+                    className="text-green-600 focus:ring-green-500"
+                    checked={!catalogPdfIncludePrice}
+                    onChange={() => setCatalogPdfIncludePrice(false)}
+                  />
+                  <span>Without price</span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="radio"
+                    name="catalog_pdf_price"
+                    className="text-green-600 focus:ring-green-500"
+                    checked={catalogPdfIncludePrice}
+                    onChange={() => setCatalogPdfIncludePrice(true)}
+                  />
+                  <span>With price</span>
+                </label>
+              </div>
+              <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 disabled={!!catalogPdfBusy || loading}
@@ -1025,6 +1084,7 @@ function ProductsContent() {
                   </>
                 )}
               </button>
+              </div>
             </div>
           </div>
           {catalogPdfError && (

@@ -1,22 +1,22 @@
 import { loadImageForPdf, fitImageToBox } from "@/lib/pdf/loadImageForPdf";
 
 /**
- * Product catalog PDF with images — 4 columns × 3 rows (12 items per A4 portrait page).
+ * Product catalog PDF with images — 4 columns × 4 rows (16 items per A4 portrait page).
  * Client-only; dynamic import of jsPDF keeps initial bundle smaller.
  *
- * @param {Array<{ image?: string; category?: string; name?: string; sku?: string; uom?: string; price?: string }>} items
- * @param {{ title?: string; subtitle?: string }} options
+ * @param {Array<{ image?: string; category?: string; name?: string; sku?: string; uom?: string; price?: string; inStock?: boolean; stock?: number | string }>} items
+ * @param {{ title?: string; subtitle?: string; showPrice?: boolean }} options
  * @returns {Promise<Blob>}
  */
 export async function buildProductCatalogPdfBlob(items, options = {}) {
-  const { title = "Product catalog", subtitle = "" } = options;
+  const { title = "Product catalog", subtitle = "", showPrice = false } = options;
   const { jsPDF } = await import("jspdf");
 
   const GRID_COLS = 4;
-  const GRID_ROWS = 3;
+  const GRID_ROWS = 4;
   const PER_PAGE = GRID_COLS * GRID_ROWS;
-  const MARGIN_X = 8;
-  const MARGIN_TOP = 8;
+  const MARGIN_X = 7;
+  const MARGIN_TOP = 7;
   const FOOTER_H = 10;
   const HEADER_BASE = 11;
 
@@ -73,15 +73,38 @@ export async function buildProductCatalogPdfBlob(items, options = {}) {
     docRef.setTextColor(0, 0, 0);
   }
 
-  function drawProductCell(docRef, col, row, cellW, cellH, gridTop, product, imageData) {
+  function isOutOfStock(p) {
+    if (p == null) return false;
+    if (typeof p.inStock === "boolean") return !p.inStock;
+    const n = Number(p.stock ?? NaN);
+    if (!Number.isNaN(n)) return n <= 0;
+    return false;
+  }
+
+  function drawOutOfStockBadge(docRef, x, y) {
+    const label = "OUT OF STOCK";
+    docRef.setFont("helvetica", "bold");
+    docRef.setFontSize(6.2);
+    const padX = 2.2;
+    const padY = 1.6;
+    const w = docRef.getTextWidth(label) + padX * 2;
+    const h = 5.2;
+    docRef.setFillColor(220, 38, 38);
+    docRef.roundedRect(x, y, w, h, 1.2, 1.2, "F");
+    docRef.setTextColor(255, 255, 255);
+    docRef.text(label, x + padX, y + h - padY);
+    docRef.setTextColor(0, 0, 0);
+  }
+
+  function drawProductCell(docRef, col, row, cellW, cellH, gridTop, product, imageData, cellShowPrice) {
     const cellX = MARGIN_X + col * cellW;
     const cellY = gridTop + row * cellH;
-    const pad = 1.8;
+    const pad = 1.5;
     const innerCellW = cellW - pad * 2;
     const innerTop = cellY + pad;
 
     const imgBoxW = innerCellW;
-    const imgBoxH = Math.min(32, cellH * 0.44);
+    const imgBoxH = Math.min(26, cellH * 0.42);
     const imgBoxX = cellX + pad;
     const imgBoxY = innerTop;
 
@@ -89,14 +112,16 @@ export async function buildProductCatalogPdfBlob(items, options = {}) {
     const textX = cellX + pad + 0.5;
 
     docRef.setFont("helvetica", "bold");
-    docRef.setFontSize(7.5);
-    const nameLines = docRef.splitTextToSize(String(product.name ?? "—").slice(0, 100), textW);
+    docRef.setFontSize(7);
+    const nameLines = docRef.splitTextToSize(String(product.name ?? "—").slice(0, 92), textW);
     const nameSlice = Array.isArray(nameLines) ? nameLines.slice(0, 2) : [String(nameLines)];
 
-    const textStartY = imgBoxY + imgBoxH + 2.2;
-    const uomBaseline = textStartY + 2.8 + nameSlice.length * 3.5 + 1 + 4 + 2.8;
-    const bottomPadAfterUom = 1.6;
-    const contentBottom = uomBaseline + bottomPadAfterUom;
+    const textStartY = imgBoxY + imgBoxH + 2;
+    const priceExtra =
+      cellShowPrice && product.price != null && String(product.price).trim() !== "" ? 2.8 : 0;
+    // Enough height for: category + 2 name lines + SKU + UOM (+ optional price) (+ small padding)
+    const contentBottom =
+      textStartY + 2.6 + nameSlice.length * 3.2 + 1 + 2.6 + 2.6 + priceExtra + 1.2;
     const boxH = Math.min(cellH, contentBottom - cellY);
 
     docRef.setDrawColor(229, 231, 235);
@@ -116,35 +141,43 @@ export async function buildProductCatalogPdfBlob(items, options = {}) {
       drawPlaceholder(docRef, imgBoxX, imgBoxY, imgBoxW, imgBoxH);
     }
 
+    // Draw badge AFTER image so it never gets covered.
+    if (isOutOfStock(product)) {
+      drawOutOfStockBadge(docRef, cellX + pad + 0.6, cellY + pad + 0.6);
+    }
+
     let ty = textStartY;
 
     docRef.setFont("helvetica", "normal");
-    docRef.setFontSize(6);
+    docRef.setFontSize(5.6);
     docRef.setTextColor(100, 100, 100);
     const cat = String(product.category ?? "—").slice(0, 42);
     docRef.text(cat, textX, ty);
-    ty += 2.8;
+    ty += 2.6;
 
     docRef.setFont("helvetica", "bold");
-    docRef.setFontSize(7.5);
+    docRef.setFontSize(7);
     docRef.setTextColor(17, 24, 39);
     docRef.text(nameSlice, textX, ty);
-    ty += nameSlice.length * 3.5 + 1;
-
-    docRef.setFont("helvetica", "bold");
-    docRef.setFontSize(9);
-    docRef.setTextColor(37, 99, 235);
-    docRef.text(String(product.price ?? "—"), textX, ty);
-    ty += 4;
+    ty += nameSlice.length * 3.2 + 1;
 
     docRef.setFont("helvetica", "normal");
-    docRef.setFontSize(6.5);
+    docRef.setFontSize(5.9);
     docRef.setTextColor(75, 85, 99);
     const skuLine = `SKU: ${String(product.sku ?? "—").slice(0, 18)}`;
     docRef.text(skuLine, textX, ty);
-    ty += 2.8;
-    const uomLine = String(product.uom ?? "—").slice(0, 16);
+    ty += 2.6;
+    const uomLine = `UOM: ${String(product.uom ?? "—").slice(0, 16)}`;
     docRef.text(uomLine, textX, ty);
+    ty += 2.6;
+
+    if (cellShowPrice && product.price != null && String(product.price).trim() !== "") {
+      docRef.setFont("helvetica", "bold");
+      docRef.setFontSize(6.4);
+      docRef.setTextColor(22, 101, 52);
+      const pl = String(product.price).trim().slice(0, 24);
+      docRef.text(pl, textX, ty);
+    }
     docRef.setTextColor(0, 0, 0);
   }
 
@@ -164,7 +197,7 @@ export async function buildProductCatalogPdfBlob(items, options = {}) {
     for (let i = 0; i < slice.length; i++) {
       const row = Math.floor(i / GRID_COLS);
       const col = i % GRID_COLS;
-      drawProductCell(doc, col, row, cellW, cellH, gridTop, slice[i], imageDataList[i]);
+      drawProductCell(doc, col, row, cellW, cellH, gridTop, slice[i], imageDataList[i], showPrice);
     }
 
     drawFooter(doc, p, totalPages);
