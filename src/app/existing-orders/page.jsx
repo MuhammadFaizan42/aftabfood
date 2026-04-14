@@ -385,17 +385,9 @@ function ExistingOrdersContent() {
   const partyCodeParam = searchParams.get("party_code");
   const customerNameParam = searchParams.get("customer_name") || "";
   const isOnline = useOnlineStatus();
-  const [fromDate, setFromDate] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - 1);
-    return d.toISOString().slice(0, 10);
-  });
+  const [fromDate, setFromDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [appliedFromDate, setAppliedFromDate] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - 1);
-    return d.toISOString().slice(0, 10);
-  });
+  const [appliedFromDate, setAppliedFromDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [appliedToDate, setAppliedToDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);

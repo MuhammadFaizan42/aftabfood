@@ -48,8 +48,75 @@ function formatPrice(val) {
   return `£${n.toFixed(2)}`;
 }
 
+function normalizeDateInputForForm(val) {
+  if (val == null || val === "") return "";
+  const s = String(val).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const parsed = new Date(s);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  return "";
+}
+
+/** Order-level fields for Finalise Order (order_review / cached snapshot). */
+function pickOrderMetaFromReviewData(d) {
+  if (!d || typeof d !== "object") {
+    return { remarks: "", deliveryDate: "", payTerms: "", discountVal: "" };
+  }
+  const order = d.order && typeof d.order === "object" ? d.order : {};
+  const header = d.header && typeof d.header === "object" ? d.header : {};
+  const src = { ...order, ...header, ...d };
+  const rawRemarks =
+    src.rms ??
+    src.RMS ??
+    src.remarks ??
+    src.REMARKS ??
+    src.order_remarks ??
+    src.notes ??
+    src.user_note ??
+    "";
+  const remarks = String(rawRemarks ?? "").trim().slice(0, 150);
+  const rawDel =
+    src.delivery_date ??
+    src.DELIVERY_DATE ??
+    src.expected_delivery ??
+    src.delivery_dt ??
+    "";
+  const deliveryDate = normalizeDateInputForForm(rawDel);
+  const rawPt =
+    src.pay_terms ??
+    src.PAY_TERMS ??
+    src.payment_terms ??
+    src.PAYMENT_TERMS ??
+    "";
+  const payTerms = rawPt != null && String(rawPt).trim() !== "" ? String(rawPt).trim() : "";
+  const rawDisc =
+    src.discount_val ??
+    src.discount ??
+    src.discount_amount ??
+    src.DISCOUNT;
+  let discountVal = "";
+  if (rawDisc != null && rawDisc !== "") {
+    const n = Number(rawDisc);
+    if (!Number.isNaN(n)) discountVal = String(n);
+  }
+  return { remarks, deliveryDate, payTerms, discountVal };
+}
+
 function mapReviewData(res) {
-  if (!res?.success || !res?.data) return { customer: null, items: [], subtotal: 0, tax: 0, discount: 0, grandTotal: 0 };
+  if (!res?.success || !res?.data) {
+    return {
+      customer: null,
+      items: [],
+      subtotal: 0,
+      tax: 0,
+      discount: 0,
+      grandTotal: 0,
+      remarks: "",
+      deliveryDate: "",
+      payTerms: "",
+      discountVal: "",
+    };
+  }
   const d = res.data;
   const rawCustomer = d.customer ?? d.customer_info ?? d.party ?? {};
   const customer = {
@@ -113,7 +180,8 @@ function mapReviewData(res) {
   const tax = Number(d.tax ?? 0) || 0;
   const discount = Number(d.discount ?? 0) || 0;
   const grandTotal = Number(d.grand_total ?? d.total ?? 0) || subtotal + tax - discount;
-  return { customer, items, subtotal, tax, discount, grandTotal };
+  const meta = pickOrderMetaFromReviewData(d);
+  return { customer, items, subtotal, tax, discount, grandTotal, ...meta };
 }
 
 function OrderReviewContent() {
@@ -166,13 +234,18 @@ function OrderReviewContent() {
           try {
             await cacheOrderDetail(id, res?.data ?? res);
           } catch { /* ignore */ }
-          const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData(res);
+          const rev = mapReviewData(res);
+          const { customer: c, items, subtotal: st, tax: t, discount: disc, grandTotal: gt } = rev;
           setCustomer(c);
           setOrderItems(await finalizeReviewOrderItems(items, isOnline));
           setSubtotal(st);
           setTax(t);
-          setDiscount(d);
+          setDiscount(disc);
           setGrandTotal(gt);
+          setRemarks(rev.remarks ?? "");
+          setDeliveryDate(rev.deliveryDate ?? "");
+          setPayTerms(rev.payTerms ?? "");
+          setDiscountVal(rev.discountVal ?? "");
           const partyCode = getSaleOrderPartyCode();
           if (partyCode) {
             try {
@@ -193,13 +266,18 @@ function OrderReviewContent() {
               setTrnsId(id);
               setIsOfflineOrder(!!isOfflineId);
               setIsCachedServerOrder(!isOfflineId);
-              const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: cached });
+              const rev = mapReviewData({ success: true, data: cached });
+              const { customer: c, items, subtotal: st, tax: t, discount: disc, grandTotal: gt } = rev;
               setCustomer(c);
               setOrderItems(await finalizeReviewOrderItems(items, isOnline));
               setSubtotal(st);
               setTax(t);
-              setDiscount(d);
+              setDiscount(disc);
               setGrandTotal(gt);
+              setRemarks(rev.remarks ?? "");
+              setDeliveryDate(rev.deliveryDate ?? "");
+              setPayTerms(rev.payTerms ?? "");
+              setDiscountVal(rev.discountVal ?? "");
             } else {
               setError(err instanceof Error ? err.message : "Failed to load order review.");
             }
@@ -217,22 +295,23 @@ function OrderReviewContent() {
         try {
           const cached = await getCachedOrderDetail(id);
           if (cached) {
-            const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: cached });
+            const rev = mapReviewData({ success: true, data: cached });
+            const { customer: c, items, subtotal: st, tax: t, discount: disc, grandTotal: gt } = rev;
             setCustomer(c);
             setOrderItems(await finalizeReviewOrderItems(items, isOnline));
             setSubtotal(st);
             setTax(t);
-            setDiscount(d);
+            setDiscount(disc);
             setGrandTotal(gt);
+            setRemarks(rev.remarks ?? "");
+            setDeliveryDate(rev.deliveryDate ?? "");
+            setPayTerms(rev.payTerms ?? "");
+            setDiscountVal(rev.discountVal ?? "");
             if (isOfflineId) {
               const row = await getExistingOrderRow(id);
               const bid = row?.backend_trns_id;
               setHasBackendTrnsId(!!bid);
               setBackendTrnsId(bid ?? null);
-              setDeliveryDate(cached.delivery_date ?? "");
-              setPayTerms(cached.pay_terms ?? "");
-              setDiscountVal(cached.discount_val ?? "");
-              setRemarks(cached.remarks ?? "");
             }
           } else {
             setError("Order details not in cache. View this order when online first.");
@@ -255,13 +334,18 @@ function OrderReviewContent() {
         try {
           await cacheOrderDetail(id, res?.data ?? res);
         } catch { /* ignore */ }
-        const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData(res);
+        const rev = mapReviewData(res);
+        const { customer: c, items, subtotal: st, tax: t, discount: disc, grandTotal: gt } = rev;
         setCustomer(c);
         setOrderItems(await finalizeReviewOrderItems(items, isOnline));
         setSubtotal(st);
         setTax(t);
-        setDiscount(d);
+        setDiscount(disc);
         setGrandTotal(gt);
+        setRemarks(rev.remarks ?? "");
+        setDeliveryDate(rev.deliveryDate ?? "");
+        setPayTerms(rev.payTerms ?? "");
+        setDiscountVal(rev.discountVal ?? "");
         const partyCode = getSaleOrderPartyCode();
         if (partyCode) {
           try {
@@ -281,21 +365,22 @@ function OrderReviewContent() {
           setTrnsId(id);
           setIsOfflineOrder(isOfflineId);
           setIsCachedServerOrder(!isOfflineId);
-          const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: cached });
+          const rev = mapReviewData({ success: true, data: cached });
+          const { customer: c, items, subtotal: st, tax: t, discount: disc, grandTotal: gt } = rev;
           setCustomer(c);
           setOrderItems(await finalizeReviewOrderItems(items, isOnline));
           setSubtotal(st);
           setTax(t);
-          setDiscount(d);
+          setDiscount(disc);
           setGrandTotal(gt);
+          setRemarks(rev.remarks ?? "");
+          setDeliveryDate(rev.deliveryDate ?? "");
+          setPayTerms(rev.payTerms ?? "");
+          setDiscountVal(rev.discountVal ?? "");
           if (isOfflineId) {
             const row = await getExistingOrderRow(id);
             setHasBackendTrnsId(!!row?.backend_trns_id);
             setBackendTrnsId(row?.backend_trns_id ?? null);
-            setDeliveryDate(cached.delivery_date ?? "");
-            setPayTerms(cached.pay_terms ?? "");
-            setDiscountVal(cached.discount_val ?? "");
-            setRemarks(cached.remarks ?? "");
           }
         } else {
           setError(err instanceof Error ? err.message : "Failed to load order review.");
@@ -313,22 +398,23 @@ function OrderReviewContent() {
           const isOfflineId = String(id).startsWith("offline_");
           setIsOfflineOrder(isOfflineId);
           setIsCachedServerOrder(!isOfflineId);
-          const { customer: c, items, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: cached });
+          const rev = mapReviewData({ success: true, data: cached });
+          const { customer: c, items, subtotal: st, tax: t, discount: disc, grandTotal: gt } = rev;
           setCustomer(c);
           setOrderItems(await finalizeReviewOrderItems(items, isOnline));
           setSubtotal(st);
           setTax(t);
-          setDiscount(d);
+          setDiscount(disc);
           setGrandTotal(gt);
+          setRemarks(rev.remarks ?? "");
+          setDeliveryDate(rev.deliveryDate ?? "");
+          setPayTerms(rev.payTerms ?? "");
+          setDiscountVal(rev.discountVal ?? "");
           if (isOfflineId) {
             const row = await getExistingOrderRow(id);
             const bid = row?.backend_trns_id;
             setHasBackendTrnsId(!!bid);
             setBackendTrnsId(bid ?? null);
-            setDeliveryDate(cached.delivery_date ?? "");
-            setPayTerms(cached.pay_terms ?? "");
-            setDiscountVal(cached.discount_val ?? "");
-            setRemarks(cached.remarks ?? "");
           }
           setLoading(false);
           return;
@@ -353,20 +439,21 @@ function OrderReviewContent() {
           if (alreadyCached) {
             setTrnsId(existingId);
             setIsOfflineOrder(true);
-            const { customer: c, items: cachedItems, subtotal: st, tax: t, discount: d, grandTotal: gt } = mapReviewData({ success: true, data: alreadyCached });
+            const rev = mapReviewData({ success: true, data: alreadyCached });
+            const { customer: c, items: cachedItems, subtotal: st, tax: t, discount: disc, grandTotal: gt } = rev;
             setCustomer(c);
             setOrderItems(await finalizeReviewOrderItems(cachedItems, isOnline));
             setSubtotal(st);
             setTax(t);
-            setDiscount(d);
+            setDiscount(disc);
             setGrandTotal(gt);
+            setRemarks(rev.remarks ?? "");
+            setDeliveryDate(rev.deliveryDate ?? "");
+            setPayTerms(rev.payTerms ?? "");
+            setDiscountVal(rev.discountVal ?? "");
             const row = await getExistingOrderRow(existingId);
             setHasBackendTrnsId(!!row?.backend_trns_id);
             setBackendTrnsId(row?.backend_trns_id ?? null);
-            setDeliveryDate(alreadyCached.delivery_date ?? "");
-            setPayTerms(alreadyCached.pay_terms ?? "");
-            setDiscountVal(alreadyCached.discount_val ?? "");
-            setRemarks(alreadyCached.remarks ?? "");
             setLoading(false);
             return;
           }

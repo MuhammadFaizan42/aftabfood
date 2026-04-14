@@ -1,5 +1,5 @@
 "use client";
-import React, { Suspense, useState, useEffect, useCallback } from "react";
+import React, { Suspense, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { buildProductCatalogPdfBlob, shareOrDownloadPdf } from "@/lib/productCatalogPdf";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -353,7 +353,11 @@ function ProductsContent() {
     getDB().catch(() => {});
   }, []);
 
+  /** Ignores out-of-order API responses so a slow full-list fetch cannot overwrite a newer search result. */
+  const fetchSeqRef = useRef(0);
+
   const fetchProducts = useCallback(async (opts = {}) => {
+    const seq = ++fetchSeqRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -366,22 +370,24 @@ function ProductsContent() {
         try {
           const rawRows = await fetchProductsPaginatedOnline(listParams);
           mapped = rawRows.map(mapApiProduct);
-          setProducts(mapped);
+          if (seq === fetchSeqRef.current) setProducts(mapped);
         } catch (apiErr) {
           const raw = await getCachedProducts({
             category: opts.category,
             search: opts.search,
           });
           mapped = raw.map(mapApiProduct);
-          setProducts(mapped);
-          if (mapped.length > 0) {
-            setError(
-              isOnline
-                ? "Could not refresh from the server — showing cached products. Use refresh to try again."
-                : "Showing cached products — server unreachable."
-            );
-          } else {
-            setError(apiErr instanceof Error ? apiErr.message : "Could not load products. Open when online to cache.");
+          if (seq === fetchSeqRef.current) {
+            setProducts(mapped);
+            if (mapped.length > 0) {
+              setError(
+                isOnline
+                  ? "Could not refresh from the server — showing cached products. Use refresh to try again."
+                  : "Showing cached products — server unreachable."
+              );
+            } else {
+              setError(apiErr instanceof Error ? apiErr.message : "Could not load products. Open when online to cache.");
+            }
           }
           return mapped;
         }
@@ -392,14 +398,16 @@ function ProductsContent() {
         search: opts.search,
       });
       const mapped = raw.map(mapApiProduct);
-      setProducts(mapped);
+      if (seq === fetchSeqRef.current) setProducts(mapped);
       return mapped;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load products.");
-      setProducts([]);
+      if (seq === fetchSeqRef.current) {
+        setError(err instanceof Error ? err.message : "Failed to load products.");
+        setProducts([]);
+      }
       return [];
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) setLoading(false);
     }
   }, [isOnline]);
 
@@ -495,7 +503,26 @@ function ProductsContent() {
     setProductComments((prev) => ({ ...c, ...prev }));
   }, [products]);
 
-  const filteredProducts = products;
+  /** Same filters as API/IDB; reapplies on the client so a stale response cannot show the wrong rows on mobile. */
+  const filteredProducts = useMemo(() => {
+    let list = products;
+    if (activeCategory && activeCategory !== "All Items") {
+      const cat = activeCategory.trim().toLowerCase();
+      list = list.filter(
+        (p) => String(p.category ?? "").trim().toLowerCase() === cat,
+      );
+    }
+    const q = searchQuery.trim();
+    if (q) {
+      const s = q.toLowerCase();
+      list = list.filter(
+        (p) =>
+          String(p.name ?? "").toLowerCase().includes(s) ||
+          String(p.sku ?? "").toLowerCase().includes(s),
+      );
+    }
+    return list;
+  }, [products, activeCategory, searchQuery]);
 
   const catalogPriceLabelForProduct = useCallback(
     (p) => {
@@ -526,7 +553,7 @@ function ProductsContent() {
           title = "Majestic — Full catalog (all categories)";
           if (!isOnline) subtitleParts.push("Offline: cached catalog");
         } else {
-          list = products;
+          list = filteredProducts;
           title =
             activeCategory === "All Items"
               ? "Majestic — Current list"
@@ -589,7 +616,7 @@ function ProductsContent() {
     [
       isOnline,
       partyCode,
-      products,
+      filteredProducts,
       activeCategory,
       searchQuery,
       catalogPdfIncludePrice,
@@ -1092,6 +1119,11 @@ function ProductsContent() {
               {catalogPdfError}
             </div>
           )}
+          {loading && products.length > 0 && (
+            <p className="mt-2 text-xs text-gray-500" role="status">
+              Updating list…
+            </p>
+          )}
         </div>
 
         {error && (
@@ -1105,7 +1137,7 @@ function ProductsContent() {
           </div>
         )}
 
-        {loading && (
+        {loading && products.length === 0 && (
           <div className="text-center py-12 text-gray-500">Loading products...</div>
         )}
 
@@ -1124,8 +1156,8 @@ function ProductsContent() {
           </button>
         </div>
 
-        {/* Products Grid */}
-        {!loading && (
+        {/* Products Grid — keep showing previous rows while a newer fetch runs (avoids empty screen on mobile scroll/refetch). */}
+        {(!loading || products.length > 0) && (
           <div className={`grid grid-cols-1 items-start gap-6 ${isTwoColumnView
             ? 'sm:grid-cols-1 lg:grid-cols-2'
             : 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
@@ -1357,11 +1389,11 @@ function ProductsContent() {
         className="fixed bottom-28 right-6 z-40 max-w-[min(90vw,14rem)] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 text-right shadow-md backdrop-blur-sm"
         aria-live="polite"
       >
-        {loading ? (
+        {loading && products.length === 0 ? (
           <span className="text-sm text-gray-500">Loading products…</span>
         ) : (
           <span className="text-sm font-medium text-gray-700">
-            {products.length.toLocaleString()} {products.length === 1 ? "product" : "products"}
+            {filteredProducts.length.toLocaleString()} {filteredProducts.length === 1 ? "product" : "products"}
             {activeCategory !== "All Items" && (
               <span className="block text-xs font-normal text-gray-500 truncate" title={activeCategory}>
                 in {activeCategory}
