@@ -5,9 +5,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import Dropdown from "../../components/common/Dropdown";
-import Image from "next/image";
-import TwoGrid from "../../components/assets/images/two-grid.svg";
-import FourGrid from "../../components/assets/images/four-grid.svg";
 import { getProducts, addToCart, removeCartItem } from "@/services/shetApi";
 import { getSaleOrderPartyCode, setSaleOrderPartyCode, getCartTrnsId, setCartTrnsId, clearCartTrnsId } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
@@ -16,6 +13,14 @@ import { getDB } from "@/lib/idb";
 import { addToOfflineCart, removeFromOfflineCart, getOfflineCart, updateOfflineCartItem } from "@/lib/offline/offlineCart";
 
 const DEFAULT_PRODUCT_IMAGE = "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop";
+
+const GRID_COLS_STORAGE_KEY = "product_grid_cols";
+/** &lt;768px: max 2 cols; 768–1023px: max 4; ≥1024px: max 6 */
+function maxColsForWidth(width) {
+  if (width < 768) return 2;
+  if (width < 1024) return 4;
+  return 6;
+}
 
 /** Normalize API batch list: arrays, PHP object-maps, JSON strings, or comma-separated BATCH_NOS. */
 function coerceProductBatchTokens(val) {
@@ -316,7 +321,8 @@ function ProductsContent() {
   const [error, setError] = useState(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [isTwoColumnView, setIsTwoColumnView] = useState(false);
+  const [gridColsPreference, setGridColsPreference] = useState(4);
+  const [windowWidth, setWindowWidth] = useState(1024);
   const [cartItems, setCartItems] = useState([]);
   const [productQuantities, setProductQuantities] = useState({});
   const [editablePrices, setEditablePrices] = useState({});
@@ -477,6 +483,32 @@ function ProductsContent() {
   }, [searchInput]);
 
   useEffect(() => {
+    const onResize = () => setWindowWidth(window.innerWidth);
+    if (typeof window !== "undefined") {
+      setWindowWidth(window.innerWidth);
+      window.addEventListener("resize", onResize);
+    }
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const v = Number(localStorage.getItem(GRID_COLS_STORAGE_KEY));
+      if (Number.isFinite(v) && v >= 1 && v <= 6) setGridColsPreference(v);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(GRID_COLS_STORAGE_KEY, String(gridColsPreference));
+    } catch {
+      /* ignore */
+    }
+  }, [gridColsPreference]);
+
+  useEffect(() => {
     const q = products.reduce((acc, p) => ({ ...acc, [p.id]: productQuantities[p.id] ?? 0 }), {});
     const p = products.reduce((acc, p) => ({
       ...acc,
@@ -502,6 +534,9 @@ function ProductsContent() {
     setSelectedBatches((prev) => ({ ...batchDefaults, ...prev }));
     setProductComments((prev) => ({ ...c, ...prev }));
   }, [products]);
+
+  const maxColsForScreen = maxColsForWidth(windowWidth);
+  const effectiveGridCols = Math.min(Math.max(1, gridColsPreference), maxColsForScreen);
 
   /** Same filters as API/IDB; reapplies on the client so a stale response cannot show the wrong rows on mobile. */
   const filteredProducts = useMemo(() => {
@@ -582,11 +617,7 @@ function ProductsContent() {
           return;
         }
 
-        catalogItems.sort((a, b) => {
-          const c = a.category.localeCompare(b.category, undefined, { sensitivity: "base" });
-          if (c !== 0) return c;
-          return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-        });
+        /* Keep the same order as the product listing (API / cache / filtered list) — do not re-sort by category/name. */
 
         const blob = await buildProductCatalogPdfBlob(catalogItems, {
           title,
@@ -1141,27 +1172,47 @@ function ProductsContent() {
           <div className="text-center py-12 text-gray-500">Loading products...</div>
         )}
 
-        {/* Change Grid Layout */}
-        <div className="hidden sm:flex gap-2 items-end mb-3 justify-end">
-          <button
-            onClick={() => setIsTwoColumnView(!isTwoColumnView)}
-            className="cursor-pointer bg-gray-300 hover:bg-gray-400 transition-colors flex items-center justify-center w-12 h-12 rounded-md"
+        {/* Grid columns: preference 1–6; mobile max 2, tablet max 4, desktop max 6 */}
+        <div className="flex flex-wrap items-center gap-2 justify-end mb-3">
+          <span
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-gray-200 text-gray-700"
+            aria-hidden
           >
-            <Image
-              src={isTwoColumnView ? FourGrid : TwoGrid}
-              alt="Toggle Grid View"
-              width={30}
-              height={30}
-            />
-          </button>
+            <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M3 3h7v7H3V3zm11 0h7v7h-7V3zM3 14h7v7H3v-7zm11 0h7v7h-7v-7z" />
+            </svg>
+          </span>
+          <label className="sr-only" htmlFor="product-grid-cols">
+            Columns per row
+          </label>
+          <select
+            id="product-grid-cols"
+            value={gridColsPreference}
+            onChange={(e) => setGridColsPreference(Number(e.target.value))}
+            className="h-10 min-w-[7.5rem] cursor-pointer rounded-md border border-gray-300 bg-white px-2 text-sm font-medium text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            aria-label="Columns per row"
+          >
+            {[1, 2, 3, 4, 5, 6].map((n) => (
+              <option key={n} value={n}>
+                {n} column{n === 1 ? "" : "s"}
+              </option>
+            ))}
+          </select>
+          {effectiveGridCols !== gridColsPreference && (
+            <span className="text-xs text-amber-800 sm:text-sm">
+              Showing {effectiveGridCols} (max {maxColsForScreen} on this screen)
+            </span>
+          )}
         </div>
 
         {/* Products Grid — keep showing previous rows while a newer fetch runs (avoids empty screen on mobile scroll/refetch). */}
         {(!loading || products.length > 0) && (
-          <div className={`grid grid-cols-1 items-start gap-6 ${isTwoColumnView
-            ? 'sm:grid-cols-1 lg:grid-cols-2'
-            : 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-            }`}>
+          <div
+            className="grid items-start gap-6"
+            style={{
+              gridTemplateColumns: `repeat(${effectiveGridCols}, minmax(0, 1fr))`,
+            }}
+          >
           {filteredProducts.map((product) => {
             const quantity = productQuantities[product.id] || 0;
             const hasQuantity = quantity > 0;

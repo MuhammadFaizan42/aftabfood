@@ -4,7 +4,7 @@
  * Base URL: NEXT_PUBLIC_API_BASE_URL (and optional server-only API_BASE_URL) via getApiBaseUrl().
  */
 
-import { api, getApiBaseUrl } from "../lib/api";
+import { api, apiRequest, getApiBaseUrl } from "../lib/api";
 
 function apiBase() {
   return getApiBaseUrl();
@@ -247,4 +247,40 @@ export async function getSalesVisitHistory(customerId, partyCode) {
   const base = salesVisitUrl();
   const url = params.toString() ? `${base}?${params.toString()}` : base;
   return api.get(url);
+}
+
+/**
+ * Upload product image – POST multipart/form-data to `models/image_upload.php` (Bearer JWT).
+ * Fields: **name** (numeric PK_INV_ID, no extension), **image** (file). Response: `data.filename`, `data.url`.
+ */
+export async function uploadProductImage(imageId, file) {
+  if (!file || typeof file !== "object") {
+    throw new Error("No image file selected.");
+  }
+  const id = String(imageId ?? "").replace(/[^\d]/g, "");
+  if (!id) {
+    throw new Error("Image name must be numeric.");
+  }
+
+  const idField =
+    (typeof process !== "undefined" && process.env.NEXT_PUBLIC_IMAGE_UPLOAD_ID_FIELD?.trim()) ||
+    "name";
+  const fileField =
+    (typeof process !== "undefined" && process.env.NEXT_PUBLIC_IMAGE_UPLOAD_FILE_FIELD?.trim()) ||
+    "image";
+
+  const fd = new FormData();
+  fd.append(idField, id);
+  fd.append(fileField, file, file.name || "image.jpg");
+
+  const url = `${apiBase()}/models/image_upload.php`;
+  const res = await apiRequest(url, {
+    method: "POST",
+    body: fd,
+  });
+
+  if (res && typeof res === "object" && res.success === false) {
+    throw new Error(res.message || "Image upload failed.");
+  }
+  return res;
 }

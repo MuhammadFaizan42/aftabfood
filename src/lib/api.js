@@ -137,6 +137,16 @@ export function getAuthUser() {
   }
 }
 
+/** Some PHP endpoints emit UTF-8 BOM or stray bytes before `{...}` JSON — `response.json()` then throws. */
+function parseJsonLoose(raw) {
+  let t = String(raw ?? "");
+  if (t.charCodeAt(0) === 0xfeff) t = t.slice(1);
+  t = t.replace(/^\uFEFF/, "").trimStart();
+  const m = t.match(/[[{]/);
+  if (m && m.index != null && m.index > 0) t = t.slice(m.index);
+  return JSON.parse(t);
+}
+
 /**
  * Generic API request – Swagger ke har endpoint ke liye use kar sakte hain
  * @param {string} path - e.g. "/api/customers", "/api/orders"
@@ -154,8 +164,15 @@ export async function apiRequest(path, options = {}) {
   }
 
   const token = getAuthToken();
+  const body = options.body;
+  const isFormData =
+    typeof FormData !== "undefined" &&
+    body != null &&
+    (body instanceof FormData ||
+      (typeof body === "object" &&
+        Object.prototype.toString.call(body) === "[object FormData]"));
   const headers = {
-    "Content-Type": "application/json",
+    ...(!isFormData ? { "Content-Type": "application/json" } : {}),
     ...(token && { Authorization: `Bearer ${token}` }),
     ...options.headers,
   };
@@ -164,24 +181,25 @@ export async function apiRequest(path, options = {}) {
 
   const response = await fetch(url, config);
 
+  const rawText = await response.text();
+
   if (!response.ok) {
-    const errorBody = await response.text();
     let message = `API Error: ${response.status}`;
     try {
-      const parsed = JSON.parse(errorBody);
+      const parsed = parseJsonLoose(rawText);
       message = parsed.message || parsed.error || message;
     } catch (_) {
-      if (response.status === 404 && errorBody.trimStart().startsWith("<!"))
+      if (response.status === 404 && rawText.trimStart().startsWith("<!"))
         message = "API not reachable. Check your internet and that the API URL is correct.";
     }
     throw new Error(message);
   }
 
-  const contentType = response.headers.get("content-type");
-  if (contentType && contentType.includes("application/json")) {
-    return response.json();
+  try {
+    return parseJsonLoose(rawText);
+  } catch (_) {
+    return rawText;
   }
-  return response.text();
 }
 
 /**

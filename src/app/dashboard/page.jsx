@@ -79,6 +79,42 @@ export default function Dashboard() {
             </div>
           </Link>
 
+          {/* Product Images Upload Card */}
+          <Link href="/product-images">
+            <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 hover:border-teal-500 p-8 hover:shadow-lg transition-shadow cursor-pointer h-full">
+              <div className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                  <svg
+                    className="w-8 h-8 text-gray-700"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 5a2 2 0 012-2h3.5l1.2 1.6a2 2 0 001.6.8H19a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 17a4 4 0 100-8 4 4 0 000 8z"
+                    />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-semibold text-gray-900 mb-3">
+                  Product Images
+                </h2>
+                <p className="text-gray-500 text-sm leading-relaxed">
+                  Upload product images by numeric image name (ID).
+                </p>
+              </div>
+            </div>
+          </Link>
+
           {/* Logout Card */}
           <button type="button" onClick={handleLogout} className="w-full text-left">
             <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 hover:border-teal-500 p-8 hover:shadow-lg transition-shadow cursor-pointer h-full">
