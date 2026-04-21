@@ -66,7 +66,19 @@ export function getOrderLineItems(res) {
             r.amount ??
             qty * unitPrice,
         ) || 0;
-      return { itemId, itemName, sku, image, qty, unitPrice, lineAmount };
+      const _syncStatus = r._syncStatus;
+      const _syncError = r._syncError;
+      return {
+        itemId,
+        itemName,
+        sku,
+        image,
+        qty,
+        unitPrice,
+        lineAmount,
+        ...(_syncStatus ? { _syncStatus } : {}),
+        ...(_syncError ? { _syncError } : {}),
+      };
     })
     .filter((it) => it.itemId && it.qty > 0);
 }

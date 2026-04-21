@@ -80,6 +80,27 @@ function inDateRange(rawDate, fromDate, toDate) {
   return true;
 }
 
+/** Attach offline sync flags from cached order line raw rows to normalized line items. */
+function mergeLineSyncFlags(lineItems, rawData) {
+  const rawItems = Array.isArray(rawData?.items) ? rawData.items : [];
+  if (!rawItems.length || !Array.isArray(lineItems)) return lineItems;
+  const keyOf = (it) => String(it.item_id ?? it.product_id ?? it.sku ?? "").trim();
+  const byRaw = new Map();
+  for (const x of rawItems) {
+    const k = keyOf(x);
+    if (k) byRaw.set(k, x);
+  }
+  return lineItems.map((li) => {
+    const raw = byRaw.get(String(li.itemId).trim());
+    if (!raw) return li;
+    return {
+      ...li,
+      ...(raw._syncStatus ? { _syncStatus: raw._syncStatus } : {}),
+      ...(raw._syncError ? { _syncError: raw._syncError } : {}),
+    };
+  });
+}
+
 /** Milliseconds for sorting — newest first. Handles API strings, cache, and offline_<timestamp> ids. */
 function orderRowSortTimeMs(row) {
   const r = row?._raw ?? {};
@@ -405,6 +426,7 @@ function ExistingOrdersContent() {
   const [syncMessage, setSyncMessage] = useState(null);
   const [syncRowLoading, setSyncRowLoading] = useState(null);
   const [syncRowError, setSyncRowError] = useState(null);
+  const [lineRetryLoading, setLineRetryLoading] = useState(null);
   const [customerSearchInput, setCustomerSearchInput] = useState("");
   const [orderNumberSearchInput, setOrderNumberSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -550,7 +572,14 @@ function ExistingOrdersContent() {
           setTimeout(() => setSyncMessage(null), 4000);
         }
       }
-      if (result?.failed > 0 && result?.synced === 0) {
+      if (result?.partial) {
+        setSyncMessage(
+          result?.message || "Some order lines could not sync (e.g. stock). Open View to retry.",
+        );
+        loadOrders();
+        setTimeout(() => setSyncMessage(null), 6000);
+      }
+      if (result?.failed > 0 && result?.synced === 0 && !result?.partial) {
         setSyncMessage(result?.error || "Some orders could not be synced.");
         setTimeout(() => setSyncMessage(null), 5000);
       }
@@ -573,18 +602,67 @@ function ExistingOrdersContent() {
     setSyncing(true);
     try {
       const res = await syncOneOfflineOrder(id);
+      await loadOrders();
       if (res?.synced > 0) {
         setSyncMessage("Order synced. SO number assigned.");
-        await loadOrders();
         setTimeout(() => setSyncMessage(null), 4000);
+      } else if (res?.partial) {
+        setSyncMessage(
+          res?.message || "Some lines could not sync (stock). Open View to retry or adjust.",
+        );
+        setTimeout(() => setSyncMessage(null), 6000);
       } else {
-        setSyncRowError("Could not sync this order. Try again.");
+        setSyncRowError(res?.message || "Could not sync this order. Try again.");
       }
     } finally {
       setSyncRowLoading(null);
       setSyncing(false);
     }
   }, [isOnline, loadOrders]);
+
+  const handleRetrySyncLines = useCallback(async () => {
+    const oid = viewOrder?.offlineId;
+    if (!oid || !isOnline) return;
+    setLineRetryLoading(oid);
+    setSyncRowError(null);
+    try {
+      const res = await syncOneOfflineOrder(oid);
+      await loadOrders();
+      if (res?.synced > 0) {
+        setSyncMessage("Order synced. SO number assigned.");
+        setViewOrder(null);
+        setTimeout(() => setSyncMessage(null), 4000);
+        return;
+      }
+      const cached = await getCachedOrderDetail(String(oid)).catch(() => null);
+      if (cached) {
+        let nextItems = getOrderLineItems({ success: true, data: cached });
+        const products = await getAllProductsSnapshot();
+        const online = typeof navigator !== "undefined" && navigator.onLine;
+        try {
+          nextItems = await enrichOrderLinesWithImages(nextItems, products, { hydrateFromApi: online });
+        } catch {
+          /* keep */
+        }
+        nextItems = mergeLineSyncFlags(nextItems, cached);
+        setViewOrder((prev) =>
+          prev
+            ? {
+                ...prev,
+                items: nextItems,
+                raw: cached,
+              }
+            : null,
+        );
+      }
+      if (res?.partial) {
+        setSyncMessage(res?.message || "Some lines still pending. Check stock below.");
+        setTimeout(() => setSyncMessage(null), 6000);
+      }
+    } finally {
+      setLineRetryLoading(null);
+    }
+  }, [viewOrder?.offlineId, isOnline, loadOrders]);
 
   const handleDuplicateOrder = useCallback(async (row) => {
     const orderId = row.id;
@@ -702,16 +780,20 @@ function ExistingOrdersContent() {
       } catch {
         /* keep raw line items */
       }
+      const rawData = sourceRes?.data ?? null;
+      items = mergeLineSyncFlags(Array.isArray(items) ? items : [], rawData);
       if (!items.length) {
         setViewError("No item details found for this order.");
       }
+      const oid = String(orderId);
       setViewOrder({
         orderId: row.orderId,
         date: row.orderDate,
         amount: row.amount,
         status: row.status,
         items: Array.isArray(items) ? items : [],
-        raw: sourceRes?.data ?? null,
+        raw: rawData,
+        offlineId: oid.startsWith("offline_") ? oid : null,
       });
     } catch (err) {
       setViewError(err instanceof Error ? err.message : "Failed to load order details.");
@@ -1310,6 +1392,16 @@ function ExistingOrdersContent() {
                 </button>
               </div>
               <div className="px-5 py-4 overflow-y-auto max-h-[calc(90vh-72px)]">
+                {viewOrder.offlineId &&
+                  (Array.isArray(viewOrder.items) ? viewOrder.items : []).some(
+                    (it) => it._syncStatus === "failed",
+                  ) && (
+                    <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-sm text-amber-900">
+                      <span className="font-medium">Some lines did not sync to the server.</span>{" "}
+                      When stock is available again, use{" "}
+                      <span className="font-medium">Retry sync</span> on each line or below.
+                    </div>
+                  )}
                 {(Array.isArray(viewOrder.items) ? viewOrder.items : []).length === 0 ? (
                   <p className="text-sm text-gray-500">No items found for this order.</p>
                 ) : (
@@ -1360,6 +1452,29 @@ function ExistingOrdersContent() {
                               </div>
                             </div>
                           </div>
+                          {it._syncStatus === "synced" && viewOrder.offlineId && (
+                            <div className="mt-2 text-xs font-medium text-emerald-700">
+                              Synced to server (draft)
+                            </div>
+                          )}
+                          {it._syncStatus === "failed" && viewOrder.offlineId && (
+                            <div className="mt-2 rounded-md bg-amber-50 border border-amber-200 px-2 py-2 text-xs text-amber-900">
+                              <div className="font-medium">
+                                Not synced — qty may already be consumed or stock unavailable.
+                              </div>
+                              {it._syncError ? (
+                                <div className="mt-1 text-amber-800/90">{String(it._syncError)}</div>
+                              ) : null}
+                              <button
+                                type="button"
+                                disabled={Boolean(lineRetryLoading) || !isOnline}
+                                onClick={() => handleRetrySyncLines()}
+                                className="mt-2 cursor-pointer inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {lineRetryLoading ? "Retrying…" : "Retry sync"}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

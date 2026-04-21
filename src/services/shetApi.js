@@ -249,6 +249,19 @@ export async function getSalesVisitHistory(customerId, partyCode) {
   return api.get(url);
 }
 
+// --- Sale Route API (Swagger: sale_route.php) ---
+function saleRouteUrl() {
+  return `${apiBase()}/models/sale_route.php`;
+}
+
+/**
+ * Get sale routes with customers – GET sale_route.php
+ * Response (observed): { success, message, data: [{ route_name, customers: [{ short_code, customer_name, postal_code }] }] }
+ */
+export async function getSaleRoutes() {
+  return api.get(saleRouteUrl());
+}
+
 /**
  * Upload product image – POST multipart/form-data to `models/image_upload.php` (Bearer JWT).
  * Fields: **name** (numeric PK_INV_ID, no extension), **image** (file). Response: `data.filename`, `data.url`.

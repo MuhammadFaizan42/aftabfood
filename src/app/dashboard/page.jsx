@@ -115,6 +115,36 @@ export default function Dashboard() {
             </div>
           </Link>
 
+          {/* Sale Route Card */}
+          <Link href="/sale-route">
+            <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 hover:border-teal-500 p-8 hover:shadow-lg transition-shadow cursor-pointer h-full">
+              <div className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                  <svg
+                    className="w-8 h-8 text-gray-700"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+                    />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-semibold text-gray-900 mb-3">
+                  Sale Route
+                </h2>
+                <p className="text-gray-500 text-sm leading-relaxed">
+                  View routes and customers; send visit or delivery notices via WhatsApp (when connected).
+                </p>
+              </div>
+            </div>
+          </Link>
+
           {/* Logout Card */}
           <button type="button" onClick={handleLogout} className="w-full text-left">
             <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 hover:border-teal-500 p-8 hover:shadow-lg transition-shadow cursor-pointer h-full">

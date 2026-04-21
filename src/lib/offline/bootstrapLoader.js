@@ -605,6 +605,69 @@ export async function updateOfflineOrderWithBackendTrnsId(offlineId, backendTrns
   row.STATUS = "Synced";
   row.order_status = "Synced";
   await putOne("existingOrders", row);
+
+  const detail = await getByKey("orderDetails", String(offlineId));
+  if (detail?.data && typeof detail.data === "object") {
+    const data = { ...detail.data };
+    delete data.sync_draft_trns_id;
+    if (Array.isArray(data.items)) {
+      data.items = data.items.map((it) => {
+        const c = { ...it };
+        delete c._syncStatus;
+        delete c._syncError;
+        return c;
+      });
+    }
+    await putOne("orderDetails", {
+      trns_id: String(offlineId),
+      data,
+      updatedAt: Date.now(),
+    });
+  }
+}
+
+/**
+ * Merge sync API line_results into offline order detail (IndexedDB).
+ * @param {string} uuid - offline_* order id
+ * @param {object} apiResult - one entry from POST /api/sales/sync-orders results[]
+ */
+export async function applyOfflineOrderSyncResult(uuid, apiResult) {
+  if (!uuid || !apiResult || !Array.isArray(apiResult.line_results)) return;
+  const row = await getByKey("orderDetails", String(uuid));
+  if (!row?.data || typeof row.data !== "object") return;
+
+  const data = { ...row.data };
+  const items = Array.isArray(data.items) ? data.items.map((x) => ({ ...x })) : [];
+  const keyOf = (it) =>
+    String(it.item_id ?? it.product_id ?? it.sku ?? it.itemIdForApi ?? "").trim();
+
+  for (const lr of apiResult.line_results) {
+    if (lr.skipped || lr.already_synced) continue;
+    const id = String(lr.item_id ?? "").trim();
+    if (!id) continue;
+    const it = items.find((x) => keyOf(x) === id);
+    if (!it) continue;
+    if (lr.success === true) {
+      it._syncStatus = "synced";
+      delete it._syncError;
+    } else {
+      it._syncStatus = "failed";
+      it._syncError = lr.message || "Could not sync line";
+    }
+  }
+
+  const draft = apiResult.draft_trns_id ?? apiResult.sync_draft_trns_id;
+  if (draft != null && draft !== "") {
+    data.sync_draft_trns_id = String(draft);
+  } else if (apiResult.submitted) {
+    delete data.sync_draft_trns_id;
+  }
+
+  await putOne("orderDetails", {
+    trns_id: String(uuid),
+    data,
+    updatedAt: Date.now(),
+  });
 }
 
 /**
@@ -634,6 +697,7 @@ export async function getOfflineOrdersForSync() {
       unit_price: Number(it.unit_price ?? it.unitPrice ?? 0) || 0,
       uom: it.uom ?? "",
       comments: it.comments ?? "",
+      ...(it._syncStatus ? { _syncStatus: it._syncStatus } : {}),
       ...(String(it.batch_no ?? "").trim() ? { batch_no: String(it.batch_no).trim() } : {}),
       ...(String(it.exp_date ?? it.expiry_date ?? "").trim()
         ? { exp_date: String(it.exp_date ?? it.expiry_date).trim() }
@@ -643,6 +707,7 @@ export async function getOfflineOrdersForSync() {
     out.push({
       uuid: order.id,
       customer_id,
+      sync_draft_trns_id: data?.sync_draft_trns_id || undefined,
       items,
       delivery_date: data?.delivery_date || undefined,
       pay_terms: data?.pay_terms || undefined,

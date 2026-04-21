@@ -74,7 +74,9 @@ function pickOrderMetaFromReviewData(d) {
     src.notes ??
     src.user_note ??
     "";
-  const remarks = String(rawRemarks ?? "").trim().slice(0, 150);
+  let remarks = String(rawRemarks ?? "").trim().slice(0, 150);
+  // Backend sometimes returns a default "DRAFT" note for draft orders; UI should start empty.
+  if (remarks.toUpperCase() === "DRAFT") remarks = "";
   const rawDel =
     src.delivery_date ??
     src.DELIVERY_DATE ??

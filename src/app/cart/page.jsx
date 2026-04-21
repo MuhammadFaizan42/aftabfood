@@ -30,6 +30,7 @@ import {
   pickImageFromOrderLine,
   resolveProductImageUrl,
 } from "@/lib/productImage";
+import { INSUFFICIENT_STOCK_INCREASE_MSG } from "@/lib/stockMessages";
 
 async function finalizeCartRows(rows, preloadedProducts = null, hydrateFromApi = true) {
   if (!rows?.length) return rows;
@@ -49,6 +50,17 @@ function formatPrice(val) {
   const n = Number(val);
   if (Number.isNaN(n)) return String(val);
   return `£${n.toFixed(2)}`;
+}
+
+/** Max orderable qty from catalog row; null = unknown (do not cap in UI). */
+function maxQtyFromCartRow(item) {
+  if (item == null) return null;
+  if (item.inStock === false) return 0;
+  const s = item.stock;
+  if (s == null || s === "") return null;
+  const n = Number(s);
+  if (Number.isNaN(n)) return null;
+  return Math.max(0, Math.floor(n));
 }
 
 function deriveUnitPriceFromSummaryLine(r) {
@@ -137,6 +149,10 @@ function mapOfflineCartToRows(cart, products = []) {
         if (raw) image = resolveProductImageUrl(raw) || DEFAULT_IMG;
       }
     }
+    const stockRaw = p ? (p.STOCK ?? p.QTY ?? p.stock) : null;
+    const stockNum = stockRaw != null && stockRaw !== "" ? Number(stockRaw) : NaN;
+    const stock = !Number.isNaN(stockNum) ? stockNum : undefined;
+    const inStock = stock !== undefined ? stock > 0 : undefined;
     return {
       id: it.item_id ?? it.product_id,
       itemIdForApi: it.item_id ?? it.product_id,
@@ -151,6 +167,7 @@ function mapOfflineCartToRows(cart, products = []) {
       price: Number(it.unit_price) || 0,
       lineTotal: lt,
       image,
+      ...(stock !== undefined ? { stock, inStock } : {}),
     };
   });
   return { rows, subtotal, tax: 0, discount: 0, grandTotal: subtotal };
@@ -488,6 +505,13 @@ export default function Cart() {
     if (isOfflineCart) {
       const item = cartItems.find((i) => i.id === id);
       if (!item) return;
+      if (increment > 0) {
+        const maxQ = maxQtyFromCartRow(item);
+        if (maxQ != null && item.quantity + increment > maxQ) {
+          setError(INSUFFICIENT_STOCK_INCREASE_MSG);
+          return;
+        }
+      }
       const newQty = Math.max(0, item.quantity + increment);
       setActionLoading(id);
       setError(null);
@@ -520,6 +544,13 @@ export default function Cart() {
     if (!trnsId) return;
     const item = cartItems.find((i) => i.id === id);
     if (!item) return;
+    if (increment > 0) {
+      const maxQ = maxQtyFromCartRow(item);
+      if (maxQ != null && item.quantity + increment > maxQ) {
+        setError(INSUFFICIENT_STOCK_INCREASE_MSG);
+        return;
+      }
+    }
     const candidate = (item.itemIdForApi ?? item.sku ?? item.id)?.toString?.() ?? "";
     const validId = candidate && candidate !== "—" ? candidate : String(item.id ?? "");
     if (!validId) return;
@@ -545,6 +576,11 @@ export default function Cart() {
     if (isNaN(num) || num < 0) return;
     const item = cartItems.find((i) => i.id === id);
     if (!item) return;
+    const maxQ = maxQtyFromCartRow(item);
+    if (maxQ != null && num > maxQ) {
+      setError(INSUFFICIENT_STOCK_INCREASE_MSG);
+      return;
+    }
     const newQty = num === 0 ? 0 : num;
     if (newQty === item.quantity) return;
     updateQuantity(id, newQty - item.quantity);
@@ -782,7 +818,10 @@ export default function Cart() {
       header: "Quantity",
       accessor: "quantity",
       width: "22%",
-      render: (row) => (
+      render: (row) => {
+        const maxQ = maxQtyFromCartRow(row);
+        const atStockCap = maxQ != null && row.quantity >= maxQ;
+        return (
         <div className="flex items-center justify-center gap-0.5 sm:gap-1">
           <button
             type="button"
@@ -797,6 +836,7 @@ export default function Cart() {
           <input
             type="number"
             min="0"
+            max={maxQ != null ? maxQ : undefined}
             value={row.quantity}
             onChange={(e) => handleQuantityChange(row.id, e.target.value)}
             disabled={isCachedOrderReadOnly}
@@ -805,7 +845,12 @@ export default function Cart() {
           <button
             type="button"
             onClick={() => updateQuantity(row.id, 1)}
-            disabled={actionLoading === row.id || isCachedOrderReadOnly}
+            disabled={
+              actionLoading === row.id ||
+              isCachedOrderReadOnly ||
+              atStockCap
+            }
+            title={atStockCap ? INSUFFICIENT_STOCK_INCREASE_MSG : "Increase quantity"}
             className="cursor-pointer w-7 h-7 sm:w-8 sm:h-8 rounded-md border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           >
             <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -813,7 +858,8 @@ export default function Cart() {
             </svg>
           </button>
         </div>
-      ),
+        );
+      },
     },
     {
       header: "Total",

@@ -11,6 +11,7 @@ import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getCachedProducts } from "@/lib/offline/bootstrapLoader";
 import { getDB } from "@/lib/idb";
 import { addToOfflineCart, removeFromOfflineCart, getOfflineCart, updateOfflineCartItem } from "@/lib/offline/offlineCart";
+import { INSUFFICIENT_STOCK_INCREASE_MSG } from "@/lib/stockMessages";
 
 const DEFAULT_PRODUCT_IMAGE = "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop";
 
@@ -655,11 +656,17 @@ function ProductsContent() {
     ],
   );
 
-  const handleQuantityChange = (productId, delta) => {
-    setProductQuantities((prev) => ({
-      ...prev,
-      [productId]: Math.max(0, (prev[productId] || 0) + delta),
-    }));
+  const handleQuantityChange = (product, delta) => {
+    const productId = product.id;
+    if (delta > 0 && !product.inStock) return;
+    const maxQ = product.inStock ? Math.max(0, Number(product.stock) || 0) : 0;
+    setProductQuantities((prev) => {
+      const cur = prev[productId] || 0;
+      let next = cur + delta;
+      if (next < 0) next = 0;
+      if (delta > 0 && product.inStock && maxQ > 0 && next > maxQ) next = maxQ;
+      return { ...prev, [productId]: next };
+    });
   };
 
   const handlePriceEdit = (productId, newPrice) => {
@@ -740,6 +747,15 @@ function ProductsContent() {
     const itemIdForApi = getItemIdForApi(product);
     const quantity = productQuantities[productId];
     if (quantity <= 0) return;
+    if (!product.inStock) {
+      setCartApiError("This product is out of stock.");
+      return;
+    }
+    const maxQ = Math.max(0, Number(product.stock) || 0);
+    if (maxQ > 0 && quantity > maxQ) {
+      setCartApiError(INSUFFICIENT_STOCK_INCREASE_MSG);
+      return;
+    }
     if (isOnline && !partyCode) return;
     setCartApiError(null);
     setCartApiLoadingId(productId);
@@ -809,6 +825,15 @@ function ProductsContent() {
     const quantity = productQuantities[productId];
     const trnsId = getCartTrnsId();
     if (quantity <= 0 && !trnsId && isOnline) return;
+    if (quantity > 0 && !product.inStock) {
+      setCartApiError("This product is out of stock. Reduce quantity to zero to remove.");
+      return;
+    }
+    const maxQ = Math.max(0, Number(product.stock) || 0);
+    if (quantity > 0 && maxQ > 0 && quantity > maxQ) {
+      setCartApiError(INSUFFICIENT_STOCK_INCREASE_MSG);
+      return;
+    }
     setCartApiError(null);
     setCartApiLoadingId(productId);
     try {
@@ -1215,6 +1240,8 @@ function ProductsContent() {
           >
           {filteredProducts.map((product) => {
             const quantity = productQuantities[product.id] || 0;
+            const maxStock = product.inStock ? Math.max(0, Number(product.stock) || 0) : 0;
+            const atStockCap = product.inStock && maxStock > 0 && quantity >= maxStock;
             const hasQuantity = quantity > 0;
             const isEditingPrice = editingPrice === product.id;
             const currentPrice = editablePrices[product.id] || Number(String(product.price ?? "").replace(/[^\d.-]/g, "") || 0).toFixed(2);
@@ -1255,7 +1282,8 @@ function ProductsContent() {
                   {/* Quantity Controls */}
                   <div className="flex items-center justify-between mb-3 bg-gray-50 rounded-lg p-2 mt-auto">
                     <button
-                      onClick={() => handleQuantityChange(product.id, -1)}
+                      type="button"
+                      onClick={() => handleQuantityChange(product, -1)}
                       className="cursor-pointer w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors text-lg"
                     >
                       −
@@ -1264,18 +1292,34 @@ function ProductsContent() {
                       type="number"
                       value={quantity}
                       onChange={(e) => {
-                        const value = parseInt(e.target.value) || 0;
+                        const value = parseInt(e.target.value, 10) || 0;
+                        const maxQ = product.inStock ? Math.max(0, Number(product.stock) || 0) : 0;
+                        if (product.inStock && maxQ > 0 && value > maxQ) {
+                          setCartApiError(INSUFFICIENT_STOCK_INCREASE_MSG);
+                        }
+                        const capped =
+                          product.inStock && maxQ > 0 ? Math.min(Math.max(0, value), maxQ) : Math.max(0, value);
                         setProductQuantities((prev) => ({
                           ...prev,
-                          [product.id]: Math.max(0, value),
+                          [product.id]: capped,
                         }));
                       }}
                       className="text-lg font-semibold text-gray-900 w-24 text-center bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
                       min="0"
+                      max={product.inStock && maxStock > 0 ? maxStock : undefined}
                     />
                     <button
-                      onClick={() => handleQuantityChange(product.id, 1)}
-                      className="cursor-pointer w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors text-lg"
+                      type="button"
+                      onClick={() => handleQuantityChange(product, 1)}
+                      disabled={!product.inStock || atStockCap}
+                      title={
+                        !product.inStock
+                          ? "Out of stock"
+                          : atStockCap
+                            ? INSUFFICIENT_STOCK_INCREASE_MSG
+                            : "Increase quantity"
+                      }
+                      className="cursor-pointer w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors text-lg disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       +
                     </button>
@@ -1285,16 +1329,31 @@ function ProductsContent() {
                   <div className="mb-2">
                     {hasQuantity ? (
                       <button
+                        type="button"
                         onClick={() => handleUpdateCart(product)}
-                        disabled={cartApiLoadingId === product.id}
-                        className="cursor-pointer w-full h-11 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors"
+                        disabled={
+                          cartApiLoadingId === product.id ||
+                          (quantity > 0 && !product.inStock)
+                        }
+                        title={
+                          quantity > 0 && !product.inStock
+                            ? "Reduce quantity to zero or remove — out of stock"
+                            : undefined
+                        }
+                        className="cursor-pointer w-full h-11 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
                       >
                         {cartApiLoadingId === product.id ? "Updating..." : "Update Cart"}
                       </button>
                     ) : (
                       <button
+                        type="button"
                         onClick={() => handleAddToCart(product)}
-                        disabled={quantity <= 0 || cartApiLoadingId === product.id}
+                        disabled={
+                          quantity <= 0 ||
+                          !product.inStock ||
+                          cartApiLoadingId === product.id
+                        }
+                        title={!product.inStock ? "Out of stock" : undefined}
                         className="cursor-pointer w-full h-11 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
                       >
                         {cartApiLoadingId === product.id ? "Adding..." : "Add to Cart"}
