@@ -55,6 +55,25 @@ export function getOrderLineItems(res) {
           itemId ??
           "—",
       ).trim();
+      const uom = String(
+        r.uom ??
+          r.UOM ??
+          r.unit ??
+          r.UNIT ??
+          r.uom_name ??
+          r.UOM_NAME ??
+          r.unit_name ??
+          r.UNIT_NAME ??
+          "",
+      ).trim();
+      const batch = String(
+        r.batch_no ??
+          r.BATCH_NO ??
+          r.batch ??
+          r.BATCH ??
+          r.batchNo ??
+          "",
+      ).trim();
       const qty = Number(r.qty ?? r.quantity ?? r.QTY ?? 0) || 0;
       const unitPrice = Number(r.unit_price ?? r.UNIT_PRICE ?? r.ITEM_RATE ?? r.price ?? 0) || 0;
       const lineAmount =
@@ -72,6 +91,8 @@ export function getOrderLineItems(res) {
         itemId,
         itemName,
         sku,
+        ...(uom ? { uom } : {}),
+        ...(batch ? { batch } : {}),
         image,
         qty,
         unitPrice,

@@ -15,6 +15,8 @@ import { getOrderLineItems } from "@/lib/orderLineItems";
 import { enrichOrderLinesWithImages } from "@/lib/productImage";
 import { setCartTrnsId, setSaleOrderPartyCode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
+import { buildOrderDetailPdfBlob } from "@/lib/orderDetailPdf";
+import { shareOrDownloadPdf } from "@/lib/productCatalogPdf";
 import {
   cacheExistingOrders,
   getCachedExistingOrders,
@@ -273,6 +275,41 @@ function formatCustomerAddress(c) {
   return joined || "—";
 }
 
+function safePdfNameSegment(val) {
+  return String(val || "order")
+    .trim()
+    .replace(/[^a-zA-Z0-9-_]/g, "_")
+    .replace(/_+/g, "_")
+    .slice(0, 48) || "order";
+}
+
+function Spinner({ size = 14, className = "" }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="3.5"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"
+      />
+    </svg>
+  );
+}
+
 async function resolveCustomerForShare(partyCode, isOnline) {
   if (!partyCode) return null;
   const pc = String(partyCode).trim();
@@ -430,6 +467,8 @@ function ExistingOrdersContent() {
   const [customerSearchInput, setCustomerSearchInput] = useState("");
   const [orderNumberSearchInput, setOrderNumberSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [pdfRowLoading, setPdfRowLoading] = useState(null);
+  const [pdfError, setPdfError] = useState(null);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -869,6 +908,158 @@ function ExistingOrdersContent() {
     )}&body=${encodeURIComponent(body)}`;
   }, [fetchOrderShareText]);
 
+  const handleShareOrderPdf = useCallback(async (row) => {
+    const orderId = row?.id;
+    if (!orderId) return;
+    setPdfError(null);
+    setPdfRowLoading(String(orderId));
+    try {
+      const online = Boolean(isOnline) && !String(orderId).startsWith("offline_");
+      let sourceRes = null;
+      try {
+        if (online) sourceRes = await getOrderReview(orderId);
+      } catch {
+        sourceRes = null;
+      }
+      if (!sourceRes) {
+        try {
+          if (online) sourceRes = await getOrderSummary(orderId);
+        } catch {
+          sourceRes = null;
+        }
+      }
+      if (!sourceRes) {
+        const cached = await getCachedOrderDetail(String(orderId)).catch(() => null);
+        if (cached) sourceRes = { success: true, data: cached };
+      }
+
+      if (!sourceRes) {
+        throw new Error("Order details not found. Open when online or ensure cache is available.");
+      }
+
+      const rawData = sourceRes?.data?.data ?? sourceRes?.data ?? null;
+      const rawCustomer = rawData?.customer ?? rawData?.customer_info ?? rawData?.party ?? {};
+      let customer = {
+        ...rawCustomer,
+        CUSTOMER_NAME:
+          rawCustomer.CUSTOMER_NAME ??
+          rawCustomer.customer_name ??
+          rawCustomer.name ??
+          rawData?.party_name ??
+          rawData?.customer_name ??
+          row.customerName,
+        SHORT_CODE:
+          rawCustomer.SHORT_CODE ??
+          rawCustomer.party_code ??
+          rawCustomer.PARTY_CODE ??
+          rawCustomer.customer_id ??
+          row.partyCode,
+        ADRES:
+          rawCustomer.ADRES ??
+          rawCustomer.address ??
+          rawCustomer.ADDRESS ??
+          [
+            rawCustomer.ST,
+            rawCustomer.ADRES,
+            rawCustomer.DIVISION,
+            rawCustomer.PROVINCES,
+          ]
+            .filter(Boolean)
+            .join(", "),
+        CONT_PERSON: rawCustomer.CONT_PERSON ?? rawCustomer.contactPerson,
+        CONT_NUM: rawCustomer.CONT_NUM ?? rawCustomer.contactNum ?? rawCustomer.mobile,
+      };
+
+      const master = await resolveCustomerForShare(row.partyCode, isOnline);
+      const addr = String(customer.ADRES ?? "").trim();
+      const cont = String(customer.CONT_PERSON ?? "").trim();
+      const phone = String(customer.CONT_NUM ?? "").trim();
+      const code = String(customer.SHORT_CODE ?? "").trim();
+      customer = {
+        ...customer,
+        SHORT_CODE: code || String(row.partyCode ?? "") || master?.SHORT_CODE || master?.CUSTOMER_ID || "—",
+        ADRES: addr || formatCustomerAddress(master) || customer.ADRES || "—",
+        CONT_PERSON: cont || master?.CONT_PERSON || master?.CONT_PERSON_NAME || master?.contact_person || "—",
+        CONT_NUM: phone || master?.CONT_NUM || master?.MOBILE || master?.mobile || master?.PHONE || "—",
+        CUSTOMER_NAME: customer.CUSTOMER_NAME || master?.CUSTOMER_NAME || row.customerName || "—",
+      };
+
+      let lines = [];
+      try {
+        lines = getOrderLineItems(sourceRes);
+      } catch {
+        lines = [];
+      }
+      const products = await getAllProductsSnapshot().catch(() => []);
+      try {
+        lines = await enrichOrderLinesWithImages(lines, products, { hydrateFromApi: online });
+      } catch {
+        /* keep */
+      }
+
+      const items = (Array.isArray(lines) ? lines : []).map((it) => {
+        const qty = Number(it.qty ?? it.quantity ?? 0) || 0;
+        const up = Number(it.unitPrice ?? it.unit_price ?? it.price ?? 0) || 0;
+        const total = Number(it.lineAmount ?? it.line_total ?? it.total ?? qty * up) || 0;
+        return {
+          name: it.itemName ?? it.name ?? it.product_name ?? "—",
+          quantity: qty,
+          unitPrice: up,
+          total,
+          sku: String(it.sku ?? it.itemId ?? it.item_id ?? it.product_id ?? "").trim() || "—",
+          batch: String(it.batch ?? it.batch_no ?? it.BATCH_NO ?? "").trim() || "—",
+          uom: String(it.uom ?? it.UOM ?? "").trim() || "—",
+          image: String(it.image ?? it.image_url ?? it.IMAGE_URL ?? "").trim(),
+        };
+      });
+
+      const orderDateStr =
+        rawData?.order_date ??
+        rawData?.ORDER_DATE ??
+        rawData?.doc_date ??
+        rawData?.DOC_DATE ??
+        rawData?.dated ??
+        rawData?.DATED ??
+        rawData?.created_at ??
+        row.orderDate ??
+        "";
+
+      const subtotal =
+        Number(rawData?.subtotal ?? rawData?.sub_total ?? rawData?.SUBTOTAL ?? 0) ||
+        items.reduce((s, r) => s + (Number(r.total) || 0), 0);
+      const tax = Number(rawData?.tax ?? rawData?.TAX ?? 0) || 0;
+      const discount = Number(rawData?.discount ?? rawData?.DISCOUNT ?? 0) || 0;
+      const grandTotal =
+        Number(rawData?.grand_total ?? rawData?.total ?? rawData?.GRAND_TOTAL ?? 0) ||
+        subtotal + tax - discount;
+
+      const blob = await buildOrderDetailPdfBlob({
+        saleOrderLabel: row.orderId,
+        orderDate: String(orderDateStr),
+        customer,
+        orderRoot: rawData && typeof rawData === "object" ? rawData : {},
+        items,
+        subtotal,
+        tax,
+        discount,
+        grandTotal,
+        deliveryDate: rawData?.delivery_date ?? rawData?.DELIVERY_DATE ?? rawData?.DEL_DATE ?? "",
+        payTerms: rawData?.pay_terms ?? rawData?.PAY_TERMS ?? rawData?.payment_terms ?? "",
+        remarks: rawData?.rms ?? rawData?.RMS ?? rawData?.remarks ?? rawData?.REMARKS ?? rawData?.comments ?? rawData?.COMMENTS ?? "",
+      });
+
+      const safe = safePdfNameSegment(row.orderId);
+      const filename = `SalesOrder_${safe}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      const hint = `Sales order ${row.orderId} — PDF for ${customer?.CUSTOMER_NAME ?? "customer"}.`;
+      await shareOrDownloadPdf(blob, filename, hint);
+    } catch (e) {
+      console.error(e);
+      setPdfError(e instanceof Error ? e.message : "Could not create PDF.");
+    } finally {
+      setPdfRowLoading(null);
+    }
+  }, [isOnline]);
+
   const filteredOrders = useMemo(() => {
     const c = customerSearchInput.trim().toLowerCase();
     const o = orderNumberSearchInput.trim().toLowerCase();
@@ -942,6 +1133,7 @@ function ExistingOrdersContent() {
         const isDuplicating = duplicateLoading === row.id;
         const isViewing = viewLoading === row.id;
         const isDeleting = deleteLoading === row.id;
+        const isPdf = pdfRowLoading === row.id;
         const status = (row.status || "").toString().toLowerCase();
         const pendingOffline = isPendingOfflineLocalRow(row);
         const showDelete = status === "draft" || pendingOffline;
@@ -949,6 +1141,27 @@ function ExistingOrdersContent() {
         const syncBusy = syncRowLoading === row.id;
         return (
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={isPdf}
+              className="cursor-pointer flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 border border-emerald-200 rounded px-3 py-1.5 hover:bg-emerald-50 transition-colors disabled:opacity-60 disabled:cursor-wait"
+              onClick={() => handleShareOrderPdf(row)}
+              title="Build and share PDF (WhatsApp)"
+            >
+              {isPdf ? (
+                <>
+                  <Spinner size={12} className="text-emerald-700" />
+                  PDF...
+                </>
+              ) : (
+                <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  PDF
+                </>
+              )}
+            </button>
             <button
               type="button"
               disabled={isViewing}
@@ -1085,6 +1298,21 @@ function ExistingOrdersContent() {
       width: "1fr",
       render: (row) => (
         <div className="flex items-center space-x-2">
+          <button
+            className="cursor-pointer p-2 text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-wait"
+            title="Build and share PDF (WhatsApp)"
+            disabled={pdfRowLoading === row.id}
+            onClick={() => handleShareOrderPdf(row)}
+          >
+            {pdfRowLoading === row.id ? (
+              <Spinner size={18} className="text-emerald-700" />
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11v6m-3-3h6" />
+              </svg>
+            )}
+          </button>
           <button
             className="cursor-pointer p-2 text-[#25D366] hover:bg-green-50 rounded-lg transition-colors"
             title="Share via WhatsApp"
@@ -1349,6 +1577,12 @@ function ExistingOrdersContent() {
         {syncMessage && (
           <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-2 text-green-800 text-sm mb-4">
             {syncMessage}
+          </div>
+        )}
+        {pdfError && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm mb-6 flex items-center justify-between gap-2">
+            <span>{pdfError}</span>
+            <button type="button" onClick={() => setPdfError(null)} className="text-red-600 hover:text-red-900 font-medium">×</button>
           </div>
         )}
 

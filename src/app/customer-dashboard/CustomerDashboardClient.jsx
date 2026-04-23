@@ -15,7 +15,16 @@ import {
 import { setSaleOrderPartyCode, clearCartTrnsId, setCartTrnsId } from "@/lib/api";
 import { getOrderLineItems } from "@/lib/orderLineItems";
 import { enrichOrderLinesWithImages, DEFAULT_IMG } from "@/lib/productImage";
-import { cacheCustomerDashboard, getCachedCustomerDashboard, getCachedCustomers, cacheVisitHistory, getAllProductsSnapshot, getCachedVisitHistory } from "@/lib/offline/bootstrapLoader";
+import {
+  cacheCustomerDashboard,
+  getCachedCustomerDashboard,
+  getCachedCustomers,
+  cacheVisitHistory,
+  getAllProductsSnapshot,
+  getCachedVisitHistory,
+  cacheOrderDetail,
+  getCachedOrderDetail,
+} from "@/lib/offline/bootstrapLoader";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { saveVisit, NO_ORDER_REASONS, getVisitsByPartyCode, getReasonLabel } from "@/lib/visits";
 
@@ -171,21 +180,47 @@ function CustomerDashboardClient() {
 
   const handleViewOrder = React.useCallback(async (row) => {
     const orderId = row.id;
-    if (orderId == null || orderId === "") {
+    const raw = row?._raw ?? {};
+    const trnsIdForFetch =
+      raw.backend_trns_id ??
+      raw.BACKEND_TRNS_ID ??
+      raw.trns_id ??
+      raw.TRNS_ID ??
+      orderId;
+    if (trnsIdForFetch == null || trnsIdForFetch === "") {
       setViewError("This order has no transaction ID to view.");
       setViewOrder(null);
       return;
     }
-    setViewLoading(String(orderId));
+    setViewLoading(String(trnsIdForFetch));
     setViewError(null);
     try {
       let items = [];
+      let sourceRes = null;
       try {
-        const res = await getOrderReview(orderId);
-        items = getOrderLineItems(res);
+        sourceRes = await getOrderReview(trnsIdForFetch);
+        try {
+          await cacheOrderDetail(String(trnsIdForFetch), sourceRes?.data ?? sourceRes);
+        } catch {
+          /* ignore */
+        }
+        items = getOrderLineItems(sourceRes);
       } catch {
-        const res = await getOrderSummary(orderId);
-        items = getOrderLineItems(res);
+        try {
+          sourceRes = await getOrderSummary(trnsIdForFetch);
+          try {
+            await cacheOrderDetail(String(trnsIdForFetch), sourceRes?.data ?? sourceRes);
+          } catch {
+            /* ignore */
+          }
+          items = getOrderLineItems(sourceRes);
+        } catch {
+          const cached = await getCachedOrderDetail(String(trnsIdForFetch)).catch(() => null);
+          if (cached) {
+            sourceRes = { success: true, data: cached };
+            items = getOrderLineItems(sourceRes);
+          }
+        }
       }
       const products = await getAllProductsSnapshot();
       const online = typeof navigator !== "undefined" && navigator.onLine;
@@ -388,10 +423,14 @@ function CustomerDashboardClient() {
 
   const customer = data?.customer;
   const summary = data?.summary;
-  /** Recent Orders card: only `recent_orders` (not `recent_invoices`). */
-  const recentOrdersRaw = Array.isArray(data?.recent_orders)
+  /**
+   * Recent Orders card:
+   * Some customers come back with `recent_invoices` instead of `recent_orders` (or `recent_orders` is empty).
+   * Prefer `recent_orders` when present, else fall back to `recent_invoices`.
+   */
+  const recentOrdersRaw = Array.isArray(data?.recent_orders) && data.recent_orders.length
     ? data.recent_orders
-    : [];
+    : (Array.isArray(data?.recent_invoices) ? data.recent_invoices : []);
 
   const customerInfo = customer
     ? {
@@ -443,7 +482,19 @@ function CustomerDashboardClient() {
 
   const recentOrders = recentOrdersRaw.map((o) => {
     const trns =
-      o.TRNS_ID ?? o.trns_id ?? o.TRNSID ?? o.transaction_id ?? o.id ?? null;
+      o.backend_trns_id ??
+      o.BACKEND_TRNS_ID ??
+      o.ORDER_TRNS_ID ??
+      o.order_trns_id ??
+      o.SO_TRNS_ID ??
+      o.so_trns_id ??
+      o.TRNS_ID ??
+      o.trns_id ??
+      o.TRNSID ??
+      o.transaction_id ??
+      o.trns ??
+      o.id ??
+      null;
     const statusVal =
       o.STATUS_RAW ?? o.STATUS ?? o.status ?? o.order_status ?? "—";
     return {
