@@ -133,15 +133,102 @@ function CustomerDashboardClient() {
           setDuplicateLoading(null);
           return;
         }
-        let newTrnsId = null;
-        for (const it of items) {
-          const res = await addToCart(pc, it.itemId, it.qty, newTrnsId, {
-            unit_price: it.unitPrice,
-          });
-          newTrnsId = res?.data?.trns_id ?? res?.trns_id ?? newTrnsId;
+        // Best-effort duplicate: skip missing/inactive items and continue.
+        // Use cached product snapshot as a quick "is this SKU in our catalog?" check to avoid API errors.
+        const products = await getAllProductsSnapshot().catch(() => []);
+        const productKeys = new Set();
+        for (const p of Array.isArray(products) ? products : []) {
+          const raw = p && typeof p === "object" ? p : {};
+          const keys = [
+            raw.PRODUCT_ID,
+            raw.product_id,
+            raw.SKU,
+            raw.sku,
+            raw.CODE,
+            raw.code,
+            raw.ITEM_CODE,
+            raw.item_code,
+            raw.INV_ITEM_ID,
+            raw.inv_item_id,
+            raw.PK_INV_ID,
+            raw.pk_inv_id,
+            raw.PK_ID,
+            raw.pk_id,
+            raw.id,
+          ]
+            .filter((x) => x != null && x !== "")
+            .map((x) => String(x).trim());
+          for (const k of keys) productKeys.add(k);
         }
-        if (newTrnsId) setCartTrnsId(newTrnsId);
+
+        let newTrnsId = null;
+        let added = 0;
+        const skipped = [];
+
+        for (const it of items) {
+          const itemKey = String(it.itemId ?? "").trim();
+          const label = it.itemName ? `${it.itemName} (${itemKey || "—"})` : (itemKey || "—");
+          if (itemKey && productKeys.size > 0 && !productKeys.has(itemKey)) {
+            skipped.push({ itemId: itemKey, itemName: it.itemName || "" });
+            continue;
+          }
+          try {
+            const res = await addToCart(pc, itemKey || it.sku || "", it.qty, newTrnsId, {
+              unit_price: it.unitPrice,
+              ...(it.uom ? { uom: it.uom } : {}),
+              ...(it.batch ? { batch_no: it.batch } : {}),
+            });
+            // API sometimes responds with { success:false, message: ... } without throwing
+            if (res && typeof res === "object" && res.success === false) {
+              skipped.push({ itemId: itemKey, itemName: it.itemName || "", reason: res.message || "API rejected" });
+              continue;
+            }
+            newTrnsId = res?.data?.trns_id ?? res?.trns_id ?? newTrnsId;
+            added += 1;
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e || "");
+            skipped.push({ itemId: itemKey, itemName: it.itemName || "", reason: msg || `Failed to add ${label}` });
+            continue;
+          }
+        }
+
+        if (!newTrnsId) {
+          const skippedCount = skipped.length;
+          setDuplicateError(
+            skippedCount
+              ? `No items could be duplicated. Skipped ${skippedCount} inactive/missing item(s).`
+              : "No items could be duplicated (all add-to-cart requests failed).",
+          );
+          setDuplicateLoading(null);
+          return;
+        }
+
+        setCartTrnsId(newTrnsId);
         setSaleOrderPartyCode(pc);
+        const skipList = skipped
+          .map((s) => {
+            const id = String(s.itemId ?? "").trim();
+            const name = String(s.itemName ?? "").trim();
+            if (name && id) return `${name} (${id})`;
+            return name || id || "—";
+          })
+          .filter(Boolean);
+        const MAX_SHOW = 6;
+        const shown = skipList.slice(0, MAX_SHOW);
+        const more = skipList.length > MAX_SHOW ? skipList.length - MAX_SHOW : 0;
+        const summaryMsg = skipped.length
+          ? [
+              `Duplicated ${added} item(s). Skipped ${skipped.length} inactive/missing item(s).`,
+              `Skipped: ${shown.join(", ")}${more ? ` … +${more} more` : ""}`,
+            ].join("\n")
+          : `Duplicated ${added} item(s).`;
+        try {
+          if (typeof sessionStorage !== "undefined") {
+            sessionStorage.setItem("aftab_cart_flash", summaryMsg);
+          }
+        } catch {
+          /* ignore */
+        }
         setDuplicateLoading(null);
         router.push("/cart");
       } catch (err) {

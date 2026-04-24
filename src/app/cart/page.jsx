@@ -32,6 +32,15 @@ import {
 } from "@/lib/productImage";
 import { INSUFFICIENT_STOCK_INCREASE_MSG } from "@/lib/stockMessages";
 
+const QTY_STEP = 1;
+function round2(n) {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+function formatQty(n) {
+  const v = Number(n) || 0;
+  return v % 1 === 0 ? String(v.toFixed(0)) : String(round2(v));
+}
+
 async function finalizeCartRows(rows, preloadedProducts = null, hydrateFromApi = true) {
   if (!rows?.length) return rows;
   let products = preloadedProducts;
@@ -60,7 +69,7 @@ function maxQtyFromCartRow(item) {
   if (s == null || s === "") return null;
   const n = Number(s);
   if (Number.isNaN(n)) return null;
-  return Math.max(0, Math.floor(n));
+  return Math.max(0, n);
 }
 
 function deriveUnitPriceFromSummaryLine(r) {
@@ -220,8 +229,10 @@ export default function Cart() {
   const [grandTotal, setGrandTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [infoMessage, setInfoMessage] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
   const [priceDrafts, setPriceDrafts] = useState({});
+  const [qtyDrafts, setQtyDrafts] = useState({});
   const priceSaveTimersRef = useRef({});
   const partyCodeForBack = getSaleOrderPartyCode();
   const trnsIdForBack = getCartTrnsId();
@@ -231,6 +242,20 @@ export default function Cart() {
 
   useEffect(() => {
     setHasMounted(true);
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (typeof sessionStorage === "undefined") return;
+      const msg = sessionStorage.getItem("aftab_cart_flash");
+      if (msg && String(msg).trim()) {
+        setInfoMessage(String(msg));
+        sessionStorage.removeItem("aftab_cart_flash");
+        setTimeout(() => setInfoMessage(null), 20000);
+      }
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const loadSummary = useCallback(async () => {
@@ -512,7 +537,7 @@ export default function Cart() {
           return;
         }
       }
-      const newQty = Math.max(0, item.quantity + increment);
+      const newQty = Math.max(0, round2(item.quantity + increment));
       setActionLoading(id);
       setError(null);
       try {
@@ -554,7 +579,7 @@ export default function Cart() {
     const candidate = (item.itemIdForApi ?? item.sku ?? item.id)?.toString?.() ?? "";
     const validId = candidate && candidate !== "—" ? candidate : String(item.id ?? "");
     if (!validId) return;
-    const newQty = Math.max(0, item.quantity + increment);
+    const newQty = Math.max(0, round2(item.quantity + increment));
     setActionLoading(id);
     setError(null);
     try {
@@ -572,8 +597,10 @@ export default function Cart() {
   };
 
   const handleQuantityChange = (id, value) => {
-    const num = parseInt(value, 10);
-    if (isNaN(num) || num < 0) return;
+    const raw = value;
+    const parsed = raw === "" ? 0 : Number(raw);
+    const num = Number.isFinite(parsed) ? Math.max(0, round2(parsed)) : 0;
+    if (!Number.isFinite(num) || num < 0) return;
     const item = cartItems.find((i) => i.id === id);
     if (!item) return;
     const maxQ = maxQtyFromCartRow(item);
@@ -584,6 +611,49 @@ export default function Cart() {
     const newQty = num === 0 ? 0 : num;
     if (newQty === item.quantity) return;
     updateQuantity(id, newQty - item.quantity);
+  };
+
+  const handleQtyInputChange = (row, raw) => {
+    // Allow intermediate states like "", "0.", "." while typing.
+    const next = String(raw ?? "");
+    if (!/^\d*\.?\d*$/.test(next)) return;
+    setQtyDrafts((prev) => ({ ...prev, [row.id]: next }));
+    // Only commit when it's a stable number (not empty, not just ".", not ending with ".")
+    if (!next || next === "." || next.endsWith(".")) return;
+    const parsed = Number(next);
+    if (!Number.isFinite(parsed) || parsed < 0) return;
+    handleQuantityChange(row.id, String(round2(parsed)));
+  };
+
+  const commitQtyChange = async (row) => {
+    const draft = qtyDrafts[row.id];
+    if (draft == null) return;
+    const s = String(draft).trim();
+    if (!s || s === ".") {
+      setQtyDrafts((prev) => {
+        const next = { ...prev };
+        delete next[row.id];
+        return next;
+      });
+      return;
+    }
+    const parsed = Number(s);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setQtyDrafts((prev) => {
+        const next = { ...prev };
+        delete next[row.id];
+        return next;
+      });
+      return;
+    }
+    const rounded = round2(parsed);
+    // Ensure final value is committed (and stock-capped) even if user ended with "."
+    handleQuantityChange(row.id, String(rounded));
+    setQtyDrafts((prev) => {
+      const next = { ...prev };
+      delete next[row.id];
+      return next;
+    });
   };
 
   const applyPriceLocally = (id, nextPrice) => {
@@ -825,7 +895,7 @@ export default function Cart() {
         <div className="flex items-center justify-center gap-0.5 sm:gap-1">
           <button
             type="button"
-            onClick={() => updateQuantity(row.id, -1)}
+            onClick={() => updateQuantity(row.id, -QTY_STEP)}
             disabled={actionLoading === row.id || isCachedOrderReadOnly}
             className="cursor-pointer w-7 h-7 sm:w-8 sm:h-8 rounded-md border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           >
@@ -837,14 +907,26 @@ export default function Cart() {
             type="number"
             min="0"
             max={maxQ != null ? maxQ : undefined}
-            value={row.quantity}
-            onChange={(e) => handleQuantityChange(row.id, e.target.value)}
+            step="any"
+            inputMode="decimal"
+            value={qtyDrafts[row.id] ?? formatQty(row.quantity)}
+            onFocus={() =>
+              setQtyDrafts((prev) => ({
+                ...prev,
+                [row.id]: prev[row.id] ?? formatQty(row.quantity),
+              }))
+            }
+            onChange={(e) => handleQtyInputChange(row, e.target.value)}
+            onBlur={() => commitQtyChange(row)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
             disabled={isCachedOrderReadOnly}
             className="w-10 sm:w-14 h-7 sm:h-8 text-center text-xs sm:text-sm border border-gray-300 rounded-md bg-white text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 px-0.5"
           />
           <button
             type="button"
-            onClick={() => updateQuantity(row.id, 1)}
+            onClick={() => updateQuantity(row.id, QTY_STEP)}
             disabled={
               actionLoading === row.id ||
               isCachedOrderReadOnly ||
@@ -917,6 +999,20 @@ export default function Cart() {
           )}
         </div>
 
+        {infoMessage && (
+          <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-emerald-900 text-sm mb-4 flex items-start justify-between gap-2">
+            <span className="whitespace-pre-line">{infoMessage}</span>
+            <button
+              type="button"
+              onClick={() => setInfoMessage(null)}
+              className="text-emerald-700 hover:text-emerald-900 font-medium shrink-0"
+              aria-label="Dismiss message"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {error && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm mb-6">
             {error}
@@ -945,7 +1041,7 @@ export default function Cart() {
                 <h2 className="text-xl font-bold text-gray-900 mb-6">Payment Details</h2>
                 <div className="space-y-4 mb-6">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Subtotal ({totalItems} items)</span>
+                    <span className="text-gray-600">Subtotal (Qty {formatQty(totalItems)})</span>
                     <span className="font-medium text-gray-900">{formatPrice(subtotal)}</span>
                   </div>
                   {/* <div className="flex items-center justify-between text-sm">

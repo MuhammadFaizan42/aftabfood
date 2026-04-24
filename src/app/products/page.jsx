@@ -23,6 +23,24 @@ function maxColsForWidth(width) {
   return 6;
 }
 
+const QTY_BUTTON_STEP = 1;
+function round2(n) {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+function formatQty(n) {
+  const v = Number(n) || 0;
+  // show up to 2 decimals, but trim trailing zeros
+  return v % 1 === 0 ? String(v.toFixed(0)) : String(round2(v));
+}
+
+function isProductInStock(p) {
+  if (!p) return false;
+  if (typeof p.inStock === "boolean") return p.inStock;
+  const n = Number(p.stock ?? NaN);
+  if (!Number.isNaN(n)) return n > 0;
+  return false;
+}
+
 /** Normalize API batch list: arrays, PHP object-maps, JSON strings, or comma-separated BATCH_NOS. */
 function coerceProductBatchTokens(val) {
   if (val == null) return [];
@@ -337,6 +355,8 @@ function ProductsContent() {
   const [catalogPdfError, setCatalogPdfError] = useState(null);
   /** PDF catalog: include unit prices (uses on-screen / edited prices) vs omit for sharing. */
   const [catalogPdfIncludePrice, setCatalogPdfIncludePrice] = useState(false);
+  /** Product list + PDF scope: show only stock-available products */
+  const [inStockOnly, setInStockOnly] = useState(false);
   const [partyCode, setPartyCode] = useState(null);
   const [expandedProducts, setExpandedProducts] = useState({});
 
@@ -557,8 +577,11 @@ function ProductsContent() {
           String(p.sku ?? "").toLowerCase().includes(s),
       );
     }
+    if (inStockOnly) {
+      list = list.filter((p) => isProductInStock(p));
+    }
     return list;
-  }, [products, activeCategory, searchQuery]);
+  }, [products, activeCategory, searchQuery, inStockOnly]);
 
   const catalogPriceLabelForProduct = useCallback(
     (p) => {
@@ -580,12 +603,14 @@ function ProductsContent() {
         let title;
         const subtitleParts = [`Party: ${partyCode ?? "—"}`];
         if (catalogPdfIncludePrice) subtitleParts.push("Prices shown on list");
+        subtitleParts.push(inStockOnly ? "In-stock only" : "All products");
 
         if (mode === "full") {
           const raw = isOnline
             ? await fetchProductsPaginatedOnline({})
             : await getCachedProducts({});
           list = raw.map(mapApiProduct);
+          if (inStockOnly) list = list.filter((p) => isProductInStock(p));
           title = "Majestic — Full catalog (all categories)";
           if (!isOnline) subtitleParts.push("Offline: cached catalog");
         } else {
@@ -634,7 +659,8 @@ function ProductsContent() {
               ? "current"
               : activeCategory.replace(/[^a-zA-Z0-9-_]/g, "_").slice(0, 24);
         const priceTag = catalogPdfIncludePrice ? "with_price" : "no_price";
-        const filename = `Majestic_${safeParty}_${scope}_${priceTag}_${new Date().toISOString().slice(0, 10)}.pdf`;
+        const stockTag = inStockOnly ? "in_stock" : "all_stock";
+        const filename = `Majestic_${safeParty}_${scope}_${priceTag}_${stockTag}_${new Date().toISOString().slice(0, 10)}.pdf`;
 
         const hint = `Product catalog${catalogPdfIncludePrice ? " with prices" : ""} (${catalogItems.length} items). PDF: ${filename}.`;
         await shareOrDownloadPdf(blob, filename, hint);
@@ -653,6 +679,7 @@ function ProductsContent() {
       searchQuery,
       catalogPdfIncludePrice,
       catalogPriceLabelForProduct,
+      inStockOnly,
     ],
   );
 
@@ -665,7 +692,7 @@ function ProductsContent() {
       let next = cur + delta;
       if (next < 0) next = 0;
       if (delta > 0 && product.inStock && maxQ > 0 && next > maxQ) next = maxQ;
-      return { ...prev, [productId]: next };
+      return { ...prev, [productId]: round2(next) };
     });
   };
 
@@ -1106,6 +1133,33 @@ function ProductsContent() {
               <div
                 className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-700"
                 role="group"
+                aria-label="Stock filter"
+              >
+                <span className="font-medium text-gray-600 whitespace-nowrap">Show</span>
+                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="radio"
+                    name="stock_filter"
+                    className="text-blue-600 focus:ring-blue-500"
+                    checked={!inStockOnly}
+                    onChange={() => setInStockOnly(false)}
+                  />
+                  <span>All products</span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="radio"
+                    name="stock_filter"
+                    className="text-blue-600 focus:ring-blue-500"
+                    checked={inStockOnly}
+                    onChange={() => setInStockOnly(true)}
+                  />
+                  <span>In-stock only</span>
+                </label>
+              </div>
+              <div
+                className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-700"
+                role="group"
                 aria-label="Catalog PDF price option"
               >
                 <span className="font-medium text-gray-600 whitespace-nowrap">Catalog PDF</span>
@@ -1283,16 +1337,20 @@ function ProductsContent() {
                   <div className="flex items-center justify-between mb-3 bg-gray-50 rounded-lg p-2 mt-auto">
                     <button
                       type="button"
-                      onClick={() => handleQuantityChange(product, -1)}
+                      onClick={() => handleQuantityChange(product, -QTY_BUTTON_STEP)}
                       className="cursor-pointer w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors text-lg"
                     >
                       −
                     </button>
                     <input
                       type="number"
-                      value={quantity}
+                      inputMode="decimal"
+                      step="any"
+                      value={formatQty(quantity)}
                       onChange={(e) => {
-                        const value = parseInt(e.target.value, 10) || 0;
+                        const raw = e.target.value;
+                        const parsed = raw === "" ? 0 : Number(raw);
+                        const value = Number.isFinite(parsed) ? Math.max(0, round2(parsed)) : 0;
                         const maxQ = product.inStock ? Math.max(0, Number(product.stock) || 0) : 0;
                         if (product.inStock && maxQ > 0 && value > maxQ) {
                           setCartApiError(INSUFFICIENT_STOCK_INCREASE_MSG);
@@ -1301,7 +1359,7 @@ function ProductsContent() {
                           product.inStock && maxQ > 0 ? Math.min(Math.max(0, value), maxQ) : Math.max(0, value);
                         setProductQuantities((prev) => ({
                           ...prev,
-                          [product.id]: capped,
+                          [product.id]: round2(capped),
                         }));
                       }}
                       className="text-lg font-semibold text-gray-900 w-24 text-center bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
@@ -1310,7 +1368,7 @@ function ProductsContent() {
                     />
                     <button
                       type="button"
-                      onClick={() => handleQuantityChange(product, 1)}
+                      onClick={() => handleQuantityChange(product, QTY_BUTTON_STEP)}
                       disabled={!product.inStock || atStockCap}
                       title={
                         !product.inStock
@@ -1525,7 +1583,7 @@ function ProductsContent() {
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
         </svg>
-        Checkout {!isCartEmpty && `(${getTotalCartItems()})`}
+        Checkout {!isCartEmpty && `(${formatQty(getTotalCartItems())})`}
       </button>
     </div>
   );
