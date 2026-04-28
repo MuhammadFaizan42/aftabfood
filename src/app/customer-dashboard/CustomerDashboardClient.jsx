@@ -53,6 +53,37 @@ function formatPrice(val) {
   })}`;
 }
 
+function normalizeExpiryToYmd(val) {
+  if (val == null) return "";
+  const raw = String(val).trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const m1 = raw.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+  if (m1) {
+    const [, dd, mm, yyyy] = m1;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  const m2 = raw.match(/^(\d{2})-([A-Za-z]{3})-(\d{2}|\d{4})$/);
+  if (m2) {
+    const [, dd, mon, yy] = m2;
+    const monthMap = {
+      JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06",
+      JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12",
+    };
+    const mm = monthMap[String(mon).toUpperCase()] || "01";
+    const yyyy = String(yy).length === 2 ? `20${yy}` : String(yy);
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    const yyyy = parsed.getFullYear();
+    const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+    const dd = String(parsed.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return raw; // fallback: send original
+}
+
 /** Align with existing-orders: which statuses may open /cart for editing. */
 function recentOrderCanEdit(statusDisplay, raw = {}) {
   const s = String(statusDisplay || "").trim().toLowerCase();
@@ -173,10 +204,13 @@ function CustomerDashboardClient() {
             continue;
           }
           try {
+            const batchNo = String(it.batch_no ?? it.batch ?? "").trim();
+            const expDate = normalizeExpiryToYmd(it.exp_date ?? it.expiry_date ?? "");
             const res = await addToCart(pc, itemKey || it.sku || "", it.qty, newTrnsId, {
               unit_price: it.unitPrice,
               ...(it.uom ? { uom: it.uom } : {}),
-              ...(it.batch ? { batch_no: it.batch } : {}),
+              ...(batchNo ? { batch_no: batchNo } : {}),
+              ...(expDate ? { exp_date: expDate } : {}),
             });
             // API sometimes responds with { success:false, message: ... } without throwing
             if (res && typeof res === "object" && res.success === false) {
@@ -1359,12 +1393,12 @@ function CustomerDashboardClient() {
                     const viewBusy =
                       viewLoading != null &&
                       String(viewLoading) === String(row.id);
-                    const disabled = !row.id;
+                    const hasTrnsId = row.id != null && String(row.id).trim() !== "";
                     return (
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
-                          disabled={disabled || viewBusy}
+                          disabled={viewBusy}
                           onClick={() => handleViewOrder(row)}
                           className="cursor-pointer inline-flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900 border border-blue-200 rounded px-3 py-1.5 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -1392,7 +1426,7 @@ function CustomerDashboardClient() {
                         {row.canEdit && (
                           <button
                             type="button"
-                            disabled={disabled}
+                            disabled={!hasTrnsId}
                             onClick={() => handleEditOrder(row)}
                             title="Edit order in cart"
                             className="cursor-pointer inline-flex items-center gap-1 text-xs text-amber-800 hover:text-amber-950 border border-amber-300 rounded px-3 py-1.5 hover:bg-amber-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1416,8 +1450,9 @@ function CustomerDashboardClient() {
                         )}
                         <button
                           type="button"
-                          disabled={disabled || duplicateBusy}
+                          disabled={!hasTrnsId || duplicateBusy}
                           onClick={() => handleDuplicateOrder(row)}
+                          title={!hasTrnsId ? "Missing transaction id (cannot duplicate)" : "Duplicate"}
                           className="cursor-pointer inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <svg

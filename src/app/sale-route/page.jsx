@@ -5,6 +5,29 @@ import Link from "next/link";
 import Header from "../../components/common/Header";
 import { getSaleRoutes } from "@/services/shetApi";
 
+const AVATAR_COLORS = [
+  { bg: "bg-blue-100", text: "text-blue-600" },
+  { bg: "bg-yellow-100", text: "text-yellow-600" },
+  { bg: "bg-green-100", text: "text-green-600" },
+  { bg: "bg-purple-100", text: "text-purple-600" },
+  { bg: "bg-pink-100", text: "text-pink-600" },
+  { bg: "bg-teal-100", text: "text-teal-600" },
+  { bg: "bg-indigo-100", text: "text-indigo-600" },
+  { bg: "bg-amber-100", text: "text-amber-600" },
+];
+
+function getInitials(name) {
+  if (!name || typeof name !== "string") return "??";
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+function formatCustomerLocation(c) {
+  const parts = [c.address, c.city, c.postalCode].filter((x) => String(x || "").trim());
+  return parts.length ? parts.join(", ") : "—";
+}
+
 function normalizeSaleRoutes(res) {
   const raw = res?.data?.data ?? res?.data ?? [];
   const arr = Array.isArray(raw) ? raw : [];
@@ -17,11 +40,17 @@ function normalizeSaleRoutes(res) {
         const code = String(c?.short_code ?? c?.party_code ?? c?.customer_id ?? "").trim();
         const name = String(c?.customer_name ?? c?.name ?? "—").trim();
         const postalCode = String(c?.postal_code ?? c?.post_code ?? "").trim();
+        const address = String(c?.address ?? c?.ADRES ?? c?.ADDRESS ?? "").trim();
+        const city = String(c?.city ?? c?.CITY ?? "").trim();
+        const phone = String(c?.phone ?? c?.CONT_NUM ?? c?.mobile ?? "").trim();
         return {
           id: code || `${idx}-${cIdx}`,
           code: code || "—",
           name: name || "—",
           postalCode,
+          address,
+          city,
+          phone,
         };
       })
       .filter((c) => c.code !== "—" || c.name !== "—");
@@ -226,22 +255,78 @@ export default function SaleRoutePage() {
                       {route.customers.length === 0 ? (
                         <p className="text-sm text-gray-500">No customers found.</p>
                       ) : (
-                        <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white overflow-hidden">
-                          {route.customers.map((c) => (
-                            <li
-                              key={c.id}
-                              className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm"
-                            >
-                              <div className="min-w-0">
-                                <span className="font-medium text-gray-900">{c.name}</span>
-                                <span className="text-gray-500"> · {c.code}</span>
-                                {c.postalCode ? (
-                                  <span className="text-gray-400"> · {c.postalCode}</span>
-                                ) : null}
+                        <div className="space-y-3">
+                          {route.customers.map((c, i) => {
+                            const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
+                            const loc = formatCustomerLocation(c);
+                            const mapsQuery = loc !== "—" ? loc : [c.name, c.code].filter(Boolean).join(" ");
+                            return (
+                              <div
+                                key={c.id}
+                                className="bg-white border border-gray-200 hover:border-blue-500 rounded-xl p-4 sm:p-5 hover:shadow-md transition-shadow"
+                              >
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                  <div className="flex items-center space-x-4 min-w-0">
+                                    <div
+                                      className={`w-11 h-11 ${color.bg} rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden`}
+                                    >
+                                      <span className={`text-base font-semibold ${color.text}`}>
+                                        {getInitials(c.name)}
+                                      </span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">
+                                        {c.name}
+                                      </h3>
+                                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+                                        <span className="text-gray-500 font-medium">#{c.code}</span>
+                                        {loc && (
+                                          <span className="flex items-center gap-1.5 min-w-0">
+                                            <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            </svg>
+                                            {loc !== "—" ? (
+                                              <a
+                                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-gray-600 hover:text-blue-600 hover:underline cursor-pointer truncate"
+                                                title="Open in Google Maps"
+                                              >
+                                                {loc}
+                                              </a>
+                                            ) : (
+                                              <span className="truncate">{loc}</span>
+                                            )}
+                                          </span>
+                                        )}
+                                        {c.phone ? (
+                                          <span className="flex items-center gap-1.5">
+                                            <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                            </svg>
+                                            {c.phone}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {c.code && c.code !== "—" ? (
+                                    <Link
+                                      href={`/customer-dashboard?party_code=${encodeURIComponent(c.code)}`}
+                                      className="w-full sm:w-auto"
+                                    >
+                                      <button className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2 rounded-lg transition-colors w-full">
+                                        Open
+                                      </button>
+                                    </Link>
+                                  ) : null}
+                                </div>
                               </div>
-                            </li>
-                          ))}
-                        </ul>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   )}

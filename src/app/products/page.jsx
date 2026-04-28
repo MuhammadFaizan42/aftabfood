@@ -41,6 +41,28 @@ function isProductInStock(p) {
   return false;
 }
 
+function productHasBatchOptions(product) {
+  if (!product) return false;
+  const hasExpiry =
+    Array.isArray(product.batchExpiryList) && product.batchExpiryList.length > 0;
+  const hasBatchNos =
+    Array.isArray(product.batchNumbers) && product.batchNumbers.length > 0;
+  const def = String(product.defaultBatch ?? "").trim();
+  const hasDefault = Boolean(def) && def.toLowerCase() !== "no batch";
+  // If the backend expects a batch, it may come as a single default batch (legacy) or as options.
+  return hasExpiry || hasBatchNos || hasDefault;
+}
+
+function batchIsSelected(batchNo) {
+  const b = String(batchNo ?? "").trim();
+  return Boolean(b) && b.toLowerCase() !== "no batch";
+}
+
+function batchIsMandatoryForProduct(product) {
+  // Requirement: if product has stock (in-stock), Batch No must be selected.
+  return Boolean(product?.inStock);
+}
+
 /** Normalize API batch list: arrays, PHP object-maps, JSON strings, or comma-separated BATCH_NOS. */
 function coerceProductBatchTokens(val) {
   if (val == null) return [];
@@ -764,7 +786,7 @@ function ProductsContent() {
       unit_price: parseUnitPrice(currentPriceStr, product.itemRate ?? 0),
       uom: selectedUnits[productId] ?? product.unitOfMeasure ?? "",
       comments: productComments[productId] ?? "",
-      batch_no,
+      batch_no: String(batch_no ?? "").trim(),
       exp_date,
     };
   };
@@ -787,6 +809,11 @@ function ProductsContent() {
     setCartApiError(null);
     setCartApiLoadingId(productId);
     const opts = getAddToCartPayload(product);
+    if (batchIsMandatoryForProduct(product) && !batchIsSelected(opts.batch_no)) {
+      setCartApiError("Batch No is required for this product. Please select a batch before adding to cart.");
+      setCartApiLoadingId(null);
+      return;
+    }
     const offlinePayload = {
       item_id: itemIdForApi,
       product_id: itemIdForApi,
@@ -870,6 +897,10 @@ function ProductsContent() {
           setCartItems((prev) => prev.filter((item) => item.id !== productId));
         } else {
           const opts = getAddToCartPayload(product);
+          if (batchIsMandatoryForProduct(product) && !batchIsSelected(opts.batch_no)) {
+            setCartApiError("Batch No is required for this product. Please select a batch before updating cart.");
+            return;
+          }
           const cart = await getOfflineCart();
           const key = String(itemIdForApi);
           const lineExists = cart.items.some(
@@ -916,6 +947,10 @@ function ProductsContent() {
         setCartItems((prev) => prev.filter((item) => item.id !== productId));
       } else if (quantity > 0) {
         const opts = getAddToCartPayload(product);
+        if (batchIsMandatoryForProduct(product) && !batchIsSelected(opts.batch_no)) {
+          setCartApiError("Batch No is required for this product. Please select a batch before updating cart.");
+          return;
+        }
         const res = await addToCart(partyCode, itemIdForApi, quantity, trnsId || undefined, opts);
         const newTrnsId = res?.data?.trns_id ?? res?.trns_id;
         if (newTrnsId) setCartTrnsId(newTrnsId);
@@ -944,6 +979,10 @@ function ProductsContent() {
             setCartItems((prev) => prev.filter((item) => item.id !== productId));
           } else {
             const opts = getAddToCartPayload(product);
+            if (batchIsMandatoryForProduct(product) && !batchIsSelected(opts.batch_no)) {
+              setCartApiError("Batch No is required for this product. Please select a batch before updating cart.");
+              return;
+            }
             const cart = await getOfflineCart();
             const key = String(itemIdForApi);
             const lineExists = cart.items.some(
@@ -1502,7 +1541,7 @@ function ProductsContent() {
                     {/* Batch No – BATCH_EXPIRY (batch + exp) or BATCH_NOS */}
                     <div className="mb-3">
                       <Dropdown
-                        label="Batch No"
+                        label={`Batch No${batchIsMandatoryForProduct(product) ? " *" : ""}`}
                         labelClassName="block text-sm font-medium text-gray-700 mb-1"
                         name={`batch-${product.id}`}
                         {...batchSelectModel(product, selectedBatches[product.id])}
@@ -1516,6 +1555,12 @@ function ProductsContent() {
                           )
                         }
                       />
+                      {batchIsMandatoryForProduct(product) &&
+                        !batchIsSelected(batchSelectModel(product, selectedBatches[product.id]).value) && (
+                        <p className="mt-1 text-[11px] text-red-600">
+                          Batch No is required to add this product.
+                        </p>
+                      )}
                     </div>
 
                     {/* Comments/Remarks – API me comments bhejte hain */}

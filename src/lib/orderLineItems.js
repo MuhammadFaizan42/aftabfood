@@ -74,6 +74,17 @@ export function getOrderLineItems(res) {
           r.batchNo ??
           "",
       ).trim();
+      const expDate = String(
+        r.exp_date ??
+          r.EXP_DATE ??
+          r.expiry_date ??
+          r.EXPIRY_DATE ??
+          r.exp_dt ??
+          r.EXP_DT ??
+          r.exp ??
+          r.EXP ??
+          "",
+      ).trim();
       const qty = Number(r.qty ?? r.quantity ?? r.QTY ?? 0) || 0;
       const unitPrice = Number(r.unit_price ?? r.UNIT_PRICE ?? r.ITEM_RATE ?? r.price ?? 0) || 0;
       const lineAmount =
@@ -92,7 +103,8 @@ export function getOrderLineItems(res) {
         itemName,
         sku,
         ...(uom ? { uom } : {}),
-        ...(batch ? { batch } : {}),
+        ...(batch ? { batch, batch_no: batch } : {}),
+        ...(expDate ? { exp_date: expDate } : {}),
         image,
         qty,
         unitPrice,
