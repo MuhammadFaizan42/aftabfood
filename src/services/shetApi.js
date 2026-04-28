@@ -138,9 +138,21 @@ export async function getOrderSummary(trnsId) {
   return api.get(url);
 }
 
+/** Order summary invoice (for customer dashboard Duplicate) – GET with trns_id */
+export async function getOrderSummaryInvoice(trnsId) {
+  const url = `${saleOrderBase()}?action=order_summary_invoice&trns_id=${encodeURIComponent(trnsId)}`;
+  return api.get(url);
+}
+
 /** Order review before submit – GET with trns_id */
 export async function getOrderReview(trnsId) {
   const url = `${saleOrderBase()}?action=order_review&trns_id=${encodeURIComponent(trnsId)}`;
+  return api.get(url);
+}
+
+/** Invoice review (for customer dashboard Recent Orders View) – GET with trns_id */
+export async function getInvoiceReview(trnsId) {
+  const url = `${saleOrderBase()}?action=invoice_review&trns_id=${encodeURIComponent(trnsId)}`;
   return api.get(url);
 }
 

@@ -9,12 +9,14 @@ import {
   createSalesVisit,
   getSalesVisitHistory,
   getOrderReview,
+  getInvoiceReview,
   getOrderSummary,
+  getOrderSummaryInvoice,
   addToCart,
 } from "@/services/shetApi";
 import { setSaleOrderPartyCode, clearCartTrnsId, setCartTrnsId } from "@/lib/api";
 import { getOrderLineItems } from "@/lib/orderLineItems";
-import { enrichOrderLinesWithImages, DEFAULT_IMG } from "@/lib/productImage";
+import { enrichOrderLinesWithImages, DEFAULT_IMG, resolveProductImageUrl } from "@/lib/productImage";
 import {
   cacheCustomerDashboard,
   getCachedCustomerDashboard,
@@ -53,15 +55,21 @@ function formatPrice(val) {
   })}`;
 }
 
-function normalizeExpiryToYmd(val) {
+function normalizeExpiryToDmy(val) {
   if (val == null) return "";
   const raw = String(val).trim();
   if (!raw) return "";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  // Already in DD-MM-YYYY
+  if (/^\d{2}-\d{2}-\d{4}$/.test(raw)) return raw;
+  // Convert YYYY-MM-DD → DD-MM-YYYY
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [yyyy, mm, dd] = raw.split("-");
+    return `${dd}-${mm}-${yyyy}`;
+  }
   const m1 = raw.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
   if (m1) {
     const [, dd, mm, yyyy] = m1;
-    return `${yyyy}-${mm}-${dd}`;
+    return `${dd}-${mm}-${yyyy}`;
   }
   const m2 = raw.match(/^(\d{2})-([A-Za-z]{3})-(\d{2}|\d{4})$/);
   if (m2) {
@@ -72,14 +80,14 @@ function normalizeExpiryToYmd(val) {
     };
     const mm = monthMap[String(mon).toUpperCase()] || "01";
     const yyyy = String(yy).length === 2 ? `20${yy}` : String(yy);
-    return `${yyyy}-${mm}-${dd}`;
+    return `${dd}-${mm}-${yyyy}`;
   }
   const parsed = new Date(raw);
   if (!Number.isNaN(parsed.getTime())) {
     const yyyy = parsed.getFullYear();
     const mm = String(parsed.getMonth() + 1).padStart(2, "0");
     const dd = String(parsed.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
+    return `${dd}-${mm}-${yyyy}`;
   }
   return raw; // fallback: send original
 }
@@ -156,7 +164,7 @@ function CustomerDashboardClient() {
           const res = await getOrderReview(orderId);
           items = getOrderLineItems(res);
         } catch {
-          const res = await getOrderSummary(orderId);
+          const res = await getOrderSummaryInvoice(orderId);
           items = getOrderLineItems(res);
         }
         if (!items.length) {
@@ -205,7 +213,7 @@ function CustomerDashboardClient() {
           }
           try {
             const batchNo = String(it.batch_no ?? it.batch ?? "").trim();
-            const expDate = normalizeExpiryToYmd(it.exp_date ?? it.expiry_date ?? "");
+            const expDate = normalizeExpiryToDmy(it.exp_date ?? it.expiry_date ?? "");
             const res = await addToCart(pc, itemKey || it.sku || "", it.qty, newTrnsId, {
               unit_price: it.unitPrice,
               ...(it.uom ? { uom: it.uom } : {}),
@@ -319,7 +327,7 @@ function CustomerDashboardClient() {
       let items = [];
       let sourceRes = null;
       try {
-        sourceRes = await getOrderReview(trnsIdForFetch);
+        sourceRes = await getInvoiceReview(trnsIdForFetch);
         try {
           await cacheOrderDetail(String(trnsIdForFetch), sourceRes?.data ?? sourceRes);
         } catch {
@@ -344,9 +352,10 @@ function CustomerDashboardClient() {
         }
       }
       const products = await getAllProductsSnapshot();
-      const online = typeof navigator !== "undefined" && navigator.onLine;
       try {
-        items = await enrichOrderLinesWithImages(items, products, { hydrateFromApi: online });
+        // Always attempt hydration (cached + live API) so images can resolve even when IDB cache is empty
+        // or `navigator.onLine` reports false positives on some devices.
+        items = await enrichOrderLinesWithImages(items, products, { hydrateFromApi: true });
       } catch {
         /* keep raw line items */
       }
@@ -1305,13 +1314,13 @@ function CustomerDashboardClient() {
           <div className="bg-white rounded-lg shadow-sm p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900">
-                Recent Orders
+                Recent Invoices
               </h2>
               <Link
                 href={partyCode ? `/existing-orders?party_code=${encodeURIComponent(partyCode)}${customerInfo.name && customerInfo.name !== "—" ? `&customer_name=${encodeURIComponent(customerInfo.name)}` : ""}` : "/existing-orders"}
                 className="text-sm text-blue-600 hover:text-blue-700 font-medium"
               >
-                View All
+                View All Sale Order
               </Link>
             </div>
             {duplicateError && (
@@ -1553,9 +1562,52 @@ function CustomerDashboardClient() {
 
         {/* Order View Modal */}
         {(viewOrder || viewError || viewLoading) && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-4xl bg-white rounded-xl shadow-xl border border-gray-200 max-h-[90vh] overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div
+            className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4"
+            role="dialog"
+            aria-modal="true"
+            style={{ paddingTop: "100px" }}
+            onMouseDown={(e) => {
+              // backdrop click closes (only if click starts on backdrop)
+              if (e.target === e.currentTarget) {
+                setViewOrder(null);
+                setViewError(null);
+                setViewLoading(null);
+              }
+            }}
+          >
+            <div
+              className="w-full max-w-4xl bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden"
+              style={{ maxHeight: "90vh", position: "relative" }}
+            >
+              {/* Hard close button: absolute so it cannot scroll out / be hidden */}
+              <button
+                type="button"
+                onClick={() => {
+                  setViewOrder(null);
+                  setViewError(null);
+                  setViewLoading(null);
+                }}
+                aria-label="Close view modal"
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  right: 10,
+                  zIndex: 50,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 8,
+                  border: "1px solid rgba(229, 231, 235, 1)",
+                  background: "white",
+                  color: "#111827",
+                  fontSize: 26,
+                  lineHeight: "38px",
+                  cursor: "pointer",
+                }}
+              >
+                ×
+              </button>
+              <div className="sticky top-0 z-10 bg-white flex items-center justify-between px-6 py-4 border-b border-gray-200">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">
                     Order Details
@@ -1566,21 +1618,10 @@ function CustomerDashboardClient() {
                     </p>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setViewOrder(null);
-                    setViewError(null);
-                    setViewLoading(null);
-                  }}
-                  className="text-gray-500 hover:text-gray-900 text-xl leading-none cursor-pointer"
-                  aria-label="Close view modal"
-                >
-                  ×
-                </button>
+                <div className="w-10 h-10" aria-hidden="true" />
               </div>
 
-              <div className="px-5 py-4 overflow-y-auto max-h-[calc(90vh-72px)]">
+              <div className="px-5 py-4 overflow-y-auto" style={{ maxHeight: "calc(90vh - 72px)" }}>
                 {viewLoading ? (
                   <div className="text-sm text-gray-500">Loading order details...</div>
                 ) : viewError ? (
@@ -1600,9 +1641,10 @@ function CustomerDashboardClient() {
                               <div className="flex items-center gap-3 min-w-0">
                               <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                                 <img
-                                  src={it.image || DEFAULT_IMG}
+                                  src={resolveProductImageUrl(it.image) || DEFAULT_IMG}
                                   alt={it.itemName || "Item"}
                                   className="w-full h-full object-cover"
+                                  loading="lazy"
                                   onError={(e) => {
                                     e.currentTarget.onerror = null;
                                     e.currentTarget.src = DEFAULT_IMG;

@@ -19,20 +19,29 @@ export function getOrderLineItems(res) {
   const arr = Array.isArray(rawItems) ? rawItems : [];
   return arr
     .map((r) => {
-      const itemId = String(
+      // Keep item id extraction aligned with cart/review mapping so cached image hydration can match reliably.
+      const rawItemId =
         r.item_id ??
-          r.product_id ??
-          r.PRODUCT_ID ??
-          r.ITEM_CODE ??
-          r.CODE ??
-          r.sku ??
-          r.SKU ??
-          r.INV_ITEM_ID ??
-          r.ITEM_ID ??
-          r.PK_ID ??
-          r.id ??
-          "",
-      ).trim();
+        r.product_id ??
+        r.PRODUCT_ID ??
+        r.ITEM_CODE ??
+        r.CODE ??
+        r.sku ??
+        r.SKU ??
+        r.PROD_ID ??
+        r.product_code ??
+        r.PART_NO ??
+        r.PK_INV_ID ??
+        r.id ??
+        r.product?.id ??
+        r.product?.product_id ??
+        r.product?.code ??
+        r.product?.PRODUCT_ID ??
+        r.INV_ITEM_ID ??
+        r.ITEM_ID ??
+        r.PK_ID ??
+        "";
+      const itemId = String(rawItemId).trim();
       const itemName = String(
         r.item_name ??
           r.product_name ??
@@ -52,6 +61,12 @@ export function getOrderLineItems(res) {
           r.ITEM_CODE ??
           r.CODE ??
           r.product_code ??
+          r.PROD_ID ??
+          r.PART_NO ??
+          r.PK_INV_ID ??
+          r.product?.PRODUCT_ID ??
+          r.product?.product_id ??
+          r.product?.code ??
           itemId ??
           "—",
       ).trim();
@@ -100,6 +115,8 @@ export function getOrderLineItems(res) {
       const _syncError = r._syncError;
       return {
         itemId,
+        // Used by image/stock enrichers to match against product cache keys.
+        itemIdForApi: itemId || null,
         itemName,
         sku,
         ...(uom ? { uom } : {}),
