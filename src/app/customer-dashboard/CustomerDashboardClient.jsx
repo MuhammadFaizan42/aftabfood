@@ -1367,30 +1367,6 @@ function CustomerDashboardClient() {
                   ),
                 },
                 {
-                  header: "Status",
-                  accessor: "status",
-                  width: "130px",
-                  render: (row) => {
-                    const s = String(row.status || "").trim();
-                    const upper = s.toUpperCase();
-                    const badgeClass =
-                      upper === "COMPLETED" || upper === "SUBMITTED"
-                        ? "text-green-700 bg-green-50"
-                        : upper === "DRAFT"
-                          ? "text-amber-700 bg-amber-50"
-                          : /fast/i.test(s)
-                            ? "text-blue-700 bg-blue-50"
-                            : "text-gray-600 bg-gray-100";
-                    return (
-                      <span
-                        className={`inline-flex items-center text-xs font-medium px-2.5 py-1 rounded ${badgeClass}`}
-                      >
-                        {row.status}
-                      </span>
-                    );
-                  },
-                },
-                {
                   header: "Action",
                   accessor: "action",
                   width: "300px",

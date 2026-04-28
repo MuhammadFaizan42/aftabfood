@@ -75,12 +75,13 @@ export default function ReceivableAmountClient() {
   const searchParams = useSearchParams();
   const partyCode = searchParams.get("party_code");
 
-  const [statusFilter, setStatusFilter] = useState("open-partial");
+  // Default to "All" so credits/JV (negative balances) are visible too.
+  const [statusFilter, setStatusFilter] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [appliedFrom, setAppliedFrom] = useState("");
   const [appliedTo, setAppliedTo] = useState("");
-  const [appliedStatus, setAppliedStatus] = useState("open-partial");
+  const [appliedStatus, setAppliedStatus] = useState("all");
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(!!partyCode);
@@ -346,10 +347,10 @@ export default function ReceivableAmountClient() {
   const handleResetFilters = () => {
     setFromDate("");
     setToDate("");
-    setStatusFilter("open-partial");
+    setStatusFilter("all");
     setAppliedFrom("");
     setAppliedTo("");
-    setAppliedStatus("open-partial");
+    setAppliedStatus("all");
   };
 
   if (!partyCode) {
@@ -592,30 +593,6 @@ export default function ReceivableAmountClient() {
                 <span className="text-gray-900 font-medium">
                   {row.invoiceNo}
                 </span>
-              ),
-            },
-            {
-              header: "Invoice Date",
-              accessor: "invoiceDate",
-              width: "130px",
-              render: (row) => (
-                <span className="text-gray-600">{row.invoiceDate}</span>
-              ),
-            },
-            {
-              header: "Due Date",
-              accessor: "dueDate",
-              width: "130px",
-              render: (row) => (
-                <span className="text-gray-600">{row.dueDate}</span>
-              ),
-            },
-            {
-              header: "Days Overdue",
-              accessor: "daysOverdue",
-              width: "120px",
-              render: (row) => (
-                <span className="text-gray-900">{row.daysOverdue}</span>
               ),
             },
             {

@@ -151,14 +151,6 @@ export default function TotalSalesInvoicesClient() {
                 {formatAmount(summary.total_sales_amount)}
               </p>
             </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">
-                Pending invoices (summary)
-              </p>
-              <p className="text-2xl font-bold text-gray-900">
-                {summary.total_pending_invoices ?? "—"}
-              </p>
-            </div>
           </div>
         )}
 
