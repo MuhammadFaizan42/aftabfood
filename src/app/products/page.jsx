@@ -378,7 +378,7 @@ function ProductsContent() {
   /** PDF catalog: include unit prices (uses on-screen / edited prices) vs omit for sharing. */
   const [catalogPdfIncludePrice, setCatalogPdfIncludePrice] = useState(false);
   /** Product list + PDF scope: show only stock-available products */
-  const [inStockOnly, setInStockOnly] = useState(false);
+  const [inStockOnly, setInStockOnly] = useState(true);
   const [partyCode, setPartyCode] = useState(null);
   const [expandedProducts, setExpandedProducts] = useState({});
 
