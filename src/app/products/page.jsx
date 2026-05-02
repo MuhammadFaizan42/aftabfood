@@ -182,6 +182,11 @@ function mapApiProduct(p) {
   const stockVal = p.STOCK ?? p.QTY ?? p.stock ?? 0;
   const stock = Number(stockVal) || 0;
 
+  const conRateNum = Number(p.CON_RATE ?? p.con_rate);
+  const conRate =
+    Number.isFinite(conRateNum) && conRateNum > 0 ? conRateNum : 0;
+  const conEqul = String(p.CON_EQUL ?? p.CON_EQ ?? "").trim();
+
   // Prefer IMAGE_URL from API, then other possible image fields
   const img =
     p.IMAGE_URL ??
@@ -215,6 +220,8 @@ function mapApiProduct(p) {
     inStock: stock > 0,
     category,
     stock,
+    conRate,
+    conEqul,
     _raw: p,
   };
 }
@@ -231,6 +238,43 @@ function uomSelectModel(product, selectedForProduct) {
   const raw = selectedForProduct ?? base;
   const value = opts.some((o) => o.value === raw) ? raw : base;
   return { options: opts, value };
+}
+
+function normalizeUomKey(s) {
+  return String(s ?? "").trim().toLowerCase();
+}
+
+/**
+ * API `STOCK` is in primary UOM (`unitOfMeasure` / UOM). When the user selects the
+ * alternate UOM (`CON_EQUL` or 2nd entry in `UOM_OPTIONS`), show STOCK × CON_RATE.
+ */
+function getDisplayStockForUom(product, selectedUom) {
+  const base = Math.max(0, Number(product.stock) || 0);
+  const primary = normalizeUomKey(product.unitOfMeasure);
+  const rate = Number(product.conRate);
+  const validRate = Number.isFinite(rate) && rate > 0 ? rate : 0;
+
+  const uomModel = uomSelectModel(product, selectedUom);
+  const sel = normalizeUomKey(uomModel.value);
+
+  if (!validRate) return round2(base);
+  if (sel === primary || sel === "") return round2(base);
+
+  const secondaryLabel = String(product.conEqul ?? "").trim();
+  if (secondaryLabel && sel === normalizeUomKey(secondaryLabel)) {
+    return round2(base * validRate);
+  }
+
+  const opts = Array.isArray(product.uomOptions) ? product.uomOptions : [];
+  if (opts.length >= 2) {
+    const first = normalizeUomKey(opts[0]);
+    const secondOpt = normalizeUomKey(opts[1]);
+    if (sel === secondOpt && sel !== first) {
+      return round2(base * validRate);
+    }
+  }
+
+  return round2(base);
 }
 
 /** Composite value for expiry rows: "batch_no|exp_date" (exp may be empty). */
@@ -377,8 +421,8 @@ function ProductsContent() {
   const [catalogPdfError, setCatalogPdfError] = useState(null);
   /** PDF catalog: include unit prices (uses on-screen / edited prices) vs omit for sharing. */
   const [catalogPdfIncludePrice, setCatalogPdfIncludePrice] = useState(false);
-  /** Product list + PDF scope: show only stock-available products */
-  const [inStockOnly, setInStockOnly] = useState(true);
+  /** Product list + PDF scope: all | in-stock | out-of-stock */
+  const [stockFilter, setStockFilter] = useState("inStock");
   const [partyCode, setPartyCode] = useState(null);
   const [expandedProducts, setExpandedProducts] = useState({});
 
@@ -578,6 +622,24 @@ function ProductsContent() {
     setProductComments((prev) => ({ ...c, ...prev }));
   }, [products]);
 
+  /** When UOM changes, cap qty to the display stock limit (primary vs CON_RATE secondary). */
+  useEffect(() => {
+    setProductQuantities((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const p of products) {
+        if (!p.inStock) continue;
+        const maxD = getDisplayStockForUom(p, selectedUnits[p.id]);
+        const q = prev[p.id] ?? 0;
+        if (maxD > 0 && q > maxD) {
+          next[p.id] = round2(maxD);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [selectedUnits, products]);
+
   const maxColsForScreen = maxColsForWidth(windowWidth);
   const effectiveGridCols = Math.min(Math.max(1, gridColsPreference), maxColsForScreen);
 
@@ -599,11 +661,13 @@ function ProductsContent() {
           String(p.sku ?? "").toLowerCase().includes(s),
       );
     }
-    if (inStockOnly) {
+    if (stockFilter === "inStock") {
       list = list.filter((p) => isProductInStock(p));
+    } else if (stockFilter === "outOfStock") {
+      list = list.filter((p) => !isProductInStock(p));
     }
     return list;
-  }, [products, activeCategory, searchQuery, inStockOnly]);
+  }, [products, activeCategory, searchQuery, stockFilter]);
 
   const catalogPriceLabelForProduct = useCallback(
     (p) => {
@@ -625,14 +689,17 @@ function ProductsContent() {
         let title;
         const subtitleParts = [`Party: ${partyCode ?? "—"}`];
         if (catalogPdfIncludePrice) subtitleParts.push("Prices shown on list");
-        subtitleParts.push(inStockOnly ? "In-stock only" : "All products");
+        if (stockFilter === "inStock") subtitleParts.push("In-stock only");
+        else if (stockFilter === "outOfStock") subtitleParts.push("Out of stock only");
+        else subtitleParts.push("All products");
 
         if (mode === "full") {
           const raw = isOnline
             ? await fetchProductsPaginatedOnline({})
             : await getCachedProducts({});
           list = raw.map(mapApiProduct);
-          if (inStockOnly) list = list.filter((p) => isProductInStock(p));
+          if (stockFilter === "inStock") list = list.filter((p) => isProductInStock(p));
+          else if (stockFilter === "outOfStock") list = list.filter((p) => !isProductInStock(p));
           title = "Majestic — Full catalog (all categories)";
           if (!isOnline) subtitleParts.push("Offline: cached catalog");
         } else {
@@ -681,7 +748,12 @@ function ProductsContent() {
               ? "current"
               : activeCategory.replace(/[^a-zA-Z0-9-_]/g, "_").slice(0, 24);
         const priceTag = catalogPdfIncludePrice ? "with_price" : "no_price";
-        const stockTag = inStockOnly ? "in_stock" : "all_stock";
+        const stockTag =
+          stockFilter === "inStock"
+            ? "in_stock"
+            : stockFilter === "outOfStock"
+              ? "out_of_stock"
+              : "all_stock";
         const filename = `Majestic_${safeParty}_${scope}_${priceTag}_${stockTag}_${new Date().toISOString().slice(0, 10)}.pdf`;
 
         const hint = `Product catalog${catalogPdfIncludePrice ? " with prices" : ""} (${catalogItems.length} items). PDF: ${filename}.`;
@@ -701,14 +773,16 @@ function ProductsContent() {
       searchQuery,
       catalogPdfIncludePrice,
       catalogPriceLabelForProduct,
-      inStockOnly,
+      stockFilter,
     ],
   );
 
   const handleQuantityChange = (product, delta) => {
     const productId = product.id;
     if (delta > 0 && !product.inStock) return;
-    const maxQ = product.inStock ? Math.max(0, Number(product.stock) || 0) : 0;
+    const maxQ = product.inStock
+      ? Math.max(0, getDisplayStockForUom(product, selectedUnits[productId]))
+      : 0;
     setProductQuantities((prev) => {
       const cur = prev[productId] || 0;
       let next = cur + delta;
@@ -800,7 +874,10 @@ function ProductsContent() {
       setCartApiError("This product is out of stock.");
       return;
     }
-    const maxQ = Math.max(0, Number(product.stock) || 0);
+    const maxQ = Math.max(
+      0,
+      getDisplayStockForUom(product, selectedUnits[productId]),
+    );
     if (maxQ > 0 && quantity > maxQ) {
       setCartApiError(INSUFFICIENT_STOCK_INCREASE_MSG);
       return;
@@ -883,7 +960,10 @@ function ProductsContent() {
       setCartApiError("This product is out of stock. Reduce quantity to zero to remove.");
       return;
     }
-    const maxQ = Math.max(0, Number(product.stock) || 0);
+    const maxQ = Math.max(
+      0,
+      getDisplayStockForUom(product, selectedUnits[productId]),
+    );
     if (quantity > 0 && maxQ > 0 && quantity > maxQ) {
       setCartApiError(INSUFFICIENT_STOCK_INCREASE_MSG);
       return;
@@ -1180,8 +1260,8 @@ function ProductsContent() {
                     type="radio"
                     name="stock_filter"
                     className="text-blue-600 focus:ring-blue-500"
-                    checked={!inStockOnly}
-                    onChange={() => setInStockOnly(false)}
+                    checked={stockFilter === "all"}
+                    onChange={() => setStockFilter("all")}
                   />
                   <span>All products</span>
                 </label>
@@ -1190,10 +1270,20 @@ function ProductsContent() {
                     type="radio"
                     name="stock_filter"
                     className="text-blue-600 focus:ring-blue-500"
-                    checked={inStockOnly}
-                    onChange={() => setInStockOnly(true)}
+                    checked={stockFilter === "inStock"}
+                    onChange={() => setStockFilter("inStock")}
                   />
                   <span>In-stock only</span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="radio"
+                    name="stock_filter"
+                    className="text-blue-600 focus:ring-blue-500"
+                    checked={stockFilter === "outOfStock"}
+                    onChange={() => setStockFilter("outOfStock")}
+                  />
+                  <span>Out of stock</span>
                 </label>
               </div>
               <div
@@ -1333,7 +1423,16 @@ function ProductsContent() {
           >
           {filteredProducts.map((product) => {
             const quantity = productQuantities[product.id] || 0;
-            const maxStock = product.inStock ? Math.max(0, Number(product.stock) || 0) : 0;
+            const selectedUomResolved = uomSelectModel(
+              product,
+              selectedUnits[product.id],
+            ).value;
+            const maxStock = product.inStock
+              ? Math.max(
+                  0,
+                  getDisplayStockForUom(product, selectedUnits[product.id]),
+                )
+              : 0;
             const atStockCap = product.inStock && maxStock > 0 && quantity >= maxStock;
             const hasQuantity = quantity > 0;
             const isEditingPrice = editingPrice === product.id;
@@ -1390,7 +1489,15 @@ function ProductsContent() {
                         const raw = e.target.value;
                         const parsed = raw === "" ? 0 : Number(raw);
                         const value = Number.isFinite(parsed) ? Math.max(0, round2(parsed)) : 0;
-                        const maxQ = product.inStock ? Math.max(0, Number(product.stock) || 0) : 0;
+                        const maxQ = product.inStock
+                          ? Math.max(
+                              0,
+                              getDisplayStockForUom(
+                                product,
+                                selectedUnits[product.id],
+                              ),
+                            )
+                          : 0;
                         if (product.inStock && maxQ > 0 && value > maxQ) {
                           setCartApiError(INSUFFICIENT_STOCK_INCREASE_MSG);
                         }
@@ -1487,7 +1594,9 @@ function ProductsContent() {
                       {product.description}
                     </p>
                     <p className="text-xs text-gray-500 mb-2">
-                      Stock: {product.stock} units available
+                      Stock: {maxStock}{" "}
+                      <span className="text-gray-400">({selectedUomResolved})</span>{" "}
+                      available
                     </p>
 
                     {/* Unit Price */}

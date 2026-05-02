@@ -15,6 +15,10 @@ import {
   pickImageFromOrderLine,
   resolveProductImageUrl,
 } from "@/lib/productImage";
+import {
+  formatCartStockBlockMessage,
+  validateCartLinesAgainstProductSnapshot,
+} from "@/lib/cartSubmitStockValidation";
 
 /** When API omits rate but sends line total + qty, derive rate so add_to_cart/submit are consistent. */
 function deriveUnitPriceFromLine(r) {
@@ -621,6 +625,25 @@ function OrderReviewContent() {
     if (discountVal !== "" && !Number.isNaN(Number(discountVal))) options.discount = Number(discountVal);
     if (remarks) options.remarks = remarks;
 
+    setError(null);
+    try {
+      const products = await getAllProductsSnapshot();
+      const stockIssues = validateCartLinesAgainstProductSnapshot(
+        orderItems,
+        products,
+        { skipWhenProductMissing: !isOnline },
+      );
+      if (stockIssues.length > 0) {
+        setError(formatCartStockBlockMessage(stockIssues));
+        return;
+      }
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Could not verify product stock. Try again.",
+      );
+      return;
+    }
+
     submitInFlightRef.current = true;
     setSubmitting(true);
     setError(null);
@@ -786,7 +809,7 @@ function OrderReviewContent() {
         </div>
 
         {error && (
-          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm mb-6">
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm mb-6 whitespace-pre-line">
             {error}
           </div>
         )}

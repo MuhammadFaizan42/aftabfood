@@ -31,6 +31,10 @@ import {
   resolveProductImageUrl,
 } from "@/lib/productImage";
 import { INSUFFICIENT_STOCK_INCREASE_MSG } from "@/lib/stockMessages";
+import {
+  formatCartStockBlockMessage,
+  validateCartLinesAgainstProductSnapshot,
+} from "@/lib/cartSubmitStockValidation";
 
 const QTY_STEP = 1;
 function round2(n) {
@@ -439,6 +443,31 @@ export default function Cart() {
     setError(null);
     const online = Boolean(isOnline);
     if (online) {
+      try {
+        const products = await getAllProductsSnapshot();
+        const lineRows = (cartItems || []).map((r) => ({
+          itemIdForApi: r.itemIdForApi,
+          id: r.id,
+          sku: r.sku,
+          name: r.name,
+          quantity: r.quantity,
+          uom: r.uom,
+        }));
+        const stockIssues = validateCartLinesAgainstProductSnapshot(
+          lineRows,
+          products,
+          { skipWhenProductMissing: false },
+        );
+        if (stockIssues.length > 0) {
+          setError(formatCartStockBlockMessage(stockIssues));
+          return;
+        }
+      } catch (e) {
+        setError(
+          e instanceof Error ? e.message : "Could not verify product stock. Try again.",
+        );
+        return;
+      }
       router.push("/review");
       return;
     }
@@ -1014,7 +1043,7 @@ export default function Cart() {
         )}
 
         {error && (
-          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm mb-6">
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm mb-6 whitespace-pre-line">
             {error}
           </div>
         )}
