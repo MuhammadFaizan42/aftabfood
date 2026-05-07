@@ -24,6 +24,7 @@ export function getApiBaseUrl() {
 const AUTH_TOKEN_KEY = "auth_token";
 const AUTH_USER_KEY = "auth_user";
 const CART_TRNS_ID_KEY = "sale_order_trns_id";
+const CART_EDIT_MODE_KEY = "sale_order_edit_mode";
 const SALE_ORDER_PARTY_CODE_KEY = "sale_order_party_code";
 
 /** Never throw — storage can throw after "clear site data", in private mode, or when disabled. */
@@ -116,6 +117,19 @@ export function setCartTrnsId(trnsId) {
 }
 export function clearCartTrnsId() {
   lsRemove(CART_TRNS_ID_KEY);
+  clearCartEditMode();
+}
+
+/** True when user opened an existing server order for edit; new draft carts keep this off. */
+export function setCartEditMode(enabled = true) {
+  if (enabled) ssSet(CART_EDIT_MODE_KEY, "1");
+  else ssRemove(CART_EDIT_MODE_KEY);
+}
+export function isCartEditMode() {
+  return ssGet(CART_EDIT_MODE_KEY) === "1";
+}
+export function clearCartEditMode() {
+  ssRemove(CART_EDIT_MODE_KEY);
 }
 
 /** Party/customer for current sale order (session – lost on tab close) */

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getOrderReview, submitOrder, getPartySaleInvDashboard, addToCart } from "@/services/shetApi";
-import { getCartTrnsId, setCartTrnsId, clearCartTrnsId, getSaleOrderPartyCode } from "@/lib/api";
+import { getCartTrnsId, setCartTrnsId, clearCartTrnsId, getSaleOrderPartyCode, isCartEditMode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getOfflineCart, clearOfflineCart } from "@/lib/offline/offlineCart";
 import { getCachedCustomerDashboard, getCachedOrderDetail, cacheOrderDetail, saveOfflineOrderToExistingOrders, getExistingOrderRow, getAllProductsSnapshot, updateOfflineOrderInStores, generateOfflineOrderId, deleteOfflineOrder } from "@/lib/offline/bootstrapLoader";
@@ -626,22 +626,24 @@ function OrderReviewContent() {
     if (remarks) options.remarks = remarks;
 
     setError(null);
-    try {
-      const products = await getAllProductsSnapshot();
-      const stockIssues = validateCartLinesAgainstProductSnapshot(
-        orderItems,
-        products,
-        { skipWhenProductMissing: !isOnline },
-      );
-      if (stockIssues.length > 0) {
-        setError(formatCartStockBlockMessage(stockIssues));
+    if (!isCartEditMode()) {
+      try {
+        const products = await getAllProductsSnapshot();
+        const stockIssues = validateCartLinesAgainstProductSnapshot(
+          orderItems,
+          products,
+          { skipWhenProductMissing: !isOnline },
+        );
+        if (stockIssues.length > 0) {
+          setError(formatCartStockBlockMessage(stockIssues));
+          return;
+        }
+      } catch (e) {
+        setError(
+          e instanceof Error ? e.message : "Could not verify product stock. Try again.",
+        );
         return;
       }
-    } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Could not verify product stock. Try again.",
-      );
-      return;
     }
 
     submitInFlightRef.current = true;

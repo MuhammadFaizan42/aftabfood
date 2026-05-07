@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getOrderSummary, updateCartItem, removeCartItem, addToCart } from "@/services/shetApi";
-import { getCartTrnsId, getSaleOrderPartyCode, setCartTrnsId, clearCartTrnsId } from "@/lib/api";
+import { getCartTrnsId, getSaleOrderPartyCode, setCartTrnsId, clearCartTrnsId, isCartEditMode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getOfflineCart, getOfflineCartSync, updateOfflineCartItem, removeFromOfflineCart } from "@/lib/offline/offlineCart";
 import {
@@ -443,30 +443,32 @@ export default function Cart() {
     setError(null);
     const online = Boolean(isOnline);
     if (online) {
-      try {
-        const products = await getAllProductsSnapshot();
-        const lineRows = (cartItems || []).map((r) => ({
-          itemIdForApi: r.itemIdForApi,
-          id: r.id,
-          sku: r.sku,
-          name: r.name,
-          quantity: r.quantity,
-          uom: r.uom,
-        }));
-        const stockIssues = validateCartLinesAgainstProductSnapshot(
-          lineRows,
-          products,
-          { skipWhenProductMissing: false },
-        );
-        if (stockIssues.length > 0) {
-          setError(formatCartStockBlockMessage(stockIssues));
+      if (!isCartEditMode()) {
+        try {
+          const products = await getAllProductsSnapshot();
+          const lineRows = (cartItems || []).map((r) => ({
+            itemIdForApi: r.itemIdForApi,
+            id: r.id,
+            sku: r.sku,
+            name: r.name,
+            quantity: r.quantity,
+            uom: r.uom,
+          }));
+          const stockIssues = validateCartLinesAgainstProductSnapshot(
+            lineRows,
+            products,
+            { skipWhenProductMissing: false },
+          );
+          if (stockIssues.length > 0) {
+            setError(formatCartStockBlockMessage(stockIssues));
+            return;
+          }
+        } catch (e) {
+          setError(
+            e instanceof Error ? e.message : "Could not verify product stock. Try again.",
+          );
           return;
         }
-      } catch (e) {
-        setError(
-          e instanceof Error ? e.message : "Could not verify product stock. Try again.",
-        );
-        return;
       }
       router.push("/review");
       return;

@@ -13,7 +13,7 @@ import {
 } from "@/services/shetApi";
 import { getOrderLineItems } from "@/lib/orderLineItems";
 import { enrichOrderLinesWithImages } from "@/lib/productImage";
-import { setCartTrnsId, setSaleOrderPartyCode } from "@/lib/api";
+import { setCartTrnsId, setSaleOrderPartyCode, setCartEditMode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { buildOrderDetailPdfBlob } from "@/lib/orderDetailPdf";
 import { shareOrDownloadPdf } from "@/lib/productCatalogPdf";
@@ -1365,6 +1365,7 @@ function ExistingOrdersContent() {
                 if (partyCode) setSaleOrderPartyCode(partyCode);
                 const trnsIdForNav = row._raw?.backend_trns_id ?? row.id;
                 if (trnsIdForNav != null) setCartTrnsId(trnsIdForNav);
+                setCartEditMode(true);
                 router.push("/cart");
               }}
             >

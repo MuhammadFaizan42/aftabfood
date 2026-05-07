@@ -14,7 +14,7 @@ import {
   getOrderSummaryInvoice,
   addToCart,
 } from "@/services/shetApi";
-import { setSaleOrderPartyCode, clearCartTrnsId, setCartTrnsId } from "@/lib/api";
+import { setSaleOrderPartyCode, clearCartTrnsId, setCartTrnsId, setCartEditMode } from "@/lib/api";
 import { getOrderLineItems } from "@/lib/orderLineItems";
 import { enrichOrderLinesWithImages, DEFAULT_IMG, resolveProductImageUrl } from "@/lib/productImage";
 import {
@@ -302,6 +302,7 @@ function CustomerDashboardClient() {
         raw.BACKEND_TRNS_ID ??
         row.id;
       setCartTrnsId(trnsIdForNav);
+      setCartEditMode(true);
       router.push("/cart");
     },
     [partyCode, router],
