@@ -237,6 +237,7 @@ export default function Cart() {
   const [actionLoading, setActionLoading] = useState(null);
   const [priceDrafts, setPriceDrafts] = useState({});
   const [qtyDrafts, setQtyDrafts] = useState({});
+  const [reviewNavigationSaving, setReviewNavigationSaving] = useState(false);
   const priceSaveTimersRef = useRef({});
   const partyCodeForBack = getSaleOrderPartyCode();
   const trnsIdForBack = getCartTrnsId();
@@ -439,6 +440,27 @@ export default function Cart() {
     return () => document.removeEventListener("visibilitychange", handler);
   }, [loadSummary]);
 
+  async function flushPendingPriceChanges() {
+    const entries = Object.entries(priceDrafts);
+    if (!entries.length) return;
+
+    Object.values(priceSaveTimersRef.current).forEach((timer) => clearTimeout(timer));
+    priceSaveTimersRef.current = {};
+
+    const saves = entries
+      .map(([id, draft]) => {
+        const num = Number(draft);
+        if (!Number.isFinite(num) || num < 0) return null;
+        return persistPrice(id, Number(num.toFixed(2)), {
+          force: true,
+          throwOnError: true,
+        });
+      })
+      .filter(Boolean);
+
+    if (saves.length) await Promise.all(saves);
+  }
+
   const handleContinueToReview = useCallback(async () => {
     setError(null);
     const online = Boolean(isOnline);
@@ -470,6 +492,17 @@ export default function Cart() {
           return;
         }
       }
+      setReviewNavigationSaving(true);
+      try {
+        await flushPendingPriceChanges();
+      } catch (e) {
+        setError(
+          e instanceof Error ? e.message : "Could not save price changes. Try again.",
+        );
+        setReviewNavigationSaving(false);
+        return;
+      }
+      setReviewNavigationSaving(false);
       router.push("/review");
       return;
     }
@@ -537,7 +570,7 @@ export default function Cart() {
     } finally {
       router.push("/review");
     }
-  }, [cartItems, isOnline, router]);
+  }, [cartItems, flushPendingPriceChanges, isOnline, router]);
 
   useEffect(() => {
     return () => {
@@ -701,14 +734,15 @@ export default function Cart() {
     });
   };
 
-  const persistPrice = async (id, nextPriceRaw) => {
+  const persistPrice = async (id, nextPriceRaw, options = {}) => {
+    const { force = false, throwOnError = false } = options;
     if (isCachedOrderReadOnly) return;
     const item = cartItems.find((i) => i.id === id);
     if (!item) return;
     const parsed = Number(nextPriceRaw);
     if (!Number.isFinite(parsed) || parsed < 0) return;
     const nextPrice = Number(parsed.toFixed(2));
-    if (nextPrice === Number(item.price)) return;
+    if (!force && nextPrice === Number(item.price)) return;
 
     if (isOfflineCart) {
       setActionLoading(id);
@@ -739,6 +773,7 @@ export default function Cart() {
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to update price.");
+        if (throwOnError) throw err;
       } finally {
         setActionLoading(null);
       }
@@ -760,6 +795,7 @@ export default function Cart() {
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update price.");
+      if (throwOnError) throw err;
     } finally {
       setActionLoading(null);
     }
@@ -770,7 +806,7 @@ export default function Cart() {
       clearTimeout(priceSaveTimersRef.current[id]);
     }
     priceSaveTimersRef.current[id] = setTimeout(() => {
-      persistPrice(id, nextPrice);
+      persistPrice(id, nextPrice, { force: true });
       delete priceSaveTimersRef.current[id];
     }, 500);
   };
@@ -800,7 +836,7 @@ export default function Cart() {
     }
     const nextPrice = Number(num.toFixed(2));
     applyPriceLocally(row.id, nextPrice);
-    await persistPrice(row.id, nextPrice);
+    await persistPrice(row.id, nextPrice, { force: true });
     setPriceDrafts((prev) => ({ ...prev, [row.id]: Number(num).toFixed(2) }));
   };
 
@@ -1093,9 +1129,10 @@ export default function Cart() {
                 <button
                   type="button"
                   onClick={handleContinueToReview}
-                  className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  disabled={reviewNavigationSaving || Boolean(actionLoading)}
+                  className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
-                  Continue to Review
+                  {reviewNavigationSaving ? "Saving changes..." : "Continue to Review"}
                 </button>
               </div>
             </div>
