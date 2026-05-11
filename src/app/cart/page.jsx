@@ -34,6 +34,8 @@ import { INSUFFICIENT_STOCK_INCREASE_MSG } from "@/lib/stockMessages";
 import {
   formatCartStockBlockMessage,
   validateCartLinesAgainstProductSnapshot,
+  getDisplayStockForProductRaw,
+  findRawProductInSnapshot,
 } from "@/lib/cartSubmitStockValidation";
 
 const QTY_STEP = 1;
@@ -45,6 +47,30 @@ function formatQty(n) {
   return v % 1 === 0 ? String(v.toFixed(0)) : String(round2(v));
 }
 
+/**
+ * Compute UOM-aware display stock per row (in the row’s selected UOM).
+ * The catalog stores STOCK in the primary UOM; for a secondary UOM the
+ * effective stock is STOCK × CON_RATE (mirrors product listing logic).
+ * Without this, mixing a secondary-UOM line qty with a primary-UOM stock
+ * would cap quantities incorrectly.
+ */
+function attachUomAwareDisplayStock(rows, products) {
+  if (!rows?.length || !products?.length) return rows;
+  return rows.map((row) => {
+    const itemId = String(row.itemIdForApi ?? row.id ?? row.sku ?? "").trim();
+    if (!itemId) return row;
+    const p = findRawProductInSnapshot(products, itemId);
+    if (!p) return row;
+    const lineUom = String(row.uom ?? row.UOM ?? "").trim();
+    const displayStock = getDisplayStockForProductRaw(p, lineUom);
+    return {
+      ...row,
+      displayStock,
+      inStock: displayStock > 0 ? true : row.inStock ?? displayStock > 0,
+    };
+  });
+}
+
 async function finalizeCartRows(rows, preloadedProducts = null, hydrateFromApi = true) {
   if (!rows?.length) return rows;
   let products = preloadedProducts;
@@ -52,9 +78,10 @@ async function finalizeCartRows(rows, preloadedProducts = null, hydrateFromApi =
     products = await getAllProductsSnapshot();
   }
   try {
-    return await enrichOrderLinesWithImages(rows, products, { hydrateFromApi });
+    const enriched = await enrichOrderLinesWithImages(rows, products, { hydrateFromApi });
+    return attachUomAwareDisplayStock(enriched, products);
   } catch {
-    return rows;
+    return attachUomAwareDisplayStock(rows, products);
   }
 }
 
@@ -65,15 +92,49 @@ function formatPrice(val) {
   return `£${n.toFixed(2)}`;
 }
 
-/** Max orderable qty from catalog row; null = unknown (do not cap in UI). */
+/**
+ * Max orderable qty for a cart row; null = unknown (do not cap in UI).
+ *
+ * Two corrections vs naive `STOCK` cap:
+ *  1) UOM-aware: prefer `row.displayStock` (already converted to the line’s UOM
+ *     via CON_RATE) over the raw catalog `stock`, which is in the primary UOM.
+ *  2) Reserved-aware: the line’s own qty is already counted as reserved by this
+ *     order, so it must be added back when capping. Otherwise a product whose
+ *     entire stock was consumed by this same order looks like "out of stock".
+ */
 function maxQtyFromCartRow(item) {
   if (item == null) return null;
-  if (item.inStock === false) return 0;
+  const reserved = Math.max(0, Number(item.quantity) || 0);
+  const uomAware = item.displayStock;
+  if (uomAware != null && uomAware !== "") {
+    const n = Number(uomAware);
+    if (!Number.isNaN(n)) return Math.max(0, n + reserved);
+  }
   const s = item.stock;
-  if (s == null || s === "") return null;
+  if (s == null || s === "") {
+    if (item.inStock === false && reserved <= 0) return 0;
+    return null;
+  }
   const n = Number(s);
   if (Number.isNaN(n)) return null;
-  return Math.max(0, n);
+  return Math.max(0, n + reserved);
+}
+
+/** True only when there is no stock (in the line’s UOM) AND nothing reserved by this order. */
+function rowIsTrulyOutOfStock(row) {
+  if (row == null) return false;
+  const reserved = Math.max(0, Number(row.quantity) || 0);
+  if (reserved > 0) return false;
+  if (row.displayStock != null && row.displayStock !== "") {
+    const n = Number(row.displayStock);
+    if (!Number.isNaN(n)) return n <= 0;
+  }
+  if (row.inStock === false) return true;
+  if (row.stock != null && row.stock !== "") {
+    const n = Number(row.stock);
+    if (!Number.isNaN(n) && n <= 0) return true;
+  }
+  return false;
 }
 
 function deriveUnitPriceFromSummaryLine(r) {
@@ -912,7 +973,7 @@ export default function Cart() {
           <div className="min-w-0 flex-1">
             <div className="font-medium text-gray-900 text-xs sm:text-sm leading-snug line-clamp-2 flex flex-wrap items-center gap-1">
               <span>{row.name}</span>
-              {(row.inStock === false || Number(row.stock ?? 1) <= 0) && (
+              {rowIsTrulyOutOfStock(row) && (
                 <span className="inline-flex shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
                   OOS
                 </span>

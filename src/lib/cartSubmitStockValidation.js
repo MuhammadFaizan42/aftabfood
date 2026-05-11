@@ -81,11 +81,16 @@ export function findRawProductInSnapshot(products, itemId) {
 /**
  * @param {Array<object>} orderItems — rows with quantity, itemIdForApi, name, uom
  * @param {object[]} products — IDB / API product rows
- * @param {{ skipWhenProductMissing?: boolean }} options — if true, unmatched lines are skipped (e.g. offline with no cache)
+ * @param {{ skipWhenProductMissing?: boolean, reservedAware?: boolean }} options
+ *   - skipWhenProductMissing: when true, unmatched lines are skipped (e.g. offline with no cache).
+ *   - reservedAware: when true (default), the line’s own quantity is treated as already reserved
+ *     by this order — i.e. available stock for the check is `STOCK + this line’s qty`. This avoids
+ *     false "out of stock" blocks when editing a submitted order whose qty already consumed stock,
+ *     or right after adding the last available unit from product listing.
  * @returns {Array<{ name: string, message: string }>}
  */
 export function validateCartLinesAgainstProductSnapshot(orderItems, products, options = {}) {
-  const { skipWhenProductMissing = false } = options;
+  const { skipWhenProductMissing = false, reservedAware = true } = options;
   const issues = [];
 
   for (const row of orderItems || []) {
@@ -106,8 +111,11 @@ export function validateCartLinesAgainstProductSnapshot(orderItems, products, op
       continue;
     }
 
-    const baseStock = Math.max(0, Number(p.STOCK ?? p.QTY ?? p.stock ?? 0) || 0);
-    if (baseStock <= 0) {
+    const lineUom = String(row.uom ?? row.UOM ?? "").trim();
+    const availableForUom = getDisplayStockForProductRaw(p, lineUom);
+    const effectiveMax = reservedAware ? round2(availableForUom + qty) : availableForUom;
+
+    if (effectiveMax <= 0) {
       issues.push({
         name,
         message: `${name} is out of stock. Remove it or set quantity to zero before placing the order.`,
@@ -115,9 +123,7 @@ export function validateCartLinesAgainstProductSnapshot(orderItems, products, op
       continue;
     }
 
-    const lineUom = String(row.uom ?? row.UOM ?? "").trim();
-    const maxQ = getDisplayStockForProductRaw(p, lineUom);
-    if (qty > maxQ + 0.0001) {
+    if (qty > effectiveMax + 0.0001) {
       issues.push({
         name,
         message: `${name}: quantity exceeds available stock for the selected unit of measure.`,
