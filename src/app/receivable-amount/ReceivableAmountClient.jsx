@@ -6,6 +6,11 @@ import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import Dropdown from "../../components/common/Dropdown";
 import { getPartySaleInvDashboard } from "@/services/shetApi";
+import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
+import {
+  getCachedPartyDashboard,
+  cachePartyDashboard,
+} from "@/lib/offline/bootstrapLoader";
 
 function formatCustomerAddress(c) {
   if (!c) return "—";
@@ -74,6 +79,7 @@ function formatDisplayDate(val) {
 export default function ReceivableAmountClient() {
   const searchParams = useSearchParams();
   const partyCode = searchParams.get("party_code");
+  const isOnline = useOnlineStatus();
 
   // Default to "All" so credits/JV (negative balances) are visible too.
   const [statusFilter, setStatusFilter] = useState("all");
@@ -86,6 +92,7 @@ export default function ReceivableAmountClient() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(!!partyCode);
   const [error, setError] = useState(null);
+  const [usingCache, setUsingCache] = useState(false);
 
   const statusOptions = [
     { value: "open-partial", label: "Open & Partial" },
@@ -104,29 +111,57 @@ export default function ReceivableAmountClient() {
       }
       setLoading(true);
       setError(null);
+
+      /* Cache-first so users see data instantly offline and online (background refresh). */
+      let cached = null;
+      try {
+        cached = await getCachedPartyDashboard(partyCode, "");
+      } catch {
+        cached = null;
+      }
+      if (!cancelled && cached?.data) {
+        setData(cached.data);
+        setUsingCache(true);
+        setLoading(false);
+      }
+
+      const online = typeof navigator !== "undefined" ? navigator.onLine : true;
+      if (!online) {
+        if (!cancelled && !cached?.data) {
+          setError("Offline — open this screen once online to cache the data.");
+          setData(null);
+        }
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
       try {
         const res = await getPartySaleInvDashboard(partyCode, {});
+        if (cancelled) return;
         if (!res?.success || !res?.data) {
-          setError(res?.message || "Failed to load receivable details.");
-          setData(null);
+          if (!cached?.data) {
+            setError(res?.message || "Failed to load receivable details.");
+            setData(null);
+          }
           return;
         }
-        if (!cancelled) {
-          setData(res.data);
-        }
+        setData(res.data);
+        setUsingCache(false);
+        cachePartyDashboard(partyCode, "", res).catch(() => {});
       } catch (err) {
-        if (!cancelled) {
+        if (cancelled) return;
+        if (!cached?.data) {
           setError(
             err instanceof Error
               ? err.message
               : "Failed to load receivable details.",
           );
           setData(null);
+        } else {
+          setError("Showing cached data — server unreachable.");
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
     load();
@@ -385,7 +420,9 @@ export default function ReceivableAmountClient() {
     );
   }
 
-  if (loading) {
+  /* Only block the whole screen when we truly have nothing to show.
+     If cached data is present, render the page and surface error inline so the user can still browse. */
+  if (loading && !data) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
@@ -398,7 +435,7 @@ export default function ReceivableAmountClient() {
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
@@ -453,6 +490,21 @@ export default function ReceivableAmountClient() {
           <p className="text-xs sm:text-sm text-gray-500 mt-1">
             Invoice and date-wise details for this customer
           </p>
+          {!isOnline && (
+            <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800 text-xs sm:text-sm">
+              Offline mode — showing the last cached receivables.
+            </div>
+          )}
+          {isOnline && usingCache && (
+            <div className="mt-3 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-blue-800 text-xs sm:text-sm">
+              Showing cached data while refreshing from the server…
+            </div>
+          )}
+          {error && data && (
+            <div className="mt-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-red-700 text-xs sm:text-sm">
+              {error}
+            </div>
+          )}
         </div>
 
         {/* Customer Info Card */}

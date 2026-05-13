@@ -5,7 +5,7 @@
 import { openDB } from "idb";
 
 const DB_NAME = "aftabfood-offline";
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 export async function getDB() {
   return openDB(DB_NAME, DB_VERSION, {
@@ -45,6 +45,17 @@ export async function getDB() {
       }
       if (newVer >= 6 && !db.objectStoreNames.contains("visitHistoryCache")) {
         db.createObjectStore("visitHistoryCache", { keyPath: "party_code" });
+      }
+      if (newVer >= 7) {
+        if (!db.objectStoreNames.contains("saleRoutesCache")) {
+          db.createObjectStore("saleRoutesCache", { keyPath: "key" });
+        }
+        if (!db.objectStoreNames.contains("partyDashboardCache")) {
+          db.createObjectStore("partyDashboardCache", { keyPath: "key" });
+        }
+        if (!db.objectStoreNames.contains("salesReturnCache")) {
+          db.createObjectStore("salesReturnCache", { keyPath: "key" });
+        }
       }
     },
   });

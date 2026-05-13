@@ -1,8 +1,8 @@
 /* PWA Service Worker – offline cache + background sync for orders */
-const CACHE_NAME = "aftabfood-v8";
+const CACHE_NAME = "aftabfood-v9";
 const IMAGE_CACHE = "aftabfood-images-v1";
 const DB_NAME = "aftabfood-offline";
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 const SYNC_TAG = "sync-orders";
 
 self.addEventListener("install", (event) => {
@@ -157,6 +157,11 @@ self.addEventListener("fetch", (event) => {
             url.pathname.startsWith("/order-success") ||
             url.pathname.startsWith("/existing-orders") ||
             url.pathname.startsWith("/customer-dashboard") ||
+            url.pathname.startsWith("/sale-route") ||
+            url.pathname.startsWith("/total-sales-invoices") ||
+            url.pathname.startsWith("/receivable-amount") ||
+            url.pathname.startsWith("/sales-return-history") ||
+            url.pathname.startsWith("/visit-history") ||
             url.pathname.includes("_next"))
         ) {
           if (isNavigate && url.pathname !== "/") cloneForPath = res.clone();

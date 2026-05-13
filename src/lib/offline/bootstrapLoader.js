@@ -2,7 +2,7 @@
  * Bootstrap loader – fetch master data when online and store in IndexedDB
  */
 import { putMany, putOne, putManyMerge, getAll, getByKey, deleteByKey, setMeta, getMeta } from "../idb";
-import { getProducts, getCustomers, getPartySaleInvDashboard, getExistingOrders } from "@/services/shetApi";
+import { getProducts, getCustomers, getPartySaleInvDashboard, getExistingOrders, getSaleRoutes } from "@/services/shetApi";
 import { setOfflineCart } from "./offlineCart";
 
 const META_LAST_SYNC = "master_last_sync";
@@ -19,7 +19,22 @@ async function isCacheStale() {
   return Date.now() - last > SYNC_INTERVAL_MS;
 }
 
-/** Load products from API and store – fetch in pages until we have up to PRODUCTS_LIMIT */
+/** Older caches (before `_order` was added) need a one-time refresh so offline mirrors the online sequence. */
+async function productsCacheNeedsOrderMigration() {
+  try {
+    const rows = await getAll("products");
+    if (!rows.length) return false;
+    return rows.every((r) => r?._order == null);
+  } catch {
+    return false;
+  }
+}
+
+/** Load products from API and store – fetch in pages until we have up to PRODUCTS_LIMIT
+ *  Each row is tagged with `_order` (its position in the API response, after dedup) so
+ *  the offline list matches the online sequence even though IndexedDB `getAll`
+ *  returns records sorted by primary key.
+ */
 async function loadProducts() {
   const PAGE_SIZE = 500;
   let all = [];
@@ -32,10 +47,18 @@ async function loadProducts() {
     offset += PAGE_SIZE;
   }
   if (!all.length) return;
-  const items = all.slice(0, PRODUCTS_LIMIT).map((p) => ({
-    ...p,
-    id: p.PK_INV_ID ?? p.PK_ID ?? p.PRODUCT_ID ?? p.id ?? p.SKU ?? String(Math.random()),
-  }));
+  const seen = new Set();
+  const deduped = [];
+  for (const p of all) {
+    const id =
+      p.PK_INV_ID ?? p.PK_ID ?? p.PRODUCT_ID ?? p.id ?? p.SKU ?? String(Math.random());
+    const key = String(id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push({ ...p, id });
+    if (deduped.length >= PRODUCTS_LIMIT) break;
+  }
+  const items = deduped.map((p, i) => ({ ...p, _order: i }));
   await putMany("products", items);
   invalidateProductsListSnapshot();
 }
@@ -132,7 +155,8 @@ async function loadExistingOrders() {
 export async function bootstrapMasterData(force = false) {
   if (typeof window === "undefined") return;
   const stale = await isCacheStale();
-  if (!stale && !force) return;
+  const needsMigration = await productsCacheNeedsOrderMigration();
+  if (!stale && !force && !needsMigration) return;
 
   const now = Date.now();
   await loadProducts().catch((err) => {
@@ -147,6 +171,9 @@ export async function bootstrapMasterData(force = false) {
   await loadExistingOrders().catch((err) => {
     console.warn("[offline] Bootstrap existing orders failed:", err?.message);
   });
+  await loadSaleRoutes().catch((err) => {
+    console.warn("[offline] Bootstrap sale routes failed:", err?.message);
+  });
   await setMeta(META_LAST_SYNC, now).catch(() => {});
 }
 
@@ -157,11 +184,20 @@ export function invalidateProductsListSnapshot() {
   _productsListSnapshot = null;
 }
 
-/** Full product list from IDB, cached until next bootstrap sync replaces the store. */
+/** Full product list from IDB, cached until next bootstrap sync replaces the store.
+ *  Sorted by `_order` (assigned at cache time) so offline mode mirrors the online
+ *  API sequence — IndexedDB getAll otherwise returns rows in primary-key order.
+ *  Rows from an older cache without `_order` keep their getAll order at the end.
+ */
 export async function getAllProductsSnapshot() {
   if (_productsListSnapshot == null) {
     try {
-      _productsListSnapshot = await getAll("products");
+      const rows = await getAll("products");
+      const orderOf = (p) => {
+        const n = Number(p?._order);
+        return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
+      };
+      _productsListSnapshot = [...rows].sort((a, b) => orderOf(a) - orderOf(b));
     } catch {
       _productsListSnapshot = [];
     }
@@ -716,6 +752,112 @@ export async function getOfflineOrdersForSync() {
     });
   }
   return out;
+}
+
+/* ---------------- Sale Routes (single global cache) ---------------- */
+
+/** Load and cache sale routes (best-effort) — called from bootstrap and on user pull-to-refresh. */
+export async function loadSaleRoutes() {
+  try {
+    const res = await getSaleRoutes();
+    if (!res || res?.success === false) return null;
+    await cacheSaleRoutes(res);
+    return res;
+  } catch {
+    return null;
+  }
+}
+
+/** Persist the raw API response so offline reads keep the same shape the page expects. */
+export async function cacheSaleRoutes(apiResponse) {
+  if (!apiResponse) return;
+  try {
+    await putOne("saleRoutesCache", {
+      key: "all",
+      response: apiResponse,
+      updatedAt: Date.now(),
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function getCachedSaleRoutes() {
+  try {
+    const row = await getByKey("saleRoutesCache", "all");
+    return row?.response ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/* ------------ Party dashboard cache (Total Sales / Receivable) ------------ */
+
+function partyDashboardCacheKey(partyCode, recentLimit) {
+  const p = String(partyCode ?? "").trim();
+  const r = recentLimit == null || recentLimit === "" ? "" : String(recentLimit);
+  return `${p}|${r}`;
+}
+
+export async function cachePartyDashboard(partyCode, recentLimit, apiResponse) {
+  if (!partyCode || !apiResponse) return;
+  try {
+    await putOne("partyDashboardCache", {
+      key: partyDashboardCacheKey(partyCode, recentLimit),
+      response: apiResponse,
+      updatedAt: Date.now(),
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function getCachedPartyDashboard(partyCode, recentLimit) {
+  if (!partyCode) return null;
+  try {
+    const row = await getByKey(
+      "partyDashboardCache",
+      partyDashboardCacheKey(partyCode, recentLimit),
+    );
+    return row?.response ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/* ---------------- Sales Returns cache (per party + date range) ---------------- */
+
+function salesReturnCacheKey(partyCode, fromDate, toDate) {
+  const p = String(partyCode ?? "").trim();
+  const f = String(fromDate ?? "").trim();
+  const t = String(toDate ?? "").trim();
+  return `${p}|${f}|${t}`;
+}
+
+export async function cacheSalesReturns(partyCode, fromDate, toDate, apiResponse) {
+  if (!partyCode || !apiResponse) return;
+  try {
+    await putOne("salesReturnCache", {
+      key: salesReturnCacheKey(partyCode, fromDate, toDate),
+      response: apiResponse,
+      updatedAt: Date.now(),
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function getCachedSalesReturns(partyCode, fromDate, toDate) {
+  if (!partyCode) return null;
+  try {
+    const row = await getByKey(
+      "salesReturnCache",
+      salesReturnCacheKey(partyCode, fromDate, toDate),
+    );
+    return row?.response ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Cache visit history for a party (call when fetching from API when online). */

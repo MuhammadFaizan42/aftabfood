@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Header from "../../components/common/Header";
 import { getSaleRoutes } from "@/services/shetApi";
+import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
+import { getCachedSaleRoutes, cacheSaleRoutes } from "@/lib/offline/bootstrapLoader";
 
 const AVATAR_COLORS = [
   { bg: "bg-blue-100", text: "text-blue-600" },
@@ -64,11 +66,13 @@ function normalizeSaleRoutes(res) {
 }
 
 export default function SaleRoutePage() {
+  const isOnline = useOnlineStatus();
   const [openRouteIds, setOpenRouteIds] = useState(() => new Set());
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [routes, setRoutes] = useState([]);
+  const [usingCache, setUsingCache] = useState(false);
 
   const showSoon = useCallback((message) => {
     setToast(message);
@@ -87,6 +91,32 @@ export default function SaleRoutePage() {
   const loadRoutes = useCallback(async () => {
     setLoading(true);
     setError(null);
+
+    /* Cache-first so offline (or flaky online) users see data immediately. */
+    let cached = null;
+    try {
+      cached = await getCachedSaleRoutes();
+    } catch {
+      cached = null;
+    }
+    if (cached) {
+      const list = normalizeSaleRoutes(cached);
+      setRoutes(list);
+      setOpenRouteIds(new Set());
+      setUsingCache(true);
+      setLoading(false);
+    }
+
+    const online = typeof navigator !== "undefined" ? navigator.onLine : true;
+    if (!online) {
+      if (!cached) {
+        setError("Offline — open this page once online to cache routes.");
+        setRoutes([]);
+      }
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await getSaleRoutes();
       if (res && typeof res === "object" && res.success === false) {
@@ -95,9 +125,16 @@ export default function SaleRoutePage() {
       const list = normalizeSaleRoutes(res);
       setRoutes(list);
       setOpenRouteIds(new Set());
+      setUsingCache(false);
+      cacheSaleRoutes(res).catch(() => {});
     } catch (e) {
-      setRoutes([]);
-      setError(e instanceof Error ? e.message : "Could not load sale routes.");
+      if (!cached) {
+        setRoutes([]);
+        setError(e instanceof Error ? e.message : "Could not load sale routes.");
+      } else {
+        /* Keep showing cached data, but tell the user fresh refresh failed. */
+        setError("Showing cached routes — server unreachable.");
+      }
     } finally {
       setLoading(false);
     }
@@ -128,6 +165,16 @@ export default function SaleRoutePage() {
           <p className="text-sm text-gray-500 mt-1">
             Select a route to view customers. WhatsApp actions will connect to the API in a later step.
           </p>
+          {!isOnline && (
+            <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800 text-xs sm:text-sm">
+              Offline mode — showing the last cached routes.
+            </div>
+          )}
+          {isOnline && usingCache && (
+            <div className="mt-3 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-blue-800 text-xs sm:text-sm">
+              Showing cached routes while refreshing from the server…
+            </div>
+          )}
 
           <div className="mt-4 flex items-center gap-2">
             <button

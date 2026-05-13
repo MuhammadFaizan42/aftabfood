@@ -58,9 +58,36 @@ function batchIsSelected(batchNo) {
   return Boolean(b) && b.toLowerCase() !== "no batch";
 }
 
+function expIsSelected(expDate) {
+  const e = String(expDate ?? "").trim();
+  return Boolean(e);
+}
+
 function batchIsMandatoryForProduct(product) {
   // Requirement: if product has stock (in-stock), Batch No must be selected.
   return Boolean(product?.inStock);
+}
+
+/**
+ * Hard requirement for any add-to-cart (online or offline): in-stock products
+ * MUST carry both batch_no and exp_date so the line never fails server-side
+ * validation when an offline cart later syncs online.
+ * Returns an error string when something is missing, or null when OK.
+ */
+function getBatchExpiryRequirementError(product, opts) {
+  if (!batchIsMandatoryForProduct(product)) return null;
+  const hasBatch = batchIsSelected(opts?.batch_no);
+  const hasExp = expIsSelected(opts?.exp_date);
+  if (!hasBatch && !hasExp) {
+    return "Batch No and Expiry Date are required for this product. Please select a batch (with expiry) before adding to cart.";
+  }
+  if (!hasBatch) {
+    return "Batch No is required for this product. Please select a batch before adding to cart.";
+  }
+  if (!hasExp) {
+    return "Expiry Date is missing for the selected batch. Please choose a batch that has an expiry date before adding to cart.";
+  }
+  return null;
 }
 
 /** Normalize API batch list: arrays, PHP object-maps, JSON strings, or comma-separated BATCH_NOS. */
@@ -886,8 +913,9 @@ function ProductsContent() {
     setCartApiError(null);
     setCartApiLoadingId(productId);
     const opts = getAddToCartPayload(product);
-    if (batchIsMandatoryForProduct(product) && !batchIsSelected(opts.batch_no)) {
-      setCartApiError("Batch No is required for this product. Please select a batch before adding to cart.");
+    const reqError = getBatchExpiryRequirementError(product, opts);
+    if (reqError) {
+      setCartApiError(reqError);
       setCartApiLoadingId(null);
       return;
     }
@@ -977,8 +1005,9 @@ function ProductsContent() {
           setCartItems((prev) => prev.filter((item) => item.id !== productId));
         } else {
           const opts = getAddToCartPayload(product);
-          if (batchIsMandatoryForProduct(product) && !batchIsSelected(opts.batch_no)) {
-            setCartApiError("Batch No is required for this product. Please select a batch before updating cart.");
+          const reqError = getBatchExpiryRequirementError(product, opts);
+          if (reqError) {
+            setCartApiError(reqError);
             return;
           }
           const cart = await getOfflineCart();
@@ -1027,8 +1056,9 @@ function ProductsContent() {
         setCartItems((prev) => prev.filter((item) => item.id !== productId));
       } else if (quantity > 0) {
         const opts = getAddToCartPayload(product);
-        if (batchIsMandatoryForProduct(product) && !batchIsSelected(opts.batch_no)) {
-          setCartApiError("Batch No is required for this product. Please select a batch before updating cart.");
+        const reqError = getBatchExpiryRequirementError(product, opts);
+        if (reqError) {
+          setCartApiError(reqError);
           return;
         }
         const res = await addToCart(partyCode, itemIdForApi, quantity, trnsId || undefined, opts);
@@ -1059,8 +1089,9 @@ function ProductsContent() {
             setCartItems((prev) => prev.filter((item) => item.id !== productId));
           } else {
             const opts = getAddToCartPayload(product);
-            if (batchIsMandatoryForProduct(product) && !batchIsSelected(opts.batch_no)) {
-              setCartApiError("Batch No is required for this product. Please select a batch before updating cart.");
+            const reqError = getBatchExpiryRequirementError(product, opts);
+            if (reqError) {
+              setCartApiError(reqError);
               return;
             }
             const cart = await getOfflineCart();
@@ -1664,12 +1695,24 @@ function ProductsContent() {
                           )
                         }
                       />
-                      {batchIsMandatoryForProduct(product) &&
-                        !batchIsSelected(batchSelectModel(product, selectedBatches[product.id]).value) && (
-                        <p className="mt-1 text-[11px] text-red-600">
-                          Batch No is required to add this product.
-                        </p>
-                      )}
+                      {(() => {
+                        if (!batchIsMandatoryForProduct(product)) return null;
+                        const opts = getAddToCartPayload(product);
+                        const hasBatch = batchIsSelected(opts.batch_no);
+                        const hasExp = expIsSelected(opts.exp_date);
+                        if (hasBatch && hasExp) return null;
+                        let msg;
+                        if (!hasBatch && !hasExp) {
+                          msg = "Batch No and Expiry Date are required to add this product.";
+                        } else if (!hasBatch) {
+                          msg = "Batch No is required to add this product.";
+                        } else {
+                          msg = "Expiry Date is missing for the selected batch. Pick a batch with expiry.";
+                        }
+                        return (
+                          <p className="mt-1 text-[11px] text-red-600">{msg}</p>
+                        );
+                      })()}
                     </div>
 
                     {/* Comments/Remarks – API me comments bhejte hain */}

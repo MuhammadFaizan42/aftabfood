@@ -6,6 +6,11 @@ import { useSearchParams } from "next/navigation";
 import Header from "@/components/common/Header";
 import ReusableTable from "@/components/common/ReusableTable";
 import { getPartySaleInvDashboard } from "@/services/shetApi";
+import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
+import {
+  getCachedPartyDashboard,
+  cachePartyDashboard,
+} from "@/lib/offline/bootstrapLoader";
 
 function formatAmount(val) {
   if (val == null || val === "") return "—";
@@ -50,37 +55,73 @@ export default function TotalSalesInvoicesClient() {
   const searchParams = useSearchParams();
   const partyCode = searchParams.get("party_code");
   const customerName = searchParams.get("customer_name") || "";
+  const isOnline = useOnlineStatus();
 
   const [loading, setLoading] = useState(!!partyCode);
   const [error, setError] = useState(null);
   const [summary, setSummary] = useState(null);
   const [rows, setRows] = useState([]);
+  const [usingCache, setUsingCache] = useState(false);
+
+  const applyDashboardData = useCallback((d) => {
+    setSummary(d?.summary || null);
+    setRows(mapRecentInvoices(d || {}));
+  }, []);
 
   const load = useCallback(async () => {
     if (!partyCode) return;
     setLoading(true);
     setError(null);
+
+    /* Cache-first so offline / flaky online users see something immediately. */
+    let cached = null;
     try {
-      const res = await getPartySaleInvDashboard(partyCode, {
-        recent_limit: 50,
-      });
-      if (!res?.success || !res?.data) {
-        setError(res?.message || "Could not load sales data.");
+      cached = await getCachedPartyDashboard(partyCode, 50);
+    } catch {
+      cached = null;
+    }
+    if (cached?.data) {
+      applyDashboardData(cached.data);
+      setUsingCache(true);
+      setLoading(false);
+    }
+
+    const online = typeof navigator !== "undefined" ? navigator.onLine : true;
+    if (!online) {
+      if (!cached?.data) {
+        setError("Offline — open this screen once online to cache the data.");
         setSummary(null);
         setRows([]);
+      }
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const res = await getPartySaleInvDashboard(partyCode, { recent_limit: 50 });
+      if (!res?.success || !res?.data) {
+        if (!cached?.data) {
+          setError(res?.message || "Could not load sales data.");
+          setSummary(null);
+          setRows([]);
+        }
         return;
       }
-      const d = res.data;
-      setSummary(d.summary || null);
-      setRows(mapRecentInvoices(d));
+      applyDashboardData(res.data);
+      setUsingCache(false);
+      cachePartyDashboard(partyCode, 50, res).catch(() => {});
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load.");
-      setSummary(null);
-      setRows([]);
+      if (!cached?.data) {
+        setError(e instanceof Error ? e.message : "Failed to load.");
+        setSummary(null);
+        setRows([]);
+      } else {
+        setError("Showing cached data — server unreachable.");
+      }
     } finally {
       setLoading(false);
     }
-  }, [partyCode]);
+  }, [partyCode, applyDashboardData]);
 
   useEffect(() => {
     load();
@@ -138,7 +179,17 @@ export default function TotalSalesInvoicesClient() {
           Total sales — invoices
         </h1>
         {customerName && customerName !== "—" && (
-          <p className="text-gray-600 mb-6">{customerName}</p>
+          <p className="text-gray-600 mb-3">{customerName}</p>
+        )}
+        {!isOnline && (
+          <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800 text-xs sm:text-sm">
+            Offline mode — showing the last cached sales data.
+          </div>
+        )}
+        {isOnline && usingCache && (
+          <div className="mb-4 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-blue-800 text-xs sm:text-sm">
+            Showing cached data while refreshing from the server…
+          </div>
         )}
 
         {summary && (

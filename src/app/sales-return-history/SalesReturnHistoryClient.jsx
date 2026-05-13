@@ -6,6 +6,13 @@ import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
 import { getSaleReturns, getPartySaleInvDashboard } from "@/services/shetApi";
 import { clearAuthToken } from "@/lib/api";
+import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
+import {
+  getCachedSalesReturns,
+  cacheSalesReturns,
+  getCachedPartyDashboard,
+  cachePartyDashboard,
+} from "@/lib/offline/bootstrapLoader";
 
 function formatAmount(val) {
   if (val == null || val === "") return "—";
@@ -20,6 +27,7 @@ function formatAmount(val) {
 function SalesReturnHistoryClient() {
   const searchParams = useSearchParams();
   const partyCode = searchParams.get("party_code");
+  const isOnline = useOnlineStatus();
 
   const [returns, setReturns] = useState([]);
   const [totalReturnedAmount, setTotalReturnedAmount] = useState(0);
@@ -33,19 +41,94 @@ function SalesReturnHistoryClient() {
   const [toDate, setToDate] = useState("");
   const [loading, setLoading] = useState(!!partyCode);
   const [error, setError] = useState(null);
+  const [usingCache, setUsingCache] = useState(false);
+
+  /* Same mapping for cached + online responses so offline view matches online. */
+  const applyApiResponse = useCallback((res) => {
+    const raw = res?.data ?? {};
+    const data =
+      raw?.items ??
+      raw?.returns ??
+      (Array.isArray(raw) ? raw : raw?.records ?? raw?.list ?? raw?.data ?? []);
+    const list = Array.isArray(data) ? data : [];
+    const rows = list.map((r) => {
+      const returnNo =
+        r.SR_INV_NUM ??
+        r.RETURN_NO ??
+        r.RET_NO ??
+        r.returnNo ??
+        r.DOC_NO ??
+        "—";
+      const date = r.DATED ?? r.DATE ?? r.date ?? "—";
+      const refInvoice =
+        r.INV_NUMBER ??
+        r.REF_INVOICE ??
+        r.INVOICE_REF ??
+        r.refInvoice ??
+        r.BRV_NUM ??
+        "—";
+      const reason = r.REASON ?? r.reason ?? r.REMARKS ?? "—";
+      const amt =
+        r.CR ??
+        r.LC_AMT ??
+        r.AMOUNT ??
+        r.RETURN_AMT ??
+        r.amount ??
+        r.INVOICE_AMT ??
+        0;
+      const amount = formatAmount(amt);
+      return { returnNo, date, refInvoice, reason, amount, _raw: r };
+    });
+    setReturns(rows);
+    const total =
+      raw?.total_amount != null
+        ? Number(raw.total_amount)
+        : list.reduce(
+            (sum, r) =>
+              sum +
+              (Number(r.CR ?? r.LC_AMT ?? r.AMOUNT ?? r.amount) || 0),
+            0,
+          );
+    setTotalReturnedAmount(total);
+  }, []);
 
   const fetchReturns = useCallback(async () => {
     if (!partyCode) return;
     setLoading(true);
     setError(null);
+
+    /* Cache-first so offline / flaky online still show last fetched data. */
+    let cached = null;
+    try {
+      cached = await getCachedSalesReturns(partyCode, fromDate, toDate);
+    } catch {
+      cached = null;
+    }
+    if (cached) {
+      applyApiResponse(cached);
+      setUsingCache(true);
+      setLoading(false);
+    }
+
+    const online = typeof navigator !== "undefined" ? navigator.onLine : true;
+    if (!online) {
+      if (!cached) {
+        setError(
+          "Offline — open this screen once online with the same date filter to cache the data.",
+        );
+        setReturns([]);
+        setTotalReturnedAmount(0);
+      }
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await getSaleReturns(partyCode, {
         ...(fromDate && { from_date: fromDate }),
         ...(toDate && { to_date: toDate }),
       });
       if (!res?.success) {
-        setReturns([]);
-        setTotalReturnedAmount(0);
         const msg = res?.message || "";
         if (
           msg.toLowerCase().includes("token expired") ||
@@ -53,58 +136,18 @@ function SalesReturnHistoryClient() {
         ) {
           clearAuthToken();
           setError("Session expired. Please log in again.");
-        } else if (msg) {
+        } else if (!cached && msg) {
           setError(msg);
+        }
+        if (!cached) {
+          setReturns([]);
+          setTotalReturnedAmount(0);
         }
         return;
       }
-      const raw = res.data;
-      const data =
-        raw?.items ??
-        raw?.returns ??
-        (Array.isArray(raw) ? raw : raw?.records ?? raw?.list ?? raw?.data ?? []);
-      const list = Array.isArray(data) ? data : [];
-      const rows = list.map((r) => {
-        const returnNo =
-          r.SR_INV_NUM ??
-          r.RETURN_NO ??
-          r.RET_NO ??
-          r.returnNo ??
-          r.DOC_NO ??
-          "—";
-        const date = r.DATED ?? r.DATE ?? r.date ?? "—";
-        const refInvoice =
-          r.INV_NUMBER ??
-          r.REF_INVOICE ??
-          r.INVOICE_REF ??
-          r.refInvoice ??
-          r.BRV_NUM ??
-          "—";
-        const reason = r.REASON ?? r.reason ?? r.REMARKS ?? "—";
-        const amt =
-          r.CR ??
-          r.LC_AMT ??
-          r.AMOUNT ??
-          r.RETURN_AMT ??
-          r.amount ??
-          r.INVOICE_AMT ??
-          0;
-        const amount = formatAmount(amt);
-        return { returnNo, date, refInvoice, reason, amount, _raw: r };
-      });
-      setReturns(rows);
-      const total =
-        raw?.total_amount != null
-          ? Number(raw.total_amount)
-          : list.reduce(
-              (sum, r) =>
-                sum +
-                (Number(
-                  r.CR ?? r.LC_AMT ?? r.AMOUNT ?? r.amount,
-                ) || 0),
-              0,
-            );
-      setTotalReturnedAmount(total);
+      applyApiResponse(res);
+      setUsingCache(false);
+      cacheSalesReturns(partyCode, fromDate, toDate, res).catch(() => {});
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "Failed to load sale returns.";
@@ -114,15 +157,19 @@ function SalesReturnHistoryClient() {
       ) {
         clearAuthToken();
         setError("Session expired. Please log in again.");
-      } else {
+      } else if (!cached) {
         setError(msg);
+      } else {
+        setError("Showing cached data — server unreachable.");
       }
-      setReturns([]);
-      setTotalReturnedAmount(0);
+      if (!cached) {
+        setReturns([]);
+        setTotalReturnedAmount(0);
+      }
     } finally {
       setLoading(false);
     }
-  }, [partyCode, fromDate, toDate]);
+  }, [partyCode, fromDate, toDate, applyApiResponse]);
 
   useEffect(() => {
     if (!partyCode) {
@@ -135,30 +182,52 @@ function SalesReturnHistoryClient() {
   useEffect(() => {
     if (!partyCode) return;
     let cancelled = false;
-    getPartySaleInvDashboard(partyCode)
-      .then((res) => {
-        if (cancelled || !res?.success || !res?.data?.customer) return;
-        const c = res.data.customer;
-        const name = c.CUSTOMER_NAME || "—";
-        const initials =
-          name
-            .split(/\s+/)
-            .filter(Boolean)
-            .slice(0, 2)
-            .map((w) => w[0])
-            .join("")
-            .toUpperCase() || "—";
-        const location =
-          [c.ST, c.ADRES, c.DIVISION].filter(Boolean).join(", ") || "—";
-        setCustomerInfo((prev) => ({
-          ...prev,
-          name,
-          initials,
-          customerId: partyCode,
-          location,
-        }));
-      })
-      .catch(() => {});
+
+    const applyCustomer = (resData) => {
+      const c = resData?.customer;
+      if (!c) return;
+      const name = c.CUSTOMER_NAME || "—";
+      const initials =
+        name
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((w) => w[0])
+          .join("")
+          .toUpperCase() || "—";
+      const location =
+        [c.ST, c.ADRES, c.DIVISION].filter(Boolean).join(", ") || "—";
+      setCustomerInfo((prev) => ({
+        ...prev,
+        name,
+        initials,
+        customerId: partyCode,
+        location,
+      }));
+    };
+
+    (async () => {
+      /* Cache-first so the customer card renders offline too. */
+      try {
+        const cached = await getCachedPartyDashboard(partyCode, "");
+        if (!cancelled && cached?.data) applyCustomer(cached.data);
+      } catch {
+        /* ignore */
+      }
+
+      const online = typeof navigator !== "undefined" ? navigator.onLine : true;
+      if (!online) return;
+
+      try {
+        const res = await getPartySaleInvDashboard(partyCode);
+        if (cancelled || !res?.success || !res?.data) return;
+        applyCustomer(res.data);
+        cachePartyDashboard(partyCode, "", res).catch(() => {});
+      } catch {
+        /* ignore */
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
@@ -232,6 +301,16 @@ function SalesReturnHistoryClient() {
           <p className="text-xs sm:text-sm text-gray-500 mt-1">
             Detailed breakdown of returned items and credit notes
           </p>
+          {!isOnline && (
+            <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800 text-xs sm:text-sm">
+              Offline mode — showing the last cached returns for these filters.
+            </div>
+          )}
+          {isOnline && usingCache && (
+            <div className="mt-3 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-blue-800 text-xs sm:text-sm">
+              Showing cached data while refreshing from the server…
+            </div>
+          )}
         </div>
 
         {/* Customer Info Card */}

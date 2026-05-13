@@ -98,13 +98,13 @@ function formatPrice(val) {
  * Two corrections vs naive `STOCK` cap:
  *  1) UOM-aware: prefer `row.displayStock` (already converted to the line’s UOM
  *     via CON_RATE) over the raw catalog `stock`, which is in the primary UOM.
- *  2) Reserved-aware: the line’s own qty is already counted as reserved by this
- *     order, so it must be added back when capping. Otherwise a product whose
- *     entire stock was consumed by this same order looks like "out of stock".
+ *  2) Reserved-aware only while editing a submitted order: the line’s own qty
+ *     was already consumed by that order, so it must be added back when capping.
+ *     New draft carts must not add this value, otherwise users can exceed stock.
  */
-function maxQtyFromCartRow(item) {
+function maxQtyFromCartRow(item, includeReserved = false) {
   if (item == null) return null;
-  const reserved = Math.max(0, Number(item.quantity) || 0);
+  const reserved = includeReserved ? Math.max(0, Number(item.quantity) || 0) : 0;
   const uomAware = item.displayStock;
   if (uomAware != null && uomAware !== "") {
     const n = Number(uomAware);
@@ -300,6 +300,7 @@ export default function Cart() {
   const [qtyDrafts, setQtyDrafts] = useState({});
   const [reviewNavigationSaving, setReviewNavigationSaving] = useState(false);
   const priceSaveTimersRef = useRef({});
+  const allowReservedQtyInStockCap = isCartEditMode();
   const partyCodeForBack = getSaleOrderPartyCode();
   const trnsIdForBack = getCartTrnsId();
   const backToProductsHref = partyCodeForBack
@@ -656,7 +657,7 @@ export default function Cart() {
       const item = cartItems.find((i) => i.id === id);
       if (!item) return;
       if (increment > 0) {
-        const maxQ = maxQtyFromCartRow(item);
+        const maxQ = maxQtyFromCartRow(item, allowReservedQtyInStockCap);
         if (maxQ != null && item.quantity + increment > maxQ) {
           setError(INSUFFICIENT_STOCK_INCREASE_MSG);
           return;
@@ -695,7 +696,7 @@ export default function Cart() {
     const item = cartItems.find((i) => i.id === id);
     if (!item) return;
     if (increment > 0) {
-      const maxQ = maxQtyFromCartRow(item);
+      const maxQ = maxQtyFromCartRow(item, allowReservedQtyInStockCap);
       if (maxQ != null && item.quantity + increment > maxQ) {
         setError(INSUFFICIENT_STOCK_INCREASE_MSG);
         return;
@@ -728,7 +729,7 @@ export default function Cart() {
     if (!Number.isFinite(num) || num < 0) return;
     const item = cartItems.find((i) => i.id === id);
     if (!item) return;
-    const maxQ = maxQtyFromCartRow(item);
+    const maxQ = maxQtyFromCartRow(item, allowReservedQtyInStockCap);
     if (maxQ != null && num > maxQ) {
       setError(INSUFFICIENT_STOCK_INCREASE_MSG);
       return;
@@ -1017,7 +1018,7 @@ export default function Cart() {
       accessor: "quantity",
       width: "22%",
       render: (row) => {
-        const maxQ = maxQtyFromCartRow(row);
+        const maxQ = maxQtyFromCartRow(row, allowReservedQtyInStockCap);
         const atStockCap = maxQ != null && row.quantity >= maxQ;
         return (
         <div className="flex items-center justify-center gap-0.5 sm:gap-1">
