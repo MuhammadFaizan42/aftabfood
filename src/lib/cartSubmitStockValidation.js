@@ -79,6 +79,49 @@ export function findRawProductInSnapshot(products, itemId) {
 }
 
 /**
+ * Match a cart / order-summary row to a cached product row.
+ * Avoid using a line-only `id` (e.g. tl_id) when it equals `tlId` — that breaks stock caps on edit.
+ */
+export function findRawProductForCartLine(row, products) {
+  if (!row || !products?.length) return null;
+  const tl = row.tlId ?? row.TL_ID ?? row.line_id ?? row.LINE_ID;
+  const rowId = row.id;
+  const skipRowId =
+    tl != null &&
+    tl !== "" &&
+    rowId != null &&
+    String(rowId).trim() !== "" &&
+    String(rowId).trim() === String(tl).trim();
+
+  const candidates = [
+    row.itemIdForApi,
+    row.item_id,
+    row.product_id,
+    row.PRODUCT_ID,
+    row.sku,
+    row.SKU,
+    row.CODE,
+    row.ITEM_CODE,
+    row.PART_NO,
+    row.PK_INV_ID,
+    row.INV_ITEM_ID,
+    row.ITEM_ID,
+    row.PK_ID,
+  ];
+  if (!skipRowId) candidates.push(rowId);
+  const seen = new Set();
+  for (const c of candidates) {
+    const k = String(c ?? "").trim();
+    if (!k || k === "—") continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const p = findRawProductInSnapshot(products, k);
+    if (p) return p;
+  }
+  return null;
+}
+
+/**
  * @param {Array<object>} orderItems — rows with quantity, itemIdForApi, name, uom
  * @param {object[]} products — IDB / API product rows
  * @param {{ skipWhenProductMissing?: boolean, reservedAware?: boolean }} options
@@ -97,11 +140,10 @@ export function validateCartLinesAgainstProductSnapshot(orderItems, products, op
     const qty = round2(Number(row.quantity ?? row.qty ?? 0) || 0);
     if (qty <= 0) continue;
 
-    const itemId = String(row.itemIdForApi ?? row.id ?? row.sku ?? "").trim();
     const name =
       String(row.name ?? row.itemName ?? row.product_name ?? "Product").trim() || "Product";
 
-    const p = findRawProductInSnapshot(products, itemId);
+    const p = findRawProductForCartLine(row, products);
     if (!p) {
       if (skipWhenProductMissing) continue;
       issues.push({

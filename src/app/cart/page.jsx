@@ -35,7 +35,7 @@ import {
   formatCartStockBlockMessage,
   validateCartLinesAgainstProductSnapshot,
   getDisplayStockForProductRaw,
-  findRawProductInSnapshot,
+  findRawProductForCartLine,
 } from "@/lib/cartSubmitStockValidation";
 
 const QTY_STEP = 1;
@@ -57,9 +57,7 @@ function formatQty(n) {
 function attachUomAwareDisplayStock(rows, products) {
   if (!rows?.length || !products?.length) return rows;
   return rows.map((row) => {
-    const itemId = String(row.itemIdForApi ?? row.id ?? row.sku ?? "").trim();
-    if (!itemId) return row;
-    const p = findRawProductInSnapshot(products, itemId);
+    const p = findRawProductForCartLine(row, products);
     if (!p) return row;
     const lineUom = String(row.uom ?? row.UOM ?? "").trim();
     const displayStock = getDisplayStockForProductRaw(p, lineUom);
@@ -95,29 +93,33 @@ function formatPrice(val) {
 /**
  * Max orderable qty for a cart row; null = unknown (do not cap in UI).
  *
- * Two corrections vs naive `STOCK` cap:
- *  1) UOM-aware: prefer `row.displayStock` (already converted to the line’s UOM
- *     via CON_RATE) over the raw catalog `stock`, which is in the primary UOM.
- *  2) Reserved-aware only while editing a submitted order: the line’s own qty
- *     was already consumed by that order, so it must be added back when capping.
- *     New draft carts must not add this value, otherwise users can exceed stock.
+ * 1) UOM-aware: prefer `row.displayStock` (STOCK scaled to the line’s UOM) over raw `stock`.
+ * 2) Ceiling = catalog cap (same number as product listing). Line qty must never exceed it.
+ * 3) If snapshot shows 0 free but the line still has qty (e.g. submitted order / deducted cache),
+ *    allow staying at that qty so the user is not stuck; `+` still cannot go above the cap when cap > 0.
  */
-function maxQtyFromCartRow(item, includeReserved = false) {
+function maxQtyFromCartRow(item) {
   if (item == null) return null;
-  const reserved = includeReserved ? Math.max(0, Number(item.quantity) || 0) : 0;
+  const reserved = Math.max(0, Number(item.quantity) || 0);
+
+  let cap = null;
   const uomAware = item.displayStock;
   if (uomAware != null && uomAware !== "") {
     const n = Number(uomAware);
-    if (!Number.isNaN(n)) return Math.max(0, n + reserved);
+    if (!Number.isNaN(n)) cap = Math.max(0, n);
   }
-  const s = item.stock;
-  if (s == null || s === "") {
+  if (cap == null && item.stock != null && item.stock !== "") {
+    const n = Number(item.stock);
+    if (!Number.isNaN(n)) cap = Math.max(0, n);
+  }
+  if (cap == null) {
     if (item.inStock === false && reserved <= 0) return 0;
     return null;
   }
-  const n = Number(s);
-  if (Number.isNaN(n)) return null;
-  return Math.max(0, n + reserved);
+
+  if (reserved > cap) return cap;
+  if (cap <= 0 && reserved > 0) return reserved;
+  return cap;
 }
 
 /** True only when there is no stock (in the line’s UOM) AND nothing reserved by this order. */
@@ -151,23 +153,55 @@ function mapOrderSummary(res) {
   const d = res.data;
   const rawItems = d.items ?? d.lines ?? d.cart ?? d.order_items ?? d.line_items ?? d.data?.items ?? d.data?.lines ?? (Array.isArray(d) ? d : []);
   const rows = (Array.isArray(rawItems) ? rawItems : []).map((r, index) => {
+    // Align with getOrderLineItems — never use tl_id as product id (breaks stock match on edit).
     const rawItemId =
-      r.item_id ?? r.product_id ?? r.PRODUCT_ID ?? r.ITEM_CODE ?? r.CODE ?? r.sku ?? r.SKU
-      ?? r.PROD_ID ?? r.product_code ?? r.PART_NO ?? r.PK_INV_ID ?? r.id
-      ?? r.product?.id ?? r.product?.product_id ?? r.product?.code ?? r.product?.PRODUCT_ID
-      ?? r.INV_ITEM_ID ?? r.ITEM_ID ?? r.PK_ID ?? "";
-    const itemIdForApi = String(rawItemId).trim();
+      r.item_id ??
+      r.product_id ??
+      r.PRODUCT_ID ??
+      r.ITEM_CODE ??
+      r.CODE ??
+      r.sku ??
+      r.SKU ??
+      r.PROD_ID ??
+      r.product_code ??
+      r.PART_NO ??
+      r.PK_INV_ID ??
+      r.id ??
+      r.product?.id ??
+      r.product?.product_id ??
+      r.product?.code ??
+      r.product?.PRODUCT_ID ??
+      r.INV_ITEM_ID ??
+      r.ITEM_ID ??
+      r.PK_ID ??
+      "";
+    const fromProductFields = String(rawItemId ?? "").trim();
     const tlId = r.tl_id ?? r.TL_ID ?? r.line_id ?? r.LINE_ID ?? null;
     const name = r.product_name ?? r.PRODUCT_NAME ?? r.name ?? "—";
-    const sku = r.sku ?? r.SKU ?? r.PRODUCT_ID ?? r.CODE ?? r.ITEM_CODE ?? (itemIdForApi || "—");
+    const skuFromLine = String(
+      r.sku ??
+        r.SKU ??
+        r.PRODUCT_ID ??
+        r.product_id ??
+        r.ITEM_CODE ??
+        r.CODE ??
+        r.PROD_ID ??
+        r.PART_NO ??
+        r.PK_INV_ID ??
+        (fromProductFields || "") ??
+        "—",
+    ).trim();
+    const sku = skuFromLine && skuFromLine !== "" ? skuFromLine : "—";
     const uom = String(r.uom ?? r.UOM ?? r.unit_of_measure ?? r.UNIT_OF_MEASURE ?? "").trim();
     const qty = Number(r.qty ?? r.quantity ?? r.QTY ?? 0) || 0;
     const unitPrice = deriveUnitPriceFromSummaryLine(r);
     const lineTotal = Number(r.line_total ?? r.total ?? r.LC_AMT ?? unitPrice * qty) || 0;
     const rawImg = pickImageFromOrderLine(r);
     const img = rawImg ? resolveProductImageUrl(rawImg) : "";
-    const id = tlId ?? (itemIdForApi || `line-${index}`);
-    const apiId = itemIdForApi || (tlId != null && tlId !== "" ? String(tlId) : null);
+    const id = tlId ?? (fromProductFields || skuFromLine || `line-${index}`);
+    const apiId =
+      fromProductFields ||
+      (sku && sku !== "—" ? sku : null);
     return {
       id,
       itemIdForApi: apiId,
@@ -300,7 +334,6 @@ export default function Cart() {
   const [qtyDrafts, setQtyDrafts] = useState({});
   const [reviewNavigationSaving, setReviewNavigationSaving] = useState(false);
   const priceSaveTimersRef = useRef({});
-  const allowReservedQtyInStockCap = isCartEditMode();
   const partyCodeForBack = getSaleOrderPartyCode();
   const trnsIdForBack = getCartTrnsId();
   const backToProductsHref = partyCodeForBack
@@ -657,7 +690,7 @@ export default function Cart() {
       const item = cartItems.find((i) => i.id === id);
       if (!item) return;
       if (increment > 0) {
-        const maxQ = maxQtyFromCartRow(item, allowReservedQtyInStockCap);
+        const maxQ = maxQtyFromCartRow(item);
         if (maxQ != null && item.quantity + increment > maxQ) {
           setError(INSUFFICIENT_STOCK_INCREASE_MSG);
           return;
@@ -696,7 +729,7 @@ export default function Cart() {
     const item = cartItems.find((i) => i.id === id);
     if (!item) return;
     if (increment > 0) {
-      const maxQ = maxQtyFromCartRow(item, allowReservedQtyInStockCap);
+      const maxQ = maxQtyFromCartRow(item);
       if (maxQ != null && item.quantity + increment > maxQ) {
         setError(INSUFFICIENT_STOCK_INCREASE_MSG);
         return;
@@ -729,7 +762,7 @@ export default function Cart() {
     if (!Number.isFinite(num) || num < 0) return;
     const item = cartItems.find((i) => i.id === id);
     if (!item) return;
-    const maxQ = maxQtyFromCartRow(item, allowReservedQtyInStockCap);
+    const maxQ = maxQtyFromCartRow(item);
     if (maxQ != null && num > maxQ) {
       setError(INSUFFICIENT_STOCK_INCREASE_MSG);
       return;
@@ -1018,7 +1051,7 @@ export default function Cart() {
       accessor: "quantity",
       width: "22%",
       render: (row) => {
-        const maxQ = maxQtyFromCartRow(row, allowReservedQtyInStockCap);
+        const maxQ = maxQtyFromCartRow(row);
         const atStockCap = maxQ != null && row.quantity >= maxQ;
         return (
         <div className="flex items-center justify-center gap-0.5 sm:gap-1">

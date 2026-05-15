@@ -227,11 +227,30 @@ export function enrichOrderTableRows(rows, products) {
   if (!rows?.length) return rows;
   const imgMap = buildProductImageByIdMap(products);
   const rowMap = buildProductRowsMap(products);
-  const normalized = rows.map((r) => ({
-    ...r,
-    itemIdForApi: r.itemIdForApi ?? r.item_id ?? r.id ?? r.itemId,
-    id: r.id ?? r.itemId ?? r.itemIdForApi,
-  }));
+  const normalized = rows.map((r) => {
+    const tl = r.tlId ?? r.TL_ID ?? r.line_id ?? r.LINE_ID;
+    const idIsLineOnly =
+      tl != null &&
+      tl !== "" &&
+      r.id != null &&
+      String(r.id).trim() !== "" &&
+      String(r.id).trim() === String(tl).trim();
+    const skuOk = (s) => s != null && String(s).trim() !== "" && String(s).trim() !== "—";
+    const fromSku = skuOk(r.sku) ? String(r.sku).trim() : skuOk(r.SKU) ? String(r.SKU).trim() : null;
+    const resolvedItemId =
+      (r.itemIdForApi != null && String(r.itemIdForApi).trim() !== "" ? String(r.itemIdForApi).trim() : null) ??
+      (r.item_id != null && String(r.item_id).trim() !== "" ? String(r.item_id).trim() : null) ??
+      (r.product_id != null && String(r.product_id).trim() !== "" ? String(r.product_id).trim() : null) ??
+      (r.PRODUCT_ID != null && String(r.PRODUCT_ID).trim() !== "" ? String(r.PRODUCT_ID).trim() : null) ??
+      fromSku ??
+      (!idIsLineOnly && r.id != null && String(r.id).trim() !== "" ? String(r.id).trim() : null) ??
+      (r.itemId != null && String(r.itemId).trim() !== "" ? String(r.itemId).trim() : null);
+    return {
+      ...r,
+      itemIdForApi: resolvedItemId,
+      id: r.id ?? r.itemId ?? r.itemIdForApi,
+    };
+  });
   let withImg = enrichRowsWithCachedImages(normalized, imgMap);
   withImg = enrichRowsWithStock(withImg, products);
   withImg = enrichRowsWithNameMatch(withImg, products);
