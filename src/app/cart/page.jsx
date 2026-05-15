@@ -39,6 +39,8 @@ import {
 } from "@/lib/cartSubmitStockValidation";
 
 const QTY_STEP = 1;
+/** Debounce for server cart `updateCartItem` / price `rate` saves while typing or clicking +/- */
+const API_SAVE_DEBOUNCE_MS = 2000;
 function round2(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
@@ -334,6 +336,11 @@ export default function Cart() {
   const [qtyDrafts, setQtyDrafts] = useState({});
   const [reviewNavigationSaving, setReviewNavigationSaving] = useState(false);
   const priceSaveTimersRef = useRef({});
+  const qtyPersistTimersRef = useRef({});
+  const pendingQtyByIdRef = useRef({});
+  const cartItemsRef = useRef([]);
+  const trnsIdRef = useRef(null);
+  const isOfflineCartRef = useRef(false);
   const partyCodeForBack = getSaleOrderPartyCode();
   const trnsIdForBack = getCartTrnsId();
   const backToProductsHref = partyCodeForBack
@@ -343,6 +350,18 @@ export default function Cart() {
   useEffect(() => {
     setHasMounted(true);
   }, []);
+
+  useEffect(() => {
+    cartItemsRef.current = cartItems;
+  }, [cartItems]);
+
+  useEffect(() => {
+    trnsIdRef.current = trnsId;
+  }, [trnsId]);
+
+  useEffect(() => {
+    isOfflineCartRef.current = isOfflineCart;
+  }, [isOfflineCart]);
 
   useEffect(() => {
     try {
@@ -535,7 +554,100 @@ export default function Cart() {
     return () => document.removeEventListener("visibilitychange", handler);
   }, [loadSummary]);
 
+  const applyQtyLocally = (id, newQty) => {
+    const q = Math.max(0, round2(newQty));
+    setQtyDrafts((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setCartItems((prev) => {
+      const newRows =
+        q === 0
+          ? prev.filter((r) => r.id !== id)
+          : prev.map((r) => (r.id === id ? { ...r, quantity: q, lineTotal: round2(r.price * q) } : r));
+      const newSubtotal = newRows.reduce((s, r) => s + (r.lineTotal ?? 0), 0);
+      setSubtotal(newSubtotal);
+      setTax(0);
+      setDiscount(0);
+      setGrandTotal(newSubtotal);
+      return newRows;
+    });
+  };
+
+  const persistQtyToApi = async (id, newQty, resolvedMeta = null) => {
+    const tid = trnsIdRef.current;
+    if (!tid || String(tid).startsWith("offline_") || isOfflineCartRef.current) return;
+    const q = Math.max(0, round2(newQty));
+    if (q <= 0) return;
+
+    let validId;
+    let tlId = null;
+    if (resolvedMeta?.validId) {
+      validId = resolvedMeta.validId;
+      tlId = resolvedMeta.tlId ?? null;
+    } else {
+      const it = cartItemsRef.current.find((i) => i.id === id);
+      if (!it) return;
+      const candidate = (it.itemIdForApi ?? it.sku ?? it.id)?.toString?.() ?? "";
+      validId = candidate && candidate !== "—" ? candidate : String(it.id ?? "");
+      tlId = it.tlId;
+    }
+    if (!validId) return;
+
+    setActionLoading(id);
+    setError(null);
+    try {
+      await updateCartItem(
+        tid,
+        validId,
+        q,
+        tlId != null && tlId !== "" ? { tl_id: tlId } : {},
+      );
+      await loadSummary();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update cart.");
+      try {
+        await loadSummary();
+      } catch {
+        /* ignore */
+      }
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const scheduleQtyPersist = (id, newQty) => {
+    const q = Math.max(0, round2(newQty));
+    if (q <= 0) return;
+    pendingQtyByIdRef.current[id] = q;
+    if (qtyPersistTimersRef.current[id]) {
+      clearTimeout(qtyPersistTimersRef.current[id]);
+    }
+    qtyPersistTimersRef.current[id] = setTimeout(() => {
+      delete qtyPersistTimersRef.current[id];
+      const pending = pendingQtyByIdRef.current[id];
+      delete pendingQtyByIdRef.current[id];
+      if (pending !== undefined) {
+        void persistQtyToApi(id, pending);
+      }
+    }, API_SAVE_DEBOUNCE_MS);
+  };
+
+  async function flushPendingQtyChanges() {
+    Object.values(qtyPersistTimersRef.current).forEach((t) => clearTimeout(t));
+    qtyPersistTimersRef.current = {};
+    const pending = { ...pendingQtyByIdRef.current };
+    pendingQtyByIdRef.current = {};
+    for (const [rowId, q] of Object.entries(pending)) {
+      if (q > 0) {
+        await persistQtyToApi(rowId, q);
+      }
+    }
+  }
+
   async function flushPendingPriceChanges() {
+    await flushPendingQtyChanges();
     const entries = Object.entries(priceDrafts);
     if (!entries.length) return;
 
@@ -592,7 +704,7 @@ export default function Cart() {
         await flushPendingPriceChanges();
       } catch (e) {
         setError(
-          e instanceof Error ? e.message : "Could not save price changes. Try again.",
+          e instanceof Error ? e.message : "Could not save cart changes. Try again.",
         );
         setReviewNavigationSaving(false);
         return;
@@ -670,6 +782,7 @@ export default function Cart() {
   useEffect(() => {
     return () => {
       Object.values(priceSaveTimersRef.current).forEach((timer) => clearTimeout(timer));
+      Object.values(qtyPersistTimersRef.current).forEach((timer) => clearTimeout(timer));
     };
   }, []);
 
@@ -735,27 +848,11 @@ export default function Cart() {
         return;
       }
     }
-    const candidate = (item.itemIdForApi ?? item.sku ?? item.id)?.toString?.() ?? "";
-    const validId = candidate && candidate !== "—" ? candidate : String(item.id ?? "");
-    if (!validId) return;
     const newQty = Math.max(0, round2(item.quantity + increment));
-    setActionLoading(id);
-    setError(null);
-    try {
-      if (newQty === 0) {
-        await removeCartItem(trnsId, validId, item.tlId != null ? { tl_id: item.tlId } : {});
-      } else {
-        await updateCartItem(trnsId, validId, newQty, item.tlId != null ? { tl_id: item.tlId } : {});
-      }
-      await loadSummary();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update cart.");
-    } finally {
-      setActionLoading(null);
-    }
+    await handleQuantityChange(id, String(newQty));
   };
 
-  const handleQuantityChange = (id, value) => {
+  const handleQuantityChange = async (id, value) => {
     const raw = value;
     const parsed = raw === "" ? 0 : Number(raw);
     const num = Number.isFinite(parsed) ? Math.max(0, round2(parsed)) : 0;
@@ -769,7 +866,45 @@ export default function Cart() {
     }
     const newQty = num === 0 ? 0 : num;
     if (newQty === item.quantity) return;
-    updateQuantity(id, newQty - item.quantity);
+
+    if (isCachedOrderReadOnly) return;
+
+    if (isOfflineCart) {
+      await updateQuantity(id, newQty - item.quantity);
+      return;
+    }
+
+    if (!trnsId) return;
+
+    const candidate = (item.itemIdForApi ?? item.sku ?? item.id)?.toString?.() ?? "";
+    const validId = candidate && candidate !== "—" ? candidate : String(item.id ?? "");
+    if (!validId) return;
+
+    const clearQtyTimerForRow = () => {
+      if (qtyPersistTimersRef.current[id]) {
+        clearTimeout(qtyPersistTimersRef.current[id]);
+        delete qtyPersistTimersRef.current[id];
+      }
+      delete pendingQtyByIdRef.current[id];
+    };
+
+    if (newQty === 0) {
+      clearQtyTimerForRow();
+      setActionLoading(id);
+      setError(null);
+      try {
+        await removeCartItem(trnsId, validId, item.tlId != null ? { tl_id: item.tlId } : {});
+        await loadSummary();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to update cart.");
+      } finally {
+        setActionLoading(null);
+      }
+      return;
+    }
+
+    applyQtyLocally(id, newQty);
+    scheduleQtyPersist(id, newQty);
   };
 
   const handleQtyInputChange = (row, raw) => {
@@ -806,8 +941,69 @@ export default function Cart() {
       return;
     }
     const rounded = round2(parsed);
-    // Ensure final value is committed (and stock-capped) even if user ended with "."
-    handleQuantityChange(row.id, String(rounded));
+    const item = cartItems.find((i) => i.id === row.id);
+    if (!item) {
+      setQtyDrafts((prev) => {
+        const next = { ...prev };
+        delete next[row.id];
+        return next;
+      });
+      return;
+    }
+
+    const maxQ = maxQtyFromCartRow(item);
+    if (maxQ != null && rounded > maxQ) {
+      setError(INSUFFICIENT_STOCK_INCREASE_MSG);
+      setQtyDrafts((prev) => {
+        const next = { ...prev };
+        delete next[row.id];
+        return next;
+      });
+      return;
+    }
+
+    if (rounded === item.quantity) {
+      setQtyDrafts((prev) => {
+        const next = { ...prev };
+        delete next[row.id];
+        return next;
+      });
+      return;
+    }
+
+    if (isCachedOrderReadOnly) {
+      setQtyDrafts((prev) => {
+        const next = { ...prev };
+        delete next[row.id];
+        return next;
+      });
+      return;
+    }
+
+    if (isOfflineCart || !trnsId) {
+      await handleQuantityChange(row.id, String(rounded));
+      setQtyDrafts((prev) => {
+        const next = { ...prev };
+        delete next[row.id];
+        return next;
+      });
+      return;
+    }
+
+    if (qtyPersistTimersRef.current[row.id]) {
+      clearTimeout(qtyPersistTimersRef.current[row.id]);
+      delete qtyPersistTimersRef.current[row.id];
+    }
+    delete pendingQtyByIdRef.current[row.id];
+
+    if (rounded === 0) {
+      await handleQuantityChange(row.id, "0");
+    } else {
+      const candidate = (item.itemIdForApi ?? item.sku ?? item.id)?.toString?.() ?? "";
+      const validId = candidate && candidate !== "—" ? candidate : String(item.id ?? "");
+      applyQtyLocally(row.id, rounded);
+      await persistQtyToApi(row.id, rounded, { validId, tlId: item.tlId });
+    }
     setQtyDrafts((prev) => {
       const next = { ...prev };
       delete next[row.id];
@@ -903,7 +1099,7 @@ export default function Cart() {
     priceSaveTimersRef.current[id] = setTimeout(() => {
       persistPrice(id, nextPrice, { force: true });
       delete priceSaveTimersRef.current[id];
-    }, 500);
+    }, API_SAVE_DEBOUNCE_MS);
   };
 
   const handlePriceInputChange = (row, value) => {
@@ -968,6 +1164,11 @@ export default function Cart() {
     if (!trnsId) return;
     const item = cartItems.find((i) => i.id === id);
     if (!item) return;
+    if (qtyPersistTimersRef.current[id]) {
+      clearTimeout(qtyPersistTimersRef.current[id]);
+      delete qtyPersistTimersRef.current[id];
+    }
+    delete pendingQtyByIdRef.current[id];
     const candidate = (item.itemIdForApi ?? item.sku ?? item.id)?.toString?.() ?? "";
     const validId = candidate && candidate !== "—" ? candidate : String(item.id ?? "");
     if (!validId) return;
