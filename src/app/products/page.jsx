@@ -9,6 +9,7 @@ import { getProducts, addToCart, removeCartItem } from "@/services/shetApi";
 import { getSaleOrderPartyCode, setSaleOrderPartyCode, getCartTrnsId, setCartTrnsId, clearCartTrnsId } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getCachedProducts } from "@/lib/offline/bootstrapLoader";
+import { attachCachedImagesToProducts } from "@/lib/offline/productImageCache";
 import { getDB } from "@/lib/idb";
 import { addToOfflineCart, removeFromOfflineCart, getOfflineCart, updateOfflineCartItem } from "@/lib/offline/offlineCart";
 import { INSUFFICIENT_STOCK_INCREASE_MSG } from "@/lib/stockMessages";
@@ -242,7 +243,12 @@ function mapApiProduct(p) {
     batchNumbers,
     batchExpiryList,
     defaultBatch,
-    image: img && img.trim() ? img.trim() : DEFAULT_PRODUCT_IMAGE,
+    image:
+      (p._cachedImageDataUrl && String(p._cachedImageDataUrl).trim())
+        ? String(p._cachedImageDataUrl).trim()
+        : img && img.trim()
+          ? img.trim()
+          : DEFAULT_PRODUCT_IMAGE,
     sku,
     inStock: stock > 0,
     category,
@@ -492,10 +498,12 @@ function ProductsContent() {
           mapped = rawRows.map(mapApiProduct);
           if (seq === fetchSeqRef.current) setProducts(mapped);
         } catch (apiErr) {
-          const raw = await getCachedProducts({
-            category: opts.category,
-            search: opts.search,
-          });
+          const raw = await attachCachedImagesToProducts(
+            await getCachedProducts({
+              category: opts.category,
+              search: opts.search,
+            }),
+          );
           mapped = raw.map(mapApiProduct);
           if (seq === fetchSeqRef.current) {
             setProducts(mapped);
@@ -513,10 +521,12 @@ function ProductsContent() {
         }
         return mapped;
       }
-      const raw = await getCachedProducts({
-        category: opts.category,
-        search: opts.search,
-      });
+      const raw = await attachCachedImagesToProducts(
+        await getCachedProducts({
+          category: opts.category,
+          search: opts.search,
+        }),
+      );
       const mapped = raw.map(mapApiProduct);
       if (seq === fetchSeqRef.current) setProducts(mapped);
       return mapped;

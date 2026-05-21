@@ -111,6 +111,16 @@ export function getOrderLineItems(res) {
             r.amount ??
             qty * unitPrice,
         ) || 0;
+      const comments = String(
+        r.comments ??
+          r.COMMENTS ??
+          r.remarks ??
+          r.REMARKS ??
+          r.line_remarks ??
+          r.LINE_REMARKS ??
+          r.item_remarks ??
+          "",
+      ).trim();
       const _syncStatus = r._syncStatus;
       const _syncError = r._syncError;
       return {
@@ -122,6 +132,7 @@ export function getOrderLineItems(res) {
         ...(uom ? { uom } : {}),
         ...(batch ? { batch, batch_no: batch } : {}),
         ...(expDate ? { exp_date: expDate } : {}),
+        ...(comments ? { comments } : {}),
         image,
         qty,
         unitPrice,

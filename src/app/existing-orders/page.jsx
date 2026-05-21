@@ -25,8 +25,14 @@ import {
   getCachedCustomers,
   deleteOfflineOrder,
   getAllProductsSnapshot,
+  removeLineFromOfflineOrder,
 } from "@/lib/offline/bootstrapLoader";
 import { onSyncComplete, syncOneOfflineOrder } from "@/lib/offline/syncManager";
+import {
+  isPendingOfflineLocalRow,
+  filterOfflineRowsForDateRange,
+  mergeOrdersPinPendingOffline,
+} from "@/lib/offline/orderListMerge";
 
 function formatOrderDate(val) {
   if (val == null || val === "") return "—";
@@ -99,6 +105,32 @@ function mergeLineSyncFlags(lineItems, rawData) {
       ...li,
       ...(raw._syncStatus ? { _syncStatus: raw._syncStatus } : {}),
       ...(raw._syncError ? { _syncError: raw._syncError } : {}),
+      ...(raw.batch_no || raw.batch ? { batch: raw.batch_no ?? raw.batch } : {}),
+      ...(raw.exp_date || raw.expiry_date
+        ? { expDate: raw.exp_date ?? raw.expiry_date }
+        : {}),
+    };
+  });
+}
+
+/** Flag lines that cannot sync until batch + expiry are present on the offline order. */
+function annotateOfflineLineBatchFlags(items) {
+  return (items || []).map((li) => {
+    if (li._syncStatus === "synced" || li._syncStatus === "failed" || li._syncStatus === "batch_missing") {
+      return li;
+    }
+    const batch = String(li.batch ?? li.batch_no ?? "").trim();
+    const exp = String(li.expDate ?? li.exp_date ?? "").trim();
+    if (batch && batch.toLowerCase() !== "no batch" && exp) return li;
+    return {
+      ...li,
+      _syncStatus: "batch_missing",
+      _syncError:
+        !batch && !exp
+          ? "Batch No and Expiry Date are required before this line can sync."
+          : !batch || batch.toLowerCase() === "no batch"
+            ? "Batch No is missing — edit the order from cart/products and sync again."
+            : "Expiry date is missing — required for sync (DD-MM-YYYY).",
     };
   });
 }
@@ -138,14 +170,6 @@ function orderRowSortTimeMs(row) {
 function sortOrdersNewestFirst(list) {
   if (!Array.isArray(list) || list.length < 2) return list ? [...list] : [];
   return [...list].sort((a, b) => orderRowSortTimeMs(b) - orderRowSortTimeMs(a));
-}
-
-function isPendingOfflineLocalRow(row) {
-  const rawId = String(row?.id ?? row?._raw?.id ?? "");
-  return (
-    rawId.startsWith("offline_") &&
-    (row?._raw?.backend_trns_id == null || row?._raw?.backend_trns_id === "")
-  );
 }
 
 function rowMatchesStatusFilter(row, statusFilter) {
@@ -500,28 +524,15 @@ function ExistingOrdersContent() {
           // ignore cache errors
         }
         const offlineOnly = await getOfflineOrdersFromStore();
-        let offlineOrders = mapRawToOrders(offlineOnly);
-        offlineOrders = offlineOrders.filter((o) =>
-          inDateRange(
-            o._raw?.order_date ??
-              o._raw?.ORDER_DATE ??
-              o._raw?._orderDateStr ??
-              o._raw?.dated ??
-              o._raw?.DATED ??
-              o._raw?.created_at ??
-              o._raw?.date,
-            appliedFromDate,
-            appliedToDate,
-          ),
+        const offlineFiltered = filterOfflineRowsForDateRange(
+          offlineOnly,
+          inDateRange,
+          appliedFromDate,
+          appliedToDate,
         );
-        // Deduplicate: API uses trns_id; offline sync stores SO# in backend_trns_id — match all keys so one row is not shown twice.
+        const offlineOrders = mapRawToOrders(offlineFiltered);
         const apiKeys = collectApiOrderKeys(apiOrders);
-        const offlineDeduped = offlineOrders.filter((o) => {
-          const bid = o._raw?.backend_trns_id;
-          if (bid == null || bid === "") return true;
-          return !apiKeys.has(String(bid).trim());
-        });
-        let merged = sortOrdersNewestFirst([...apiOrders, ...offlineDeduped]);
+        let merged = mergeOrdersPinPendingOffline(apiOrders, offlineOrders, apiKeys, sortOrdersNewestFirst);
         if (partyCodeParam) {
           const pc = String(partyCodeParam).trim();
           merged = merged.filter((o) => String(o.partyCode ?? "").trim() === pc);
@@ -537,25 +548,20 @@ function ExistingOrdersContent() {
         for (const o of offlineRows) {
           if (o?.id != null && !byId.has(String(o.id))) byId.set(String(o.id), o);
         }
-        let list = mapRawToOrders([...byId.values()]);
-        list = list.filter((o) =>
-          inDateRange(
-            o._raw?.order_date ??
-              o._raw?.ORDER_DATE ??
-              o._raw?._orderDateStr ??
-              o._raw?.dated ??
-              o._raw?.DATED ??
-              o._raw?.created_at ??
-              o._raw?.date,
-            appliedFromDate,
-            appliedToDate,
-          ),
+        const mergedRaw = filterOfflineRowsForDateRange(
+          [...byId.values()],
+          inDateRange,
+          appliedFromDate,
+          appliedToDate,
         );
+        let list = mapRawToOrders(mergedRaw);
         if (partyCodeParam) {
           const pc = String(partyCodeParam).trim();
           list = list.filter((o) => String(o.partyCode ?? "").trim() === pc);
         }
-        setOrders(sortOrdersNewestFirst(list));
+        const pending = list.filter(isPendingOfflineLocalRow);
+        const rest = list.filter((o) => !isPendingOfflineLocalRow(o));
+        setOrders([...sortOrdersNewestFirst(pending), ...sortOrdersNewestFirst(rest)]);
       }
     } catch (err) {
       // If API fails but we still have offline/cached data, show it instead of a blank screen.
@@ -570,25 +576,20 @@ function ExistingOrdersContent() {
         for (const o of offlineRows) {
           if (o?.id != null && !byId.has(String(o.id))) byId.set(String(o.id), o);
         }
-        let list = mapRawToOrders([...byId.values()]);
-        list = list.filter((o) =>
-          inDateRange(
-            o._raw?.order_date ??
-              o._raw?.ORDER_DATE ??
-              o._raw?._orderDateStr ??
-              o._raw?.dated ??
-              o._raw?.DATED ??
-              o._raw?.created_at ??
-              o._raw?.date,
-            appliedFromDate,
-            appliedToDate,
-          ),
+        const mergedRaw = filterOfflineRowsForDateRange(
+          [...byId.values()],
+          inDateRange,
+          appliedFromDate,
+          appliedToDate,
         );
+        let list = mapRawToOrders(mergedRaw);
         if (partyCodeParam) {
           const pc = String(partyCodeParam).trim();
           list = list.filter((o) => String(o.partyCode ?? "").trim() === pc);
         }
-        setOrders(sortOrdersNewestFirst(list));
+        const pending = list.filter(isPendingOfflineLocalRow);
+        const rest = list.filter((o) => !isPendingOfflineLocalRow(o));
+        setOrders([...sortOrdersNewestFirst(pending), ...sortOrdersNewestFirst(rest)]);
       } catch {
         setOrders([]);
       }
@@ -659,6 +660,58 @@ function ExistingOrdersContent() {
     }
   }, [isOnline, loadOrders]);
 
+  const handleRemoveFailedLine = useCallback(
+    async (lineItem) => {
+      const oid = viewOrder?.offlineId;
+      if (!oid || !lineItem?.itemId) return;
+      setSyncRowError(null);
+      setLineRetryLoading(`remove-${lineItem.itemId}`);
+      try {
+        const ok = await removeLineFromOfflineOrder(oid, lineItem.itemId);
+        if (!ok) {
+          setSyncRowError("Could not remove this line from the offline order.");
+          return;
+        }
+        const cached = await getCachedOrderDetail(String(oid)).catch(() => null);
+        if (cached) {
+          let nextItems = getOrderLineItems({ success: true, data: cached });
+          const products = await getAllProductsSnapshot();
+          const online = typeof navigator !== "undefined" && navigator.onLine;
+          try {
+            nextItems = await enrichOrderLinesWithImages(nextItems, products, {
+              hydrateFromApi: online,
+            });
+          } catch {
+            /* keep */
+          }
+          nextItems = annotateOfflineLineBatchFlags(mergeLineSyncFlags(nextItems, cached));
+          const newAmount = (nextItems || []).reduce(
+            (s, i) => s + (Number(i.lineAmount) || Number(i.qty) * Number(i.unitPrice) || 0),
+            0,
+          );
+          setViewOrder((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  items: nextItems,
+                  amount: newAmount,
+                  raw: cached,
+                }
+              : null,
+          );
+        }
+        await loadOrders();
+        setSyncMessage("Line removed from offline order.");
+        setTimeout(() => setSyncMessage(null), 4000);
+      } catch (e) {
+        setSyncRowError(e instanceof Error ? e.message : "Could not remove line.");
+      } finally {
+        setLineRetryLoading(null);
+      }
+    },
+    [viewOrder?.offlineId, loadOrders],
+  );
+
   const handleRetrySyncLines = useCallback(async () => {
     const oid = viewOrder?.offlineId;
     if (!oid || !isOnline) return;
@@ -683,7 +736,7 @@ function ExistingOrdersContent() {
         } catch {
           /* keep */
         }
-        nextItems = mergeLineSyncFlags(nextItems, cached);
+        nextItems = annotateOfflineLineBatchFlags(mergeLineSyncFlags(nextItems, cached));
         setViewOrder((prev) =>
           prev
             ? {
@@ -821,10 +874,13 @@ function ExistingOrdersContent() {
       }
       const rawData = sourceRes?.data ?? null;
       items = mergeLineSyncFlags(Array.isArray(items) ? items : [], rawData);
+      const oid = String(orderId);
+      if (oid.startsWith("offline_")) {
+        items = annotateOfflineLineBatchFlags(items);
+      }
       if (!items.length) {
         setViewError("No item details found for this order.");
       }
-      const oid = String(orderId);
       setViewOrder({
         orderId: row.orderId,
         date: row.orderDate,
@@ -1010,6 +1066,14 @@ function ExistingOrdersContent() {
           batch: String(it.batch ?? it.batch_no ?? it.BATCH_NO ?? "").trim() || "—",
           uom: String(it.uom ?? it.UOM ?? "").trim() || "—",
           image: String(it.image ?? it.image_url ?? it.IMAGE_URL ?? "").trim(),
+          comments: String(
+            it.comments ??
+              it.COMMENTS ??
+              it.remarks ??
+              it.REMARKS ??
+              it.line_remarks ??
+              "",
+          ).trim(),
         };
       });
 
@@ -1201,19 +1265,22 @@ function ExistingOrdersContent() {
               <button
                 type="button"
                 disabled={syncBusy || !isOnline}
-                className="cursor-pointer flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 border border-emerald-200 rounded px-3 py-1.5 hover:bg-emerald-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="cursor-pointer p-1.5 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 border border-emerald-200 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => handleSyncOfflineRow(row)}
-                title={isOnline ? "Sync offline order to backend" : "Go online to sync"}
+                title={isOnline ? "Sync offline order to server" : "Go online to sync"}
+                aria-label="Sync offline order"
               >
                 {syncBusy ? (
-                  <span className="animate-pulse">Syncing...</span>
+                  <Spinner size={16} className="text-emerald-700" />
                 ) : (
-                  <>
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v6h6M20 20v-6h-6M20 8a8 8 0 00-14.906-3.5M4 16a8 8 0 0014.906 3.5" />
-                    </svg>
-                    Sync
-                  </>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v6h6M20 20v-6h-6M20 8a8 8 0 00-14.906-3.5M4 16a8 8 0 0014.906 3.5"
+                    />
+                  </svg>
                 )}
               </button>
             )}
@@ -1355,6 +1422,28 @@ function ExistingOrdersContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
           </button>
+          {isPendingOfflineLocalRow(row) && (
+            <button
+              type="button"
+              className="cursor-pointer p-2 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={isOnline ? "Sync offline order to server" : "Go online to sync this order"}
+              disabled={syncRowLoading === row.id || !isOnline}
+              onClick={() => handleSyncOfflineRow(row)}
+            >
+              {syncRowLoading === row.id ? (
+                <Spinner size={18} className="text-emerald-700" />
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v6h6M20 20v-6h-6M20 8a8 8 0 00-14.906-3.5M4 16a8 8 0 0014.906 3.5"
+                  />
+                </svg>
+              )}
+            </button>
+          )}
           {row.canEdit && (
             <button
               className="cursor-pointer p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
@@ -1629,12 +1718,14 @@ function ExistingOrdersContent() {
               <div className="px-5 py-4 overflow-y-auto max-h-[calc(90vh-72px)]">
                 {viewOrder.offlineId &&
                   (Array.isArray(viewOrder.items) ? viewOrder.items : []).some(
-                    (it) => it._syncStatus === "failed",
+                    (it) =>
+                      it._syncStatus === "failed" || it._syncStatus === "batch_missing",
                   ) && (
                     <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-sm text-amber-900">
                       <span className="font-medium">Some lines did not sync to the server.</span>{" "}
-                      When stock is available again, use{" "}
-                      <span className="font-medium">Retry sync</span> on each line or below.
+                      Fix batch/expiry or stock issues, then use{" "}
+                      <span className="font-medium">Retry</span> on each line — or{" "}
+                      <span className="font-medium">Remove</span> to drop a line from this offline order.
                     </div>
                   )}
                 {(Array.isArray(viewOrder.items) ? viewOrder.items : []).length === 0 ? (
@@ -1692,22 +1783,63 @@ function ExistingOrdersContent() {
                               Synced to server (draft)
                             </div>
                           )}
+                          {it._syncStatus === "batch_missing" && viewOrder.offlineId && (
+                            <div className="mt-2 rounded-md bg-orange-50 border border-orange-200 px-2 py-2 text-xs text-orange-900">
+                              <span className="inline-flex font-medium text-orange-800 bg-orange-100 border border-orange-200 rounded px-1.5 py-0.5 mb-1">
+                                Batch / expiry missing
+                              </span>
+                              {it._syncError ? (
+                                <div className="text-orange-800/90">{String(it._syncError)}</div>
+                              ) : null}
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  disabled={Boolean(lineRetryLoading) || !isOnline}
+                                  onClick={() => handleRetrySyncLines()}
+                                  className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-orange-300 bg-white px-2.5 py-1 text-xs font-medium text-orange-900 hover:bg-orange-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {lineRetryLoading === viewOrder.offlineId ? "Retrying…" : "Retry sync"}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={Boolean(lineRetryLoading)}
+                                  onClick={() => handleRemoveFailedLine(it)}
+                                  className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {lineRetryLoading === `remove-${it.itemId}` ? "Removing…" : "Remove line"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                           {it._syncStatus === "failed" && viewOrder.offlineId && (
                             <div className="mt-2 rounded-md bg-amber-50 border border-amber-200 px-2 py-2 text-xs text-amber-900">
-                              <div className="font-medium">
-                                Not synced — qty may already be consumed or stock unavailable.
-                              </div>
+                              <span className="inline-flex font-medium text-amber-800 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5 mb-1">
+                                Not synced
+                              </span>
                               {it._syncError ? (
-                                <div className="mt-1 text-amber-800/90">{String(it._syncError)}</div>
-                              ) : null}
-                              <button
-                                type="button"
-                                disabled={Boolean(lineRetryLoading) || !isOnline}
-                                onClick={() => handleRetrySyncLines()}
-                                className="mt-2 cursor-pointer inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                {lineRetryLoading ? "Retrying…" : "Retry sync"}
-                              </button>
+                                <div className="text-amber-800/90">{String(it._syncError)}</div>
+                              ) : (
+                                <div>Stock or server error — try again when online.</div>
+                              )}
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  disabled={Boolean(lineRetryLoading) || !isOnline}
+                                  onClick={() => handleRetrySyncLines()}
+                                  className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Retry syncing this order to the server"
+                                >
+                                  {lineRetryLoading === viewOrder.offlineId ? "Retrying…" : "Retry sync"}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={Boolean(lineRetryLoading)}
+                                  onClick={() => handleRemoveFailedLine(it)}
+                                  className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {lineRetryLoading === `remove-${it.itemId}` ? "Removing…" : "Remove line"}
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>

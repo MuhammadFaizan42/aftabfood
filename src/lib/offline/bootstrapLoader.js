@@ -4,6 +4,7 @@
 import { putMany, putOne, putManyMerge, getAll, getByKey, deleteByKey, setMeta, getMeta } from "../idb";
 import { getProducts, getCustomers, getPartySaleInvDashboard, getExistingOrders, getSaleRoutes } from "@/services/shetApi";
 import { setOfflineCart } from "./offlineCart";
+import { prefetchProductImages, recordProductImagePrefetchStats } from "./productImageCache";
 
 const META_LAST_SYNC = "master_last_sync";
 const SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour – refresh cache
@@ -174,6 +175,13 @@ export async function bootstrapMasterData(force = false) {
   await loadSaleRoutes().catch((err) => {
     console.warn("[offline] Bootstrap sale routes failed:", err?.message);
   });
+  try {
+    const products = await getAllProductsSnapshot();
+    const imgStats = await prefetchProductImages(products);
+    await recordProductImagePrefetchStats(imgStats);
+  } catch (err) {
+    console.warn("[offline] Product image prefetch failed:", err?.message);
+  }
   await setMeta(META_LAST_SYNC, now).catch(() => {});
 }
 
@@ -687,8 +695,12 @@ export async function applyOfflineOrderSyncResult(uuid, apiResult) {
       it._syncStatus = "synced";
       delete it._syncError;
     } else {
-      it._syncStatus = "failed";
-      it._syncError = lr.message || "Could not sync line";
+      const msg = lr.message || "Could not sync line";
+      const isBatch =
+        lr.code === "batch_missing" ||
+        /batch\s*no|batch_no|exp_date|expiry/i.test(String(msg));
+      it._syncStatus = isBatch ? "batch_missing" : "failed";
+      it._syncError = msg;
     }
   }
 
@@ -718,6 +730,56 @@ export async function getExistingOrderRow(orderId) {
  * Build payload for sync API from offline existing orders (only those without backend_trns_id yet).
  * Returns array of { uuid, customer_id, items: [{ item_id, qty, unit_price, uom?, comments? }], delivery_date?, pay_terms?, discount?, remarks? }.
  */
+/**
+ * Remove a failed / unwanted line from a pending offline_* order (local only).
+ */
+export async function removeLineFromOfflineOrder(offlineId, itemKey) {
+  const oid = String(offlineId ?? "").trim();
+  const key = String(itemKey ?? "").trim();
+  if (!oid.startsWith(OFFLINE_ORDER_ID_PREFIX) || !key) return false;
+
+  const detailRow = await getByKey("orderDetails", oid);
+  if (!detailRow?.data || typeof detailRow.data !== "object") return false;
+
+  const data = { ...detailRow.data };
+  const prevItems = Array.isArray(data.items) ? data.items : [];
+  const keyOf = (it) =>
+    String(it.item_id ?? it.product_id ?? it.sku ?? it.itemIdForApi ?? "").trim();
+  const items = prevItems.filter((it) => keyOf(it) !== key);
+  if (items.length === prevItems.length) return false;
+
+  const subtotal = items.reduce((s, it) => {
+    const qty = Number(it.qty ?? it.quantity ?? 0) || 0;
+    const up = Number(it.unit_price ?? it.unitPrice ?? 0) || 0;
+    const lt = Number(it.line_total ?? it.lineTotal ?? 0) || up * qty;
+    return s + lt;
+  }, 0);
+
+  data.items = items;
+  data.subtotal = subtotal;
+  data.sub_total = subtotal;
+  data.grand_total = subtotal;
+  data.total = subtotal;
+
+  await putOne("orderDetails", {
+    trns_id: oid,
+    data,
+    updatedAt: Date.now(),
+  });
+
+  const existing = await getByKey("existingOrders", oid);
+  if (existing) {
+    await putOne("existingOrders", {
+      ...existing,
+      amount: subtotal,
+      AMOUNT: subtotal,
+      total: subtotal,
+      grand_total: subtotal,
+    });
+  }
+  return true;
+}
+
 export async function getOfflineOrdersForSync() {
   const offline = await getOfflineOrdersFromStore();
   const pending = offline.filter((o) => o.backend_trns_id == null);

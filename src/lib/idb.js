@@ -5,7 +5,7 @@
 import { openDB } from "idb";
 
 const DB_NAME = "aftabfood-offline";
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 export async function getDB() {
   return openDB(DB_NAME, DB_VERSION, {
@@ -56,6 +56,9 @@ export async function getDB() {
         if (!db.objectStoreNames.contains("salesReturnCache")) {
           db.createObjectStore("salesReturnCache", { keyPath: "key" });
         }
+      }
+      if (newVer >= 8 && !db.objectStoreNames.contains("productImages")) {
+        db.createObjectStore("productImages", { keyPath: "id" });
       }
     },
   });

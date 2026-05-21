@@ -72,6 +72,14 @@ function mapOrderDetails(res) {
     batch: String(r.batch_no ?? r.BATCH_NO ?? r.batch ?? "").trim() || "—",
     uom: String(r.uom ?? r.UOM ?? "").trim() || "—",
     image: String(r.IMAGE_URL ?? r.image_url ?? r.image ?? "").trim(),
+    comments: String(
+      r.comments ??
+        r.COMMENTS ??
+        r.remarks ??
+        r.REMARKS ??
+        r.line_remarks ??
+        "",
+    ).trim(),
   }));
   const subtotal = Number(d.subtotal ?? d.sub_total ?? 0) || items.reduce((s, r) => s + (r.total || 0), 0);
   const tax = Number(d.tax ?? 0) || 0;

@@ -80,6 +80,27 @@ export async function POST(request) {
           continue;
         }
 
+        const batchNo = String(it.batch_no ?? "").trim();
+        const expDate = String(it.exp_date ?? it.expiry_date ?? "").trim();
+        if (!batchNo || batchNo.toLowerCase() === "no batch") {
+          lineResults.push({
+            item_id: ikey,
+            success: false,
+            code: "batch_missing",
+            message: "Batch No is required before this line can sync.",
+          });
+          continue;
+        }
+        if (!expDate) {
+          lineResults.push({
+            item_id: ikey,
+            success: false,
+            code: "batch_missing",
+            message: "Expiry date is required (DD-MM-YYYY) before this line can sync.",
+          });
+          continue;
+        }
+
         const addBody = {
           customer_id: String(customerId),
           item_id: ikey,

@@ -2,7 +2,7 @@
 const CACHE_NAME = "aftabfood-v9";
 const IMAGE_CACHE = "aftabfood-images-v1";
 const DB_NAME = "aftabfood-offline";
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 const SYNC_TAG = "sync-orders";
 
 self.addEventListener("install", (event) => {

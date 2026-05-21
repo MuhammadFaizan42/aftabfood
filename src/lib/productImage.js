@@ -374,11 +374,34 @@ export async function hydrateLineImagesFromProductApi(rows) {
   return out;
 }
 
+/** Use IndexedDB product image blobs when offline (listing prefetch). */
+async function enrichRowsWithOfflineImageCache(rows) {
+  if (typeof navigator === "undefined" || navigator.onLine) return rows;
+  try {
+    const { getProductImageUrlMap } = await import("@/lib/offline/productImageCache");
+    const map = await getProductImageUrlMap();
+    if (!map?.size) return rows;
+    return rows.map((row) => {
+      const keys = [row.itemIdForApi, row.sku, row.item_id, row.id, row.itemId]
+        .filter((k) => k != null && String(k).trim() !== "" && String(k) !== "—")
+        .map((k) => String(k).trim());
+      for (const k of keys) {
+        const hit = map.get(k);
+        if (hit) return { ...row, image: hit };
+      }
+      return row;
+    });
+  } catch {
+    return rows;
+  }
+}
+
 /** IndexedDB enrich + optional live product.php lookup for remaining placeholders */
 export async function enrichOrderLinesWithImages(rows, products, options = {}) {
   const { hydrateFromApi = true } = options;
   if (!rows?.length) return rows;
-  const base = enrichOrderTableRows(rows, products ?? []);
+  let base = enrichOrderTableRows(rows, products ?? []);
+  base = await enrichRowsWithOfflineImageCache(base);
   if (!hydrateFromApi) return base;
   return hydrateLineImagesFromProductApi(base);
 }

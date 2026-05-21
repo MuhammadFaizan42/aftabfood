@@ -8,7 +8,7 @@ import { normalizeOrderCustomer, displayCustomerField } from "@/lib/orderCustome
  *   orderDate?: string;
  *   customer?: Record<string, unknown>;
  *   orderRoot?: Record<string, unknown>;
- *   items?: Array<{ name?: string; quantity?: number; unitPrice?: number; total?: number; sku?: string; batch?: string; uom?: string; image?: string }>;
+ *   items?: Array<{ name?: string; quantity?: number; unitPrice?: number; total?: number; sku?: string; batch?: string; uom?: string; image?: string; comments?: string; remarks?: string }>;
  *   subtotal?: number;
  *   tax?: number;
  *   discount?: number;
@@ -161,9 +161,27 @@ export async function buildOrderDetailPdfBlob(payload) {
 
   const imgBox = 20;
   const textX = margin + imgBox + 4;
-  const rowMinH = 22;
+  const nameW = pageW - textX - margin;
+
+  function lineRemarksText(it) {
+    return String(it.comments ?? it.remarks ?? it.COMMENTS ?? it.REMARKS ?? "").trim();
+  }
 
   for (const it of items) {
+    const remarkStr = lineRemarksText(it);
+    const remarkLines = remarkStr
+      ? (() => {
+          const w = doc.splitTextToSize(`Remarks: ${remarkStr.slice(0, 300)}`, nameW);
+          return Array.isArray(w) ? w.slice(0, 4) : [String(w)];
+        })()
+      : [];
+    const nameLinesPreview = doc.splitTextToSize(String(it.name || "—").slice(0, 220), nameW);
+    const nameLineCount = (Array.isArray(nameLinesPreview) ? nameLinesPreview.slice(0, 2) : [String(nameLinesPreview)]).length;
+    const rowMinH = Math.max(
+      22,
+      3.5 + nameLineCount * 3.6 + 1 + 3.8 + remarkLines.length * 3.4 + 6,
+    );
+
     ensureSpace(rowMinH + 6);
     const topY = y;
 
@@ -193,7 +211,6 @@ export async function buildOrderDetailPdfBlob(payload) {
     let ty = topY + 3.5;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
-    const nameW = pageW - textX - margin;
     const nameLines = doc.splitTextToSize(String(it.name || "—").slice(0, 220), nameW);
     const nameSlice = Array.isArray(nameLines) ? nameLines.slice(0, 2) : [String(nameLines)];
     doc.text(nameSlice, textX, ty);
@@ -207,6 +224,17 @@ export async function buildOrderDetailPdfBlob(payload) {
     const uom = String(it.uom ?? "—").slice(0, 16);
     doc.text(`SKU: ${sku}    Batch: ${batch}    UOM: ${uom}`, textX, ty);
     ty += 3.8;
+    if (remarkLines.length) {
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7);
+      doc.setTextColor(75, 85, 99);
+      for (const ln of remarkLines.slice(0, 4)) {
+        doc.text(ln, textX, ty);
+        ty += 3.4;
+      }
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(0);
+    }
     const qty = Number(it.quantity) || 0;
     const up = Number(it.unitPrice) || 0;
     const rawLine = Number(it.total);
