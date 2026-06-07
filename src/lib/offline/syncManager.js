@@ -8,7 +8,12 @@ import {
   getOfflineOrdersForSync,
   updateOfflineOrderWithBackendTrnsId,
   applyOfflineOrderSyncResult,
+  getCachedOrderDetail,
 } from "./bootstrapLoader";
+import {
+  buildPartialSyncMessageFromItems,
+  buildPartialSyncMessageFromLineResults,
+} from "./offlineSyncMessages";
 import { getAuthToken } from "../api";
 
 const SYNC_API = "/api/sales/sync-orders";
@@ -25,6 +30,31 @@ export function onSyncComplete(callback) {
 
 function notifySyncComplete(result) {
   syncCallbacks.forEach((cb) => cb(result));
+}
+
+async function resolvePartialSyncMessage(uuid, apiResult, orderItems) {
+  try {
+    const cached = await getCachedOrderDetail(String(uuid));
+    const items = cached?.items;
+    const hasFailed =
+      Array.isArray(items) &&
+      items.some((it) => {
+        const s = String(it._syncStatus ?? "").toLowerCase();
+        return s === "failed" || s === "batch_missing";
+      });
+    if (hasFailed) return buildPartialSyncMessageFromItems(items);
+  } catch {
+    /* ignore */
+  }
+  const fromResults = buildPartialSyncMessageFromLineResults(
+    orderItems,
+    apiResult?.line_results,
+  );
+  if (fromResults) return fromResults;
+  return (
+    apiResult?.message ||
+    "Some lines could not sync. Open View to fix batch, expiry, or stock and retry."
+  );
 }
 
 export async function syncPendingOrders() {
@@ -175,7 +205,7 @@ export async function syncOneOfflineOrder(offlineId) {
     }
 
     if (r.partial) {
-      const msg = r.message || "Some lines could not sync. Check stock and retry.";
+      const msg = await resolvePartialSyncMessage(r.uuid, r, target.items);
       notifySyncComplete({
         synced: 0,
         failed: 0,
@@ -185,13 +215,20 @@ export async function syncOneOfflineOrder(offlineId) {
       return { synced: 0, failed: 0, partial: true, message: msg };
     }
 
+    const failMsg = await resolvePartialSyncMessage(r.uuid, r, target.items);
     notifySyncComplete({
       synced: 0,
       failed: 1,
       partial: false,
-      error: r?.message || "Sync failed",
+      error: failMsg || r?.message || "Sync failed",
+      message: failMsg || r?.message || "Sync failed",
     });
-    return { synced: 0, failed: 1, partial: false };
+    return {
+      synced: 0,
+      failed: 1,
+      partial: false,
+      message: failMsg || r?.message || "Sync failed",
+    };
   } catch (err) {
     notifySyncComplete({ synced: 0, failed: 1, partial: false, error: err?.message });
     return { synced: 0, failed: 1, partial: false };

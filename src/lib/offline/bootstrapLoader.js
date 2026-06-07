@@ -1,7 +1,7 @@
 /**
  * Bootstrap loader – fetch master data when online and store in IndexedDB
  */
-import { putMany, putOne, putManyMerge, getAll, getByKey, deleteByKey, setMeta, getMeta } from "../idb";
+import { itemKeyOf, prefixSyncErrorWithItemName } from "./offlineSyncMessages";
 import { getProducts, getCustomers, getPartySaleInvDashboard, getExistingOrders, getSaleRoutes } from "@/services/shetApi";
 import { setOfflineCart } from "./offlineCart";
 import { prefetchProductImages, recordProductImagePrefetchStats } from "./productImageCache";
@@ -682,14 +682,12 @@ export async function applyOfflineOrderSyncResult(uuid, apiResult) {
 
   const data = { ...row.data };
   const items = Array.isArray(data.items) ? data.items.map((x) => ({ ...x })) : [];
-  const keyOf = (it) =>
-    String(it.item_id ?? it.product_id ?? it.sku ?? it.itemIdForApi ?? "").trim();
 
   for (const lr of apiResult.line_results) {
     if (lr.skipped || lr.already_synced) continue;
     const id = String(lr.item_id ?? "").trim();
     if (!id) continue;
-    const it = items.find((x) => keyOf(x) === id);
+    const it = items.find((x) => itemKeyOf(x) === id);
     if (!it) continue;
     if (lr.success === true) {
       it._syncStatus = "synced";
@@ -700,7 +698,7 @@ export async function applyOfflineOrderSyncResult(uuid, apiResult) {
         lr.code === "batch_missing" ||
         /batch\s*no|batch_no|exp_date|expiry/i.test(String(msg));
       it._syncStatus = isBatch ? "batch_missing" : "failed";
-      it._syncError = msg;
+      it._syncError = prefixSyncErrorWithItemName(it, msg);
     }
   }
 
@@ -791,6 +789,7 @@ export async function getOfflineOrdersForSync() {
     const rawItems = data?.items ?? [];
     const items = rawItems.map((it) => ({
       item_id: String(it.item_id ?? it.id ?? it.product_id ?? it.sku ?? ""),
+      product_name: it.product_name ?? it.name ?? "",
       qty: Number(it.qty ?? it.quantity ?? 0) || 0,
       unit_price: Number(it.unit_price ?? it.unitPrice ?? 0) || 0,
       uom: it.uom ?? "",

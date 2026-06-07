@@ -28,6 +28,7 @@ import {
   removeLineFromOfflineOrder,
 } from "@/lib/offline/bootstrapLoader";
 import { onSyncComplete, syncOneOfflineOrder } from "@/lib/offline/syncManager";
+import { prefixSyncErrorWithItemName } from "@/lib/offline/offlineSyncMessages";
 import {
   isPendingOfflineLocalRow,
   filterOfflineRowsForDateRange,
@@ -122,15 +123,15 @@ function annotateOfflineLineBatchFlags(items) {
     const batch = String(li.batch ?? li.batch_no ?? "").trim();
     const exp = String(li.expDate ?? li.exp_date ?? "").trim();
     if (batch && batch.toLowerCase() !== "no batch" && exp) return li;
+    const rawError = !batch && !exp
+      ? "Batch No and Expiry Date are required before this line can sync."
+      : !batch || batch.toLowerCase() === "no batch"
+        ? "Batch No is missing — edit the order from cart/products and sync again."
+        : "Expiry date is missing — required for sync (DD-MM-YYYY).";
     return {
       ...li,
       _syncStatus: "batch_missing",
-      _syncError:
-        !batch && !exp
-          ? "Batch No and Expiry Date are required before this line can sync."
-          : !batch || batch.toLowerCase() === "no batch"
-            ? "Batch No is missing — edit the order from cart/products and sync again."
-            : "Expiry date is missing — required for sync (DD-MM-YYYY).",
+      _syncError: prefixSyncErrorWithItemName(li, rawError),
     };
   });
 }
@@ -613,15 +614,15 @@ function ExistingOrdersContent() {
         }
       }
       if (result?.partial) {
-        setSyncMessage(
-          result?.message || "Some order lines could not sync (e.g. stock). Open View to retry.",
+        setSyncRowError(
+          result?.message || "Some order lines could not sync. Open View to retry.",
         );
         loadOrders();
-        setTimeout(() => setSyncMessage(null), 6000);
+        setTimeout(() => setSyncRowError(null), 10000);
       }
       if (result?.failed > 0 && result?.synced === 0 && !result?.partial) {
-        setSyncMessage(result?.error || "Some orders could not be synced.");
-        setTimeout(() => setSyncMessage(null), 5000);
+        setSyncRowError(result?.message || result?.error || "Some orders could not be synced.");
+        setTimeout(() => setSyncRowError(null), 10000);
       }
     });
     return unsubscribe;
@@ -647,12 +648,13 @@ function ExistingOrdersContent() {
         setSyncMessage("Order synced. SO number assigned.");
         setTimeout(() => setSyncMessage(null), 4000);
       } else if (res?.partial) {
-        setSyncMessage(
-          res?.message || "Some lines could not sync (stock). Open View to retry or adjust.",
+        setSyncRowError(
+          res?.message || "Some lines could not sync. Open View to fix batch, expiry, or stock and retry.",
         );
-        setTimeout(() => setSyncMessage(null), 6000);
+        setTimeout(() => setSyncRowError(null), 10000);
       } else {
         setSyncRowError(res?.message || "Could not sync this order. Try again.");
+        setTimeout(() => setSyncRowError(null), 10000);
       }
     } finally {
       setSyncRowLoading(null);
@@ -748,8 +750,10 @@ function ExistingOrdersContent() {
         );
       }
       if (res?.partial) {
-        setSyncMessage(res?.message || "Some lines still pending. Check stock below.");
-        setTimeout(() => setSyncMessage(null), 6000);
+        setSyncRowError(
+          res?.message || "Some lines still pending. Fix batch, expiry, or stock and retry.",
+        );
+        setTimeout(() => setSyncRowError(null), 10000);
       }
     } finally {
       setLineRetryLoading(null);
@@ -1667,6 +1671,18 @@ function ExistingOrdersContent() {
         {syncMessage && (
           <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-2 text-green-800 text-sm mb-4">
             {syncMessage}
+          </div>
+        )}
+        {syncRowError && (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-900 text-sm mb-4 flex items-start justify-between gap-2">
+            <span className="whitespace-pre-line">{syncRowError}</span>
+            <button
+              type="button"
+              onClick={() => setSyncRowError(null)}
+              className="text-amber-700 hover:text-amber-950 font-medium flex-shrink-0"
+            >
+              ×
+            </button>
           </div>
         )}
         {pdfError && (
