@@ -11,7 +11,7 @@ import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getCachedProducts } from "@/lib/offline/bootstrapLoader";
 import { attachCachedImagesToProducts } from "@/lib/offline/productImageCache";
 import { getDB } from "@/lib/idb";
-import { addToOfflineCart, removeFromOfflineCart, getOfflineCart, updateOfflineCartItem } from "@/lib/offline/offlineCart";
+import { addToOfflineCart, removeFromOfflineCart, getOfflineCart, getOfflineCartForCustomer, updateOfflineCartItem, clearOfflineCartIfCustomerMismatch } from "@/lib/offline/offlineCart";
 import { INSUFFICIENT_STOCK_INCREASE_MSG } from "@/lib/stockMessages";
 
 const DEFAULT_PRODUCT_IMAGE = "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=400&fit=crop";
@@ -388,7 +388,7 @@ function dedupeRawProducts(rows) {
 }
 
 /** Paginate product.php until empty or cap (All Items / category / search). */
-async function fetchProductsPaginatedOnline(params = {}) {
+async function fetchProductsPaginatedOnlineProgressive(params = {}, onProgress) {
   const all = [];
   let offset = 0;
   for (let page = 0; page < 40; page++) {
@@ -399,32 +399,54 @@ async function fetchProductsPaginatedOnline(params = {}) {
     });
     if (!res?.success || !Array.isArray(res.data) || res.data.length === 0) break;
     all.push(...res.data);
+    const batch = dedupeRawProducts(all).slice(0, PRODUCTS_LIST_MAX);
+    if (typeof onProgress === "function") {
+      onProgress(batch, { page, done: false });
+    }
     if (res.data.length < PRODUCTS_PAGE_SIZE || all.length >= PRODUCTS_LIST_MAX) break;
     offset += PRODUCTS_PAGE_SIZE;
   }
-  return dedupeRawProducts(all).slice(0, PRODUCTS_LIST_MAX);
+  const final = dedupeRawProducts(all).slice(0, PRODUCTS_LIST_MAX);
+  if (typeof onProgress === "function") {
+    onProgress(final, { page: -1, done: true });
+  }
+  return final;
 }
 
-async function fetchDistinctProductCategoriesOnline() {
-  const LIMIT = 500;
-  const MAX_PAGES = 30;
-  let offset = 0;
+async function fetchProductsPaginatedOnline(params = {}) {
+  return fetchProductsPaginatedOnlineProgressive(params);
+}
+
+/** Categories from IDB first; online adds at most one product.php page (no 30-page scan). */
+async function loadProductCategoryNames(isOnline) {
   const seen = new Set();
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const res = await getProducts({ limit: LIMIT, offset });
-    if (page === 0) {
-      const fromMeta = categoriesFromProductApiResponse(res);
-      if (fromMeta?.length) return fromMeta;
-    }
-    if (!res?.success || !Array.isArray(res.data)) break;
-    for (const p of res.data) {
+  try {
+    const raw = await getCachedProducts({});
+    for (const p of raw) {
       const n = categoryNameFromRaw(p);
       if (n) seen.add(n);
     }
-    if (res.data.length < LIMIT) break;
-    offset += LIMIT;
+  } catch {
+    /* ignore */
   }
-  return [...seen].sort((a, b) => a.localeCompare(b));
+  if (isOnline) {
+    try {
+      const res = await getProducts({ limit: PRODUCTS_PAGE_SIZE, offset: 0 });
+      const fromMeta = categoriesFromProductApiResponse(res);
+      if (fromMeta?.length) {
+        for (const n of fromMeta) seen.add(n);
+      } else if (res?.success && Array.isArray(res.data)) {
+        for (const p of res.data) {
+          const n = categoryNameFromRaw(p);
+          if (n) seen.add(n);
+        }
+      }
+    } catch {
+      /* keep cache-derived names */
+    }
+  }
+  const sorted = [...seen].sort((a, b) => a.localeCompare(b));
+  return sorted.length ? ["All Items", ...sorted] : ["All Items"];
 }
 
 function ProductsContent() {
@@ -436,6 +458,7 @@ function ProductsContent() {
   const [activeCategory, setActiveCategory] = useState("All Items");
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -484,60 +507,72 @@ function ProductsContent() {
 
   const fetchProducts = useCallback(async (opts = {}) => {
     const seq = ++fetchSeqRef.current;
-    setLoading(true);
+    const category = opts.category;
+    const search = opts.search;
+    const cacheParams = { category, search };
+
+    let hasShownRows = false;
     setError(null);
+
     try {
-      if (isOnline) {
-        const listParams = {
-          ...(opts.category && opts.category !== "All Items" && { category: opts.category }),
-          ...(opts.search && String(opts.search).trim() && { search: String(opts.search).trim() }),
-        };
-        let mapped;
-        try {
-          const rawRows = await fetchProductsPaginatedOnline(listParams);
-          mapped = rawRows.map(mapApiProduct);
-          if (seq === fetchSeqRef.current) setProducts(mapped);
-        } catch (apiErr) {
-          const raw = await attachCachedImagesToProducts(
-            await getCachedProducts({
-              category: opts.category,
-              search: opts.search,
-            }),
-          );
-          mapped = raw.map(mapApiProduct);
-          if (seq === fetchSeqRef.current) {
-            setProducts(mapped);
-            if (mapped.length > 0) {
-              setError(
-                isOnline
-                  ? "Could not refresh from the server — showing cached products. Use refresh to try again."
-                  : "Showing cached products — server unreachable."
-              );
-            } else {
-              setError(apiErr instanceof Error ? apiErr.message : "Could not load products. Open when online to cache.");
-            }
-          }
-          return mapped;
-        }
-        return mapped;
+      const cachedRaw = await attachCachedImagesToProducts(await getCachedProducts(cacheParams));
+      const cachedMapped = cachedRaw.map(mapApiProduct);
+      if (seq === fetchSeqRef.current && cachedMapped.length > 0) {
+        setProducts(cachedMapped);
+        setLoading(false);
+        hasShownRows = true;
       }
-      const raw = await attachCachedImagesToProducts(
-        await getCachedProducts({
-          category: opts.category,
-          search: opts.search,
-        }),
-      );
-      const mapped = raw.map(mapApiProduct);
-      if (seq === fetchSeqRef.current) setProducts(mapped);
-      return mapped;
-    } catch (err) {
+    } catch {
+      /* ignore cache read errors */
+    }
+
+    if (!hasShownRows && seq === fetchSeqRef.current) {
+      setLoading(true);
+    }
+
+    if (!isOnline) {
       if (seq === fetchSeqRef.current) {
-        setError(err instanceof Error ? err.message : "Failed to load products.");
-        setProducts([]);
+        setLoading(false);
+        setRefreshing(false);
+        if (!hasShownRows) {
+          setProducts([]);
+          setError("No cached products. Open when online to sync the catalog.");
+        }
       }
       return [];
-    } finally {
-      if (seq === fetchSeqRef.current) setLoading(false);
+    }
+
+    if (seq === fetchSeqRef.current) setRefreshing(true);
+
+    const listParams = {
+      ...(category && category !== "All Items" && { category }),
+      ...(search && String(search).trim() && { search: String(search).trim() }),
+    };
+
+    try {
+      const finalRows = await fetchProductsPaginatedOnlineProgressive(listParams, (batch) => {
+        if (seq !== fetchSeqRef.current) return;
+        setProducts(batch.map(mapApiProduct));
+        setLoading(false);
+      });
+      if (seq === fetchSeqRef.current) {
+        setProducts(finalRows.map(mapApiProduct));
+        setLoading(false);
+        setRefreshing(false);
+      }
+      return finalRows.map(mapApiProduct);
+    } catch (apiErr) {
+      if (seq === fetchSeqRef.current) {
+        setRefreshing(false);
+        setLoading(false);
+        if (!hasShownRows) {
+          setProducts([]);
+          setError(apiErr instanceof Error ? apiErr.message : "Could not load products. Open when online to cache.");
+        } else {
+          setError("Could not refresh from the server — showing cached products.");
+        }
+      }
+      return [];
     }
   }, [isOnline]);
 
@@ -553,51 +588,36 @@ function ProductsContent() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (isOnline) {
-        try {
-          const names = await fetchDistinctProductCategoriesOnline();
-          if (!cancelled && names.length) setCategories(["All Items", ...names]);
-        } catch {
-          try {
-            const res = await getProducts({ limit: 100 });
-            if (!cancelled && res?.success && Array.isArray(res.data)) {
-              const names = [
-                ...new Set(res.data.map((p) => categoryNameFromRaw(p)).filter(Boolean)),
-              ].sort((a, b) => a.localeCompare(b));
-              if (names.length) setCategories(["All Items", ...names]);
-            }
-          } catch {
-            /* keep default chips */
-          }
-        }
-      } else {
-        try {
-          const raw = await getCachedProducts({});
-          const names = [...new Set(raw.map((p) => categoryNameFromRaw(p)).filter(Boolean))].sort((a, b) =>
-            a.localeCompare(b)
-          );
-          if (!cancelled && names.length) setCategories(["All Items", ...names]);
-        } catch {
-          /* ignore */
-        }
+      try {
+        const names = await loadProductCategoryNames(isOnline);
+        if (!cancelled && names.length) setCategories(names);
+      } catch {
+        /* keep default chips */
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [isOnline]);
 
   useEffect(() => {
     (async () => {
-      const cart = await getOfflineCart();
-      if (!cart?.items?.length) return;
-      const customerMatch = !cart.customer_id || cart.customer_id === partyCode;
-      if (customerMatch) {
-        setCartItems(
-          cart.items.map((i) => ({
-            id: i.product_key ?? i.item_id ?? i.product_id,
-            quantity: Number(i.qty) || 0,
-          }))
-        );
+      if (!partyCode) {
+        setCartItems([]);
+        return;
       }
+      await clearOfflineCartIfCustomerMismatch(partyCode);
+      const cart = await getOfflineCartForCustomer(partyCode);
+      if (!cart?.items?.length) {
+        setCartItems([]);
+        return;
+      }
+      setCartItems(
+        cart.items.map((i) => ({
+          id: i.product_key ?? i.item_id ?? i.product_id,
+          quantity: Number(i.qty) || 0,
+        })),
+      );
     })();
   }, [partyCode]);
 
@@ -1357,7 +1377,7 @@ function ProductsContent() {
               <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={!!catalogPdfBusy || loading}
+                disabled={!!catalogPdfBusy || (loading && products.length === 0)}
                 onClick={() => handleCatalogPdf("screen")}
                 className="cursor-pointer inline-flex items-center justify-center gap-2 h-11 px-4 rounded-lg text-sm font-medium text-white bg-[#25D366] hover:bg-[#20bd5a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 title="PDF of the list you see now (category + search)"
@@ -1399,15 +1419,21 @@ function ProductsContent() {
               {catalogPdfError}
             </div>
           )}
-          {loading && products.length > 0 && (
+          {(refreshing || (loading && products.length > 0)) && (
             <p className="mt-2 text-xs text-gray-500" role="status">
-              Updating list…
+              {products.length > 0 ? "Updating list from server…" : "Loading products…"}
             </p>
           )}
         </div>
 
         {error && (
-          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm mb-6">
+          <div
+            className={`rounded-lg px-4 py-3 text-sm mb-6 ${
+              error.includes("cached") || error.includes("Cached")
+                ? "bg-amber-50 border border-amber-200 text-amber-900"
+                : "bg-red-50 border border-red-200 text-red-700"
+            }`}
+          >
             {error}
           </div>
         )}

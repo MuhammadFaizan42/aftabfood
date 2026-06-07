@@ -15,6 +15,7 @@ import {
   addToCart,
 } from "@/services/shetApi";
 import { setSaleOrderPartyCode, clearCartTrnsId, setCartTrnsId, setCartEditMode } from "@/lib/api";
+import { clearOfflineCart } from "@/lib/offline/offlineCart";
 import { getOrderLineItems } from "@/lib/orderLineItems";
 import { enrichOrderLinesWithImages, DEFAULT_IMG, resolveProductImageUrl } from "@/lib/productImage";
 import {
@@ -866,6 +867,7 @@ function CustomerDashboardClient() {
               if (partyCode) {
                 clearCartTrnsId();
                 setSaleOrderPartyCode(partyCode);
+                clearOfflineCart().catch(() => {});
               }
             }}
           >

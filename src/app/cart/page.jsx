@@ -7,7 +7,7 @@ import ReusableTable from "../../components/common/ReusableTable";
 import { getOrderSummary, updateCartItem, removeCartItem, addToCart } from "@/services/shetApi";
 import { getCartTrnsId, getSaleOrderPartyCode, setCartTrnsId, clearCartTrnsId, isCartEditMode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
-import { getOfflineCart, getOfflineCartSync, updateOfflineCartItem, removeFromOfflineCart } from "@/lib/offline/offlineCart";
+import { getOfflineCart, getOfflineCartSync, getOfflineCartSyncForCustomer, getOfflineCartForCustomer, updateOfflineCartItem, removeFromOfflineCart, clearOfflineCart, clearOfflineCartIfCustomerMismatch, offlineCartCustomerMatches, normalizeOfflineCartCustomerId } from "@/lib/offline/offlineCart";
 import {
   getCachedOrderDetail,
   getAllProductsSnapshot,
@@ -385,7 +385,23 @@ export default function Cart() {
       if (id && String(id).startsWith("offline_")) {
         const cached = await getCachedOrderDetail(id);
         if (cached) {
+          const orderCustomer =
+            cached.customer?.SHORT_CODE ??
+            cached.customer?.PARTY_CODE ??
+            cached.customer?.party_code ??
+            cached.customer_id ??
+            getSaleOrderPartyCode();
+          await clearOfflineCartIfCustomerMismatch(orderCustomer);
           let cart = await getOfflineCart();
+          const orderCust = normalizeOfflineCartCustomerId(orderCustomer);
+          if (
+            cart.items.length &&
+            orderCust &&
+            !offlineCartCustomerMatches(cart.customer_id, orderCust)
+          ) {
+            await clearOfflineCart();
+            cart = await getOfflineCart();
+          }
           if ((!cart?.items?.length) && Array.isArray(cached.items) && cached.items.length > 0) {
             await hydrateOfflineCartFromOfflineOrder(id, cached);
             cart = await getOfflineCart();
@@ -477,7 +493,10 @@ export default function Cart() {
         }
       }
 
-      const syncCart = getOfflineCartSync();
+      const partyCode = String(getSaleOrderPartyCode() ?? "").trim();
+      await clearOfflineCartIfCustomerMismatch(partyCode);
+
+      const syncCart = getOfflineCartSyncForCustomer(partyCode);
       if (syncCart?.items?.length) {
         setTrnsId(null);
         setIsOfflineCart(true);
@@ -491,10 +510,10 @@ export default function Cart() {
         setGrandTotal(gt);
         return;
       }
-      let cart = await getOfflineCart();
+      let cart = await getOfflineCartForCustomer(partyCode);
       if (!cart?.items?.length) {
         await new Promise((r) => setTimeout(r, 300));
-        cart = await getOfflineCart();
+        cart = await getOfflineCartForCustomer(partyCode);
       }
       if (cart?.items?.length) {
         setTrnsId(null);

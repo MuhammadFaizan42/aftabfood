@@ -11,6 +11,52 @@ function emptyCart() {
   return { customer_id: null, items: [], updatedAt: 0 };
 }
 
+/** Normalize customer / party code for offline cart ownership checks. */
+export function normalizeOfflineCartCustomerId(id) {
+  if (id == null || id === "") return "";
+  return String(id).trim();
+}
+
+export function offlineCartCustomerMatches(cartCustomerId, targetCustomerId) {
+  const owner = normalizeOfflineCartCustomerId(cartCustomerId);
+  const target = normalizeOfflineCartCustomerId(targetCustomerId);
+  if (!owner || !target) return false;
+  return owner === target;
+}
+
+/** Clear session cart when it belongs to a different customer (new order / switch customer). */
+export async function clearOfflineCartIfCustomerMismatch(targetCustomerId) {
+  const target = normalizeOfflineCartCustomerId(targetCustomerId);
+  if (!target) return false;
+  const cart = await getOfflineCart();
+  if (!cart.items.length) return false;
+  const owner = normalizeOfflineCartCustomerId(cart.customer_id);
+  if (owner === target) return false;
+  await clearOfflineCart();
+  return true;
+}
+
+/** Sync read — empty when cart belongs to another customer. */
+export function getOfflineCartSyncForCustomer(targetCustomerId) {
+  const cart = getOfflineCartSync();
+  if (!cart?.items?.length) return emptyCart();
+  const target = normalizeOfflineCartCustomerId(targetCustomerId);
+  const owner = normalizeOfflineCartCustomerId(cart.customer_id);
+  if (!target || owner !== target) return emptyCart();
+  return cart;
+}
+
+/** Async read — empty when cart belongs to another customer (does not clear storage). */
+export async function getOfflineCartForCustomer(targetCustomerId) {
+  const target = normalizeOfflineCartCustomerId(targetCustomerId);
+  const cart = await getOfflineCart();
+  if (!cart.items.length) return cart;
+  if (!target) return emptyCart();
+  const owner = normalizeOfflineCartCustomerId(cart.customer_id);
+  if (owner !== target) return emptyCart();
+  return cart;
+}
+
 function normalizeCart(raw) {
   if (!raw) return emptyCart();
   const items = Array.isArray(raw.items) ? raw.items : (raw.items ? [] : []);
@@ -108,10 +154,12 @@ export async function setOfflineCart(customerId, items) {
 /** Add item to offline cart */
 export async function addToOfflineCart(customerId, item) {
   const cart = await getOfflineCart();
-  if (cart.customer_id && cart.customer_id !== customerId) {
+  const nextId = normalizeOfflineCartCustomerId(customerId);
+  const prevId = normalizeOfflineCartCustomerId(cart.customer_id);
+  if (cart.items.length > 0 && prevId !== nextId) {
     cart.items = [];
   }
-  cart.customer_id = customerId;
+  cart.customer_id = nextId || null;
   const itemKey = String(item.item_id ?? item.product_id ?? "");
   const existing = cart.items.find(
     (i) => String(i.item_id ?? i.product_id) === itemKey

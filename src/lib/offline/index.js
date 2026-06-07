@@ -16,9 +16,14 @@ export { syncPendingOrders, onSyncComplete } from "./syncManager";
 export { useOnlineStatus } from "./useOnlineStatus";
 export {
   getOfflineCart,
+  getOfflineCartForCustomer,
+  getOfflineCartSyncForCustomer,
   setOfflineCart,
   addToOfflineCart,
   updateOfflineCartItem,
   removeFromOfflineCart,
   clearOfflineCart,
+  clearOfflineCartIfCustomerMismatch,
+  offlineCartCustomerMatches,
+  normalizeOfflineCartCustomerId,
 } from "./offlineCart";

@@ -7,7 +7,7 @@ import ReusableTable from "../../components/common/ReusableTable";
 import { getOrderReview, submitOrder, getPartySaleInvDashboard, addToCart } from "@/services/shetApi";
 import { getCartTrnsId, setCartTrnsId, clearCartTrnsId, getSaleOrderPartyCode, isCartEditMode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
-import { getOfflineCart, clearOfflineCart } from "@/lib/offline/offlineCart";
+import { getOfflineCart, getOfflineCartForCustomer, clearOfflineCart, clearOfflineCartIfCustomerMismatch } from "@/lib/offline/offlineCart";
 import { getCachedCustomerDashboard, getCachedOrderDetail, cacheOrderDetail, saveOfflineOrderToExistingOrders, getExistingOrderRow, getAllProductsSnapshot, updateOfflineOrderInStores, generateOfflineOrderId, deleteOfflineOrder } from "@/lib/offline/bootstrapLoader";
 import {
   DEFAULT_IMG,
@@ -222,9 +222,11 @@ function OrderReviewContent() {
     setError(null);
     setCustomerEnrich(null);
     const id = getCartTrnsId();
+    const partyCode = getSaleOrderPartyCode();
     let hasOfflineCartItems = false;
     try {
-      const oc = await getOfflineCart();
+      await clearOfflineCartIfCustomerMismatch(partyCode);
+      const oc = await getOfflineCartForCustomer(partyCode);
       hasOfflineCartItems = Array.isArray(oc?.items) && oc.items.length > 0;
     } catch {
       hasOfflineCartItems = false;
@@ -430,7 +432,7 @@ function OrderReviewContent() {
       setTrnsId(null);
       setIsOfflineOrder(true);
       try {
-        const cart = await getOfflineCart();
+        const cart = await getOfflineCartForCustomer(partyCode);
         if (!cart?.items?.length) {
           setLoading(false);
           return;
