@@ -1,6 +1,7 @@
 /**
  * Bootstrap loader – fetch master data when online and store in IndexedDB
  */
+import { putMany, putOne, putManyMerge, getAll, getByKey, deleteByKey, setMeta, getMeta } from "../idb";
 import { itemKeyOf, prefixSyncErrorWithItemName } from "./offlineSyncMessages";
 import { getProducts, getCustomers, getPartySaleInvDashboard, getExistingOrders, getSaleRoutes } from "@/services/shetApi";
 import { setOfflineCart } from "./offlineCart";
