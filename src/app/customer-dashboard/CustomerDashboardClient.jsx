@@ -701,12 +701,25 @@ function CustomerDashboardClient() {
     return months;
   })();
   const maxAmount = Math.max(1, ...chartMonths.map((m) => Number(m.amount) || 0));
-  const chartData = chartMonths.map((m) => ({
-    month: m.month,
-    value: Math.round(((Number(m.amount) || 0) / maxAmount) * 100),
-    label: formatAmount(m.amount),
-    rawAmount: m.amount,
-  }));
+  /** Nice Y-axis ticks from 0 → max (top = maxAmount). */
+  const chartYTicks = (() => {
+    const steps = 4;
+    const ticks = [];
+    for (let i = steps; i >= 0; i--) {
+      ticks.push((maxAmount * i) / steps);
+    }
+    return ticks;
+  })();
+  const chartData = chartMonths.map((m) => {
+    const amt = Number(m.amount) || 0;
+    return {
+      month: m.month,
+      /** 0–100% of chart plot area — proportional to amount */
+      heightPct: Math.max(0, Math.min(100, (amt / maxAmount) * 100)),
+      label: formatAmount(amt),
+      rawAmount: amt,
+    };
+  });
 
   if (!partyCode) {
     return (
@@ -1280,35 +1293,48 @@ function CustomerDashboardClient() {
                 <p className="text-xs text-gray-500">Last 12 months</p>
               </div>
             </div>
-            <div className="relative h-64">
-              {/* Chart */}
-              <div className="flex items-end justify-between h-full border-b border-l border-gray-200 pb-8 pl-8">
+            <div className="relative h-64 pl-12">
+              {/* Y-axis labels (aligned with plot area above month labels) */}
+              <div className="absolute left-0 top-0 bottom-7 w-11 flex flex-col justify-between text-[10px] sm:text-xs text-gray-500 pr-1 text-right leading-none">
+                {chartYTicks.map((tick, i) => (
+                  <span key={i} className="truncate" title={formatAmount(tick)}>
+                    {formatAmount(tick)}
+                  </span>
+                ))}
+              </div>
+              {/* Chart plot */}
+              <div className="flex items-stretch gap-1.5 sm:gap-2 h-full border-b border-l border-gray-200 pb-7 overflow-visible">
                 {chartData.map((data, index) => (
                   <div
                     key={index}
-                    className="flex flex-col items-center flex-1 h-full justify-end"
+                    className="relative flex flex-col items-center flex-1 min-w-0 h-full overflow-visible"
                   >
-                    <span className="text-xs font-medium text-gray-900 mb-1">
-                      {data.label}
-                    </span>
-                    <div
-                      className="w-full mx-1 bg-blue-500 rounded-t transition-all hover:bg-blue-600"
-                      style={{ height: `${data.value * 3}%` }}
-                    ></div>
-                    <span className="text-xs text-gray-500 mt-2">
+                    <div className="flex-1 w-full flex items-end justify-center min-h-0 pt-4">
+                      <div className="relative w-[55%] max-w-[1.75rem] min-w-[6px] flex flex-col items-center justify-end h-full">
+                        {data.rawAmount > 0 ? (
+                          <span
+                            className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] sm:text-[10px] font-semibold text-gray-900 leading-none z-10 pointer-events-none"
+                            style={{ bottom: `calc(${data.heightPct}% + 3px)` }}
+                            title={data.label}
+                          >
+                            {data.label}
+                          </span>
+                        ) : null}
+                        <div
+                          className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-600"
+                          style={{
+                            height: data.heightPct > 0 ? `${data.heightPct}%` : "0%",
+                            minHeight: data.rawAmount > 0 ? "2px" : "0",
+                          }}
+                          title={`${data.month}: ${data.label}`}
+                        />
+                      </div>
+                    </div>
+                    <span className="text-[9px] sm:text-xs text-gray-500 mt-1.5 shrink-0">
                       {data.month}
                     </span>
                   </div>
                 ))}
-              </div>
-              {/* Y-axis labels */}
-              <div className="absolute left-0 top-0 h-full flex flex-col justify-between text-xs text-gray-500 pb-8 pr-2">
-                <span>£</span>
-                <span>£</span>
-                <span>£</span>
-                <span>£</span>
-                <span>£</span>
-                <span>£</span>
               </div>
             </div>
           </div>
