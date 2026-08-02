@@ -9,7 +9,7 @@ const UPSTREAM_TIMEOUT_MS = 300000;
 
 /**
  * Server proxy for sale_order.php POST — avoids browser CORS; must hit SAME API host as client (getApiBaseUrl).
- * POST /api/sale-order?action=submit_order
+ * POST /api/sale-order?action=submit_order | edit_order | …
  */
 export async function POST(request) {
   const auth = request.headers.get("authorization");

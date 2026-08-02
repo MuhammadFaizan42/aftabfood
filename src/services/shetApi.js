@@ -163,6 +163,7 @@ const SUBMIT_ORDER_RMS_MAX = 150;
 export async function submitOrder(trnsId, options = {}) {
   const body = { trns_id: toNum(trnsId) ?? trnsId };
   if (options.delivery_date) body.delivery_date = options.delivery_date;
+  if (options.sale_date) body.sale_date = String(options.sale_date).trim().slice(0, 10);
   const userNote = options.rms ?? options.remarks;
   if (userNote != null && String(userNote).trim() !== "") {
     body.rms = String(userNote).trim().slice(0, SUBMIT_ORDER_RMS_MAX);
@@ -191,6 +192,38 @@ export async function submitOrder(trnsId, options = {}) {
   const res = await api.post(submitPath, body);
   if (res && typeof res === "object" && res.success === false) {
     throw new Error(res.message || "Submit order failed.");
+  }
+  return res;
+}
+
+/**
+ * Edit existing order (Draft or Submitted) — e.g. sale_date.
+ * POST /api/sale-order?action=edit_order  →  sale_order.php?action=edit_order
+ * Body (sale date only): { trns_id, sale_date: "YYYY-MM-DD" }
+ */
+export async function editOrder(trnsId, options = {}) {
+  const body = { trns_id: toNum(trnsId) ?? trnsId };
+  if (options.sale_date != null && String(options.sale_date).trim() !== "") {
+    body.sale_date = String(options.sale_date).trim().slice(0, 10);
+  }
+  if (options.delivery_date) body.delivery_date = options.delivery_date;
+  if (options.remarks != null && String(options.remarks).trim() !== "") {
+    body.remarks = String(options.remarks).trim().slice(0, SUBMIT_ORDER_RMS_MAX);
+    body.rms = body.remarks;
+  }
+  if (options.discount != null && options.discount !== "") {
+    body.discount = toNum(options.discount) ?? options.discount;
+  }
+  if (options.pay_terms != null && options.pay_terms !== "") {
+    body.pay_terms = options.pay_terms;
+  }
+  const editPath =
+    typeof window !== "undefined" && window.location?.origin
+      ? `${window.location.origin}/api/sale-order?action=edit_order`
+      : `/api/sale-order?action=edit_order`;
+  const res = await api.post(editPath, body);
+  if (res && typeof res === "object" && res.success === false) {
+    throw new Error(res.message || "Edit order failed.");
   }
   return res;
 }

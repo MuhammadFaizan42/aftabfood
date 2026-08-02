@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "../../components/common/Header";
 import ReusableTable from "../../components/common/ReusableTable";
-import { getOrderReview, submitOrder, getPartySaleInvDashboard, addToCart } from "@/services/shetApi";
-import { getCartTrnsId, setCartTrnsId, clearCartTrnsId, getSaleOrderPartyCode, isCartEditMode } from "@/lib/api";
+import { getOrderReview, submitOrder, editOrder, getPartySaleInvDashboard, addToCart } from "@/services/shetApi";
+import { getCartTrnsId, setCartTrnsId, clearCartTrnsId, getSaleOrderPartyCode, isCartEditMode, clearCartEditMode } from "@/lib/api";
 import { useOnlineStatus } from "@/lib/offline/useOnlineStatus";
 import { getOfflineCart, getOfflineCartForCustomer, clearOfflineCart, clearOfflineCartIfCustomerMismatch } from "@/lib/offline/offlineCart";
 import { getCachedCustomerDashboard, getCachedOrderDetail, cacheOrderDetail, saveOfflineOrderToExistingOrders, getExistingOrderRow, getAllProductsSnapshot, updateOfflineOrderInStores, generateOfflineOrderId, deleteOfflineOrder } from "@/lib/offline/bootstrapLoader";
@@ -56,6 +56,13 @@ function normalizeDateInputForForm(val) {
   if (val == null || val === "") return "";
   const s = String(val).trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dmy) {
+    const dd = dmy[1].padStart(2, "0");
+    const mm = dmy[2].padStart(2, "0");
+    const yyyy = dmy[3];
+    return `${yyyy}-${mm}-${dd}`;
+  }
   const parsed = new Date(s);
   if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
   return "";
@@ -64,7 +71,7 @@ function normalizeDateInputForForm(val) {
 /** Order-level fields for Finalise Order (order_review / cached snapshot). */
 function pickOrderMetaFromReviewData(d) {
   if (!d || typeof d !== "object") {
-    return { remarks: "", deliveryDate: "", payTerms: "", discountVal: "" };
+    return { remarks: "", deliveryDate: "", saleDate: "", payTerms: "", discountVal: "" };
   }
   const order = d.order && typeof d.order === "object" ? d.order : {};
   const header = d.header && typeof d.header === "object" ? d.header : {};
@@ -88,6 +95,17 @@ function pickOrderMetaFromReviewData(d) {
     src.delivery_dt ??
     "";
   const deliveryDate = normalizeDateInputForForm(rawDel);
+  const rawSale =
+    src.sale_date ??
+    src.SALE_DATE ??
+    src.order_date ??
+    src.ORDER_DATE ??
+    src.doc_date ??
+    src.DOC_DATE ??
+    src.trns_date ??
+    src.TRNS_DATE ??
+    "";
+  const saleDate = normalizeDateInputForForm(rawSale);
   const rawPt =
     src.pay_terms ??
     src.PAY_TERMS ??
@@ -105,7 +123,7 @@ function pickOrderMetaFromReviewData(d) {
     const n = Number(rawDisc);
     if (!Number.isNaN(n)) discountVal = String(n);
   }
-  return { remarks, deliveryDate, payTerms, discountVal };
+  return { remarks, deliveryDate, saleDate, payTerms, discountVal };
 }
 
 function mapReviewData(res) {
@@ -119,6 +137,7 @@ function mapReviewData(res) {
       grandTotal: 0,
       remarks: "",
       deliveryDate: "",
+      saleDate: "",
       payTerms: "",
       discountVal: "",
     };
@@ -208,6 +227,7 @@ function OrderReviewContent() {
   const [submitting, setSubmitting] = useState(false);
 
   const [deliveryDate, setDeliveryDate] = useState("");
+  const [saleDate, setSaleDate] = useState("");
   const [payTerms, setPayTerms] = useState("");
   const [discountVal, setDiscountVal] = useState("");
   const [remarks, setRemarks] = useState("");
@@ -215,7 +235,12 @@ function OrderReviewContent() {
   const [isCachedServerOrder, setIsCachedServerOrder] = useState(false);
   const [hasBackendTrnsId, setHasBackendTrnsId] = useState(false);
   const [backendTrnsId, setBackendTrnsId] = useState(null);
+  const [isEditingExisting, setIsEditingExisting] = useState(false);
   const submitInFlightRef = useRef(false);
+
+  useEffect(() => {
+    setIsEditingExisting(isCartEditMode());
+  }, []);
 
   const loadReview = useCallback(async () => {
     setLoading(true);
@@ -252,6 +277,7 @@ function OrderReviewContent() {
           setGrandTotal(gt);
           setRemarks(rev.remarks ?? "");
           setDeliveryDate(rev.deliveryDate ?? "");
+          setSaleDate(rev.saleDate ?? "");
           setPayTerms(rev.payTerms ?? "");
           setDiscountVal(rev.discountVal ?? "");
           const partyCode = getSaleOrderPartyCode();
@@ -284,6 +310,7 @@ function OrderReviewContent() {
               setGrandTotal(gt);
               setRemarks(rev.remarks ?? "");
               setDeliveryDate(rev.deliveryDate ?? "");
+              setSaleDate(rev.saleDate ?? "");
               setPayTerms(rev.payTerms ?? "");
               setDiscountVal(rev.discountVal ?? "");
             } else {
@@ -313,6 +340,7 @@ function OrderReviewContent() {
             setGrandTotal(gt);
             setRemarks(rev.remarks ?? "");
             setDeliveryDate(rev.deliveryDate ?? "");
+            setSaleDate(rev.saleDate ?? "");
             setPayTerms(rev.payTerms ?? "");
             setDiscountVal(rev.discountVal ?? "");
             if (isOfflineId) {
@@ -352,6 +380,7 @@ function OrderReviewContent() {
         setGrandTotal(gt);
         setRemarks(rev.remarks ?? "");
         setDeliveryDate(rev.deliveryDate ?? "");
+        setSaleDate(rev.saleDate ?? "");
         setPayTerms(rev.payTerms ?? "");
         setDiscountVal(rev.discountVal ?? "");
         const partyCode = getSaleOrderPartyCode();
@@ -383,6 +412,7 @@ function OrderReviewContent() {
           setGrandTotal(gt);
           setRemarks(rev.remarks ?? "");
           setDeliveryDate(rev.deliveryDate ?? "");
+          setSaleDate(rev.saleDate ?? "");
           setPayTerms(rev.payTerms ?? "");
           setDiscountVal(rev.discountVal ?? "");
           if (isOfflineId) {
@@ -416,6 +446,7 @@ function OrderReviewContent() {
           setGrandTotal(gt);
           setRemarks(rev.remarks ?? "");
           setDeliveryDate(rev.deliveryDate ?? "");
+          setSaleDate(rev.saleDate ?? "");
           setPayTerms(rev.payTerms ?? "");
           setDiscountVal(rev.discountVal ?? "");
           if (isOfflineId) {
@@ -457,6 +488,7 @@ function OrderReviewContent() {
             setGrandTotal(gt);
             setRemarks(rev.remarks ?? "");
             setDeliveryDate(rev.deliveryDate ?? "");
+            setSaleDate(rev.saleDate ?? "");
             setPayTerms(rev.payTerms ?? "");
             setDiscountVal(rev.discountVal ?? "");
             const row = await getExistingOrderRow(existingId);
@@ -623,6 +655,7 @@ function OrderReviewContent() {
 
     const options = {};
     if (deliveryDate) options.delivery_date = deliveryDate;
+    if (saleDate) options.sale_date = saleDate;
     if (payTerms) options.pay_terms = payTerms;
     if (discountVal !== "" && !Number.isNaN(Number(discountVal))) options.discount = Number(discountVal);
     if (remarks) options.remarks = remarks;
@@ -702,6 +735,13 @@ function OrderReviewContent() {
         if (serverTrns == null || serverTrns === "") {
           throw new Error("Could not create a server draft for this order. Check line items and try again.");
         }
+        if (saleDate) {
+          try {
+            await editOrder(serverTrns, { sale_date: saleDate });
+          } catch {
+            /* submit_order may still accept sale_date */
+          }
+        }
         const submitRes = await submitOrder(serverTrns, options);
         if (submitRes && typeof submitRes === "object" && submitRes.success === false) {
           throw new Error(submitRes.message || "Submit order failed.");
@@ -729,6 +769,47 @@ function OrderReviewContent() {
       }
 
       if (!trnsId) return;
+
+      const editingExisting = isCartEditMode() || isEditingExisting;
+      const isServerTrns = !String(trnsId).startsWith("offline_");
+
+      /**
+       * Edit flow (Draft or Submitted): persist Sale Date via edit_order first.
+       * Submitted orders often cannot use submit_order — edit_order still updates SALE_DATE.
+       */
+      if (editingExisting && isServerTrns && isOnline) {
+        if (!saleDate) {
+          throw new Error("Please select a Sale Date before saving.");
+        }
+        await editOrder(trnsId, {
+          sale_date: saleDate,
+          ...(deliveryDate ? { delivery_date: deliveryDate } : {}),
+          ...(remarks ? { remarks } : {}),
+          ...(discountVal !== "" && !Number.isNaN(Number(discountVal))
+            ? { discount: Number(discountVal) }
+            : {}),
+          ...(payTerms ? { pay_terms: payTerms } : {}),
+        });
+        try {
+          const res = await submitOrder(trnsId, options);
+          clearCartTrnsId();
+          clearCartEditMode();
+          const orderId =
+            res?.data?.order_number ??
+            res?.data?.order_id ??
+            res?.data?.trns_id ??
+            trnsId;
+          router.push(`/order-success?order_id=${encodeURIComponent(orderId)}`);
+          return;
+        } catch {
+          /* Submitted: submit_order may reject; sale_date already saved via edit_order */
+          clearCartTrnsId();
+          clearCartEditMode();
+          router.push(`/order-success?order_id=${encodeURIComponent(trnsId)}`);
+          return;
+        }
+      }
+
       const res = await submitOrder(trnsId, options);
       clearCartTrnsId();
       const orderId = res?.data?.order_number ?? res?.data?.order_id ?? res?.data?.trns_id ?? trnsId;
@@ -906,6 +987,23 @@ function OrderReviewContent() {
               <h2 className="text-lg font-semibold text-gray-900">Finalise Order</h2>
 
               <div>
+                <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">
+                  Sale Date{isEditingExisting || isCartEditMode() ? "" : " (optional)"}
+                </label>
+                <input
+                  type="date"
+                  value={saleDate}
+                  onChange={(e) => setSaleDate(e.target.value)}
+                  disabled={isViewOnly}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100"
+                />
+                {(isEditingExisting || isCartEditMode()) && (
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    Change Sale Date for Draft or Submitted orders, then save.
+                  </p>
+                )}
+              </div>
+              <div>
                 <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Delivery Date (optional)</label>
                 <input
                   type="date"
@@ -1009,13 +1107,19 @@ function OrderReviewContent() {
                     className="cursor-pointer w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors"
                   >
                     {submitting
-                      ? "Submitting..."
+                      ? isEditingExisting || isCartEditMode()
+                        ? "Saving…"
+                        : "Submitting..."
                       : isOfflineOrder && hasBackendTrnsId
                         ? "View Order"
-                        : "Submit Order"}
+                        : isEditingExisting || isCartEditMode()
+                          ? "Save Changes"
+                          : "Submit Order"}
                   </button>
                   <p className="text-xs text-center text-gray-500">
-                    By submitting, you agree to the sales terms.
+                    {isEditingExisting || isCartEditMode()
+                      ? "Sale Date is saved via edit order (works for Submitted orders too)."
+                      : "By submitting, you agree to the sales terms."}
                   </p>
                 </>
               )}
