@@ -52,20 +52,84 @@ function formatPrice(val) {
   return `£${n.toFixed(2)}`;
 }
 
+const MONTH_NAME_TO_NUM = {
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
+};
+
+/** Local calendar YYYY-MM-DD — never use toISOString (UTC) or Sale Date shifts back one day in PK/UTC+5. */
+function formatLocalYmd(y, m, d) {
+  const yyyy = Number(y);
+  const mm = Number(m);
+  const dd = Number(d);
+  if (!Number.isFinite(yyyy) || !Number.isFinite(mm) || !Number.isFinite(dd)) return "";
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return "";
+  return `${String(yyyy).padStart(4, "0")}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+}
+
+function localYmdFromDate(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  return formatLocalYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
+}
+
+/**
+ * Normalize API / Oracle / browser dates for <input type="date"> (YYYY-MM-DD).
+ * Avoids UTC off-by-one (e.g. DB 09-AUG → UI 08-Aug in Pakistan).
+ */
 function normalizeDateInputForForm(val) {
   if (val == null || val === "") return "";
+  if (val instanceof Date) return localYmdFromDate(val);
+
   const s = String(val).trim();
+  if (!s) return "";
+
+  // Already ISO date (optional time) — take calendar part only, no timezone convert
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+
+  // DD/MM/YYYY or DD-MM-YYYY
+  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if (dmy) {
-    const dd = dmy[1].padStart(2, "0");
-    const mm = dmy[2].padStart(2, "0");
-    const yyyy = dmy[3];
-    return `${yyyy}-${mm}-${dd}`;
+    let yyyy = Number(dmy[3]);
+    if (yyyy < 100) yyyy += 2000;
+    return formatLocalYmd(yyyy, dmy[2], dmy[1]);
   }
+
+  // Oracle / en display: 09-AUG-26, 09-Aug-2026, 9 August 2026
+  const mon = s.match(/^(\d{1,2})[\s\-\/]+([A-Za-z]{3,9})[\s\-\/]+(\d{2,4})$/);
+  if (mon) {
+    const monthNum = MONTH_NAME_TO_NUM[mon[2].toLowerCase()];
+    if (monthNum) {
+      let yyyy = Number(mon[3]);
+      if (yyyy < 100) yyyy += 2000;
+      return formatLocalYmd(yyyy, monthNum, mon[1]);
+    }
+  }
+
+  // Last resort: parse then use LOCAL y/m/d (not UTC via toISOString)
   const parsed = new Date(s);
-  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
-  return "";
+  return localYmdFromDate(parsed);
 }
 
 /** Order-level fields for Finalise Order (order_review / cached snapshot). */
